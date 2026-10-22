@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="id">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,285 +13,93 @@
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
     }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px 24px 24px; }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      padding: 20px 24px 24px;
-    }
-
-    header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    h1 {
-      font-size: 17px;
-      font-weight: 650;
-      margin: 0;
-      letter-spacing: -0.01em;
-    }
-
-    #status {
-      font-size: 12px;
-      color: var(--muted);
-      text-align: right;
-      min-height: 16px;
-      overflow-wrap: anywhere;
-    }
-
-    #status[data-kind="ok"] {
-      color: #1f9d55;
-    }
-
-    #status[data-kind="err"] {
-      color: #d64545;
-    }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    h1 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+    #status { font-size: 12px; color: var(--muted); text-align: right; min-height: 16px;
+              overflow-wrap: anywhere; }
+    #status[data-kind="ok"] { color: #1f9d55; }
+    #status[data-kind="err"] { color: #d64545; }
 
     /* pratinjau */
-    .stage {
-      margin: 16px 0 6px;
-      height: 92px;
-      border-radius: 12px;
-      background: linear-gradient(160deg, #6f7a8c, #a9b2c0);
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      overflow: hidden;
-    }
+    .stage { margin: 16px 0 6px; height: 92px; border-radius: 12px;
+             background: linear-gradient(160deg, #6f7a8c, #a9b2c0);
+             display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
+    #pill { --p-bg: #000; --p-fg: #fff; --p-fg-rgb: 255,255,255; --p-accent: 120,140,255; --p-scale: 1;
+            width: calc(210px * var(--p-scale)); height: calc(44px * var(--p-scale));
+            background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
+            color: var(--p-fg); border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
+            display: flex; align-items: center; justify-content: center; gap: calc(10px * var(--p-scale));
+            font-size: calc(12px * var(--p-scale)); position: relative; overflow: hidden;
+            transition: background .15s, color .15s; }
+    #pill i { width: calc(7px * var(--p-scale)); height: calc(7px * var(--p-scale)); border-radius: 50%; background: var(--p-fg); }
+    #pill span { opacity: .85; }
+    #pill::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: calc(5px * var(--p-scale));
+                   height: 2px; border-radius: 2px; background: rgb(var(--p-accent)); opacity: .9; }
+    .hint { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
 
-    #pill {
-      --p-bg: #000;
-      --p-fg: #fff;
-      --p-fg-rgb: 255, 255, 255;
-      --p-accent: 120, 140, 255;
-      --p-scale: 1;
-      width: calc(210px * var(--p-scale));
-      height: calc(44px * var(--p-scale));
-      background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
-      color: var(--p-fg);
-      border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: calc(10px * var(--p-scale));
-      font-size: calc(12px * var(--p-scale));
-      position: relative;
-      overflow: hidden;
-      transition: background .15s, color .15s;
-    }
+    section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
+    h2 { font-size: 13px; font-weight: 650; margin: 10px 0 4px; }
 
-    #pill i {
-      width: calc(7px * var(--p-scale));
-      height: calc(7px * var(--p-scale));
-      border-radius: 50%;
-      background: var(--p-fg);
-    }
-
-    #pill span {
-      opacity: .85;
-    }
-
-    #pill::after {
-      content: "";
-      position: absolute;
-      left: 14%;
-      right: 14%;
-      bottom: calc(5px * var(--p-scale));
-      height: 2px;
-      border-radius: 2px;
-      background: rgb(var(--p-accent));
-      opacity: .9;
-    }
-
-    .hint {
-      font-size: 12px;
-      color: var(--muted);
-      margin: 0 0 4px;
-    }
-
-    section {
-      border-top: 1px solid var(--line);
-      margin-top: 16px;
-      padding-top: 4px;
-    }
-
-    h2 {
-      font-size: 13px;
-      font-weight: 650;
-      margin: 10px 0 4px;
-    }
-
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 8px 0;
-      min-height: 40px;
-    }
-
-    .row.off {
-      opacity: .4;
-    }
-
-    .row>label:first-child,
-    .row>span:first-child {
-      flex: 1;
-    }
-
-    .ctl {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    code {
-      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-      font-size: 12px;
-      color: var(--muted);
-      min-width: 62px;
-      text-align: right;
-    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+           padding: 8px 0; min-height: 40px; }
+    .row.off { opacity: .4; }
+    .row > label:first-child, .row > span:first-child { flex: 1; }
+    .ctl { display: flex; align-items: center; gap: 10px; }
+    code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px;
+           color: var(--muted); min-width: 62px; text-align: right; }
 
     /* segmented */
-    .seg {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      padding: 3px;
-      gap: 3px;
-      margin: 8px 0 4px;
-    }
+    .seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line);
+           border-radius: 9px; padding: 3px; gap: 3px; margin: 8px 0 4px; }
+    .seg label { position: relative; }
+    .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+    .seg span { display: block; text-align: center; padding: 6px 0; border-radius: 6px; cursor: pointer; }
+    .seg input:checked + span { background: color-mix(in srgb, currentColor 14%, transparent); font-weight: 600; }
+    .seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 1px; }
 
-    .seg label {
-      position: relative;
-    }
+    input[type="color"] { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; padding: 0;
+                          border: 1px solid var(--line); border-radius: 50%; background: none; cursor: pointer; }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+    input[type="color"]:disabled { cursor: not-allowed; }
+    input[type="range"] { width: 180px; accent-color: var(--focus); }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--focus); }
+    .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-    .seg input {
-      position: absolute;
-      opacity: 0;
-      inset: 0;
-      cursor: pointer;
-    }
-
-    .seg span {
-      display: block;
-      text-align: center;
-      padding: 6px 0;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .seg input:checked+span {
-      background: color-mix(in srgb, currentColor 14%, transparent);
-      font-weight: 600;
-    }
-
-    .seg input:focus-visible+span {
-      outline: 2px solid var(--focus);
-      outline-offset: 1px;
-    }
-
-    input[type="color"] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 30px;
-      height: 30px;
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      background: none;
-      cursor: pointer;
-    }
-
-    input[type="color"]::-webkit-color-swatch-wrapper {
-      padding: 0;
-    }
-
-    input[type="color"]::-webkit-color-swatch {
-      border: 0;
-      border-radius: 50%;
-    }
-
-    input[type="color"]:disabled {
-      cursor: not-allowed;
-    }
-
-    input[type="range"] {
-      width: 180px;
-      accent-color: var(--focus);
-    }
-
-    input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      accent-color: var(--focus);
-    }
-
-    .auto {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    input:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 22px;
-    }
-
-    button {
-      font: inherit;
-      padding: 9px 16px;
-      border-radius: 9px;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-    }
-
-    button.primary {
-      background: var(--focus);
-      border-color: transparent;
-      color: #fff;
-      font-weight: 600;
-    }
-
-    button:disabled {
-      opacity: .5;
-      cursor: progress;
-    }
-
-    button:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
+    input[type="text"], input[type="search"], input[type="number"] {
+      font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
+      background: transparent; color: inherit; min-width: 0; }
+    input[type="number"] { width: 130px; text-align: right; }
+    .row input[type="text"] { width: 200px; }
+    .search { display: flex; gap: 8px; margin: 6px 0; }
+    .search input { flex: 1; }
+    .results { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 4px; }
+    .results button { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left;
+                      padding: 8px 10px; }
+    .results small { color: var(--muted); white-space: nowrap; }
+    .feat { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; margin: 6px 0 2px; }
+    .feat label { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
+    .feat h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 11px; font-weight: 600; color: var(--muted);
+               text-transform: uppercase; letter-spacing: .04em; }
+    .actions { display: flex; gap: 8px; margin-top: 22px; }
+    button { font: inherit; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line);
+             background: transparent; color: inherit; cursor: pointer; }
+    button.primary { background: var(--focus); border-color: transparent; color: #fff; font-weight: 600; }
+    button:disabled { opacity: .5; cursor: progress; }
+    button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   </style>
 </head>
-
 <body>
   <header>
     <h1>Pengaturan Notch</h1>
     <div id="status" role="status" aria-live="polite">Memuat… (kalau tulisan ini tidak berubah, script tidak berjalan)</div>
   </header>
 
-  <div class="stage">
-    <div id="pill"><i></i><i></i><span>Notch</span></div>
-  </div>
+  <div class="stage"><div id="pill"><i></i><i></i><span>Notch</span></div></div>
   <p class="hint">Pratinjau. Perubahan langsung terlihat di notch asli.</p>
 
   <section>
@@ -341,10 +148,48 @@
   </section>
 
   <section>
+    <h2>Fitur</h2>
+    <p class="hint" style="margin:6px 0">Centang fitur yang ingin dipakai. <b>Butuh restart</b> (pakai Simpan &amp; restart).</p>
+    <div class="feat" id="features">
+      <h3>Halaman</h3>
+      <label><input type="checkbox" id="f-media" data-feature="media" /> Musik</label>
+      <label><input type="checkbox" id="f-weather" data-feature="weather" /> Cuaca</label>
+      <label><input type="checkbox" id="f-battery" data-feature="battery" /> Baterai</label>
+      <label><input type="checkbox" id="f-timer" data-feature="timer" /> Timer Pomodoro</label>
+      <label><input type="checkbox" id="f-quick" data-feature="quick" /> Kontrol cepat</label>
+      <label><input type="checkbox" id="f-tools" data-feature="tools" /> Alat</label>
+      <label><input type="checkbox" id="f-stats" data-feature="stats" /> Status sistem</label>
+      <label><input type="checkbox" id="f-clipboard" data-feature="clipboard" /> Riwayat clipboard</label>
+      <label><input type="checkbox" id="f-shelf" data-feature="shelf" /> Shelf file</label>
+      <h3>Tambahan</h3>
+      <label><input type="checkbox" id="f-lyrics" data-feature="lyrics" /> Lirik lagu</label>
+      <label><input type="checkbox" id="f-privacy" data-feature="privacy" /> Indikator mic/kamera</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cuaca</h2>
+    <p class="hint" style="margin:6px 0">Lokasi saat ini: <b id="w-current">…</b></p>
+    <div class="search">
+      <input type="search" id="w-q" placeholder="Cari kota, mis. Surabaya" autocomplete="off" data-weather />
+      <button type="button" id="w-search">Cari</button>
+    </div>
+    <ul class="results" id="w-results"></ul>
+    <div class="row"><label for="w-city">Nama lokasi</label><input type="text" id="w-city" data-weather /></div>
+    <div class="row"><label for="w-lat">Lintang</label><input type="number" id="w-lat" step="0.0001" min="-90" max="90" data-weather /></div>
+    <div class="row"><label for="w-lon">Bujur</label><input type="number" id="w-lon" step="0.0001" min="-180" max="180" data-weather /></div>
+    <p class="hint">Berlaku langsung setelah Simpan, tanpa restart.</p>
+  </section>
+
+  <section>
     <h2>Perilaku</h2>
     <div class="row">
       <label for="hide_fullscreen">Sembunyikan notch saat layar penuh <small style="color:var(--muted)">(butuh restart)</small></label>
       <input type="checkbox" id="hide_fullscreen" />
+    </div>
+    <div class="row">
+      <label for="autostart">Jalankan otomatis saat komputer menyala <small style="color:var(--muted)">(build release)</small></label>
+      <input type="checkbox" id="autostart" data-os />
     </div>
   </section>
 
@@ -354,185 +199,286 @@
   </div>
 
   <script>
-    const T = window.__TAURI__;
-    if (!T || !T.core) {
-      document.getElementById("status").textContent = "Error: window.__TAURI__ tidak ada (cek withGlobalTauri: true di tauri.conf.json)";
-      document.getElementById("status").dataset.kind = "err";
-      throw new Error("__TAURI__ tidak tersedia");
+const T = window.__TAURI__;
+if (!T || !T.core) {
+  document.getElementById("status").textContent = "Error: window.__TAURI__ tidak ada (cek withGlobalTauri: true di tauri.conf.json)";
+  document.getElementById("status").dataset.kind = "err";
+  throw new Error("__TAURI__ tidak tersedia");
+}
+const invoke = (cmd, args) => Promise.race([
+  T.core.invoke(cmd, args),
+  new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
+]);
+// daftar fitur disimpan di config.pages (urutan halaman = urutan di daftar itu)
+const PAGE_IDS = ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf"];
+const EXTRA_IDS = ["lyrics", "privacy"];
+const FEATURE_IDS = [...PAGE_IDS, ...EXTRA_IDS];
+const FALLBACK = {
+  scale: 1,
+  pages: [...FEATURE_IDS],
+  weather: { lat: -6.9175, lon: 107.6191, city: "Bandung" },
+  hide_fullscreen: true,
+  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" }
+};
+const $ = (id) => document.getElementById(id);
+const inp = (id) => $(id);
+const statusEl = $("status");
+const pill = $("pill");
+function say(text, kind = "") {
+  statusEl.textContent = text;
+  statusEl.dataset.kind = kind;
+}
+window.addEventListener("error", (e) => say(`Error: ${e.message}`, "err"));
+window.addEventListener("unhandledrejection", (e) => say(`Error: ${String(e.reason)}`, "err"));
+let cfg = structuredClone(FALLBACK);
+let loaded = false;
+const norm = (h, fallback) => {
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h ?? "").trim());
+  if (!m) return fallback;
+  let v = m[1].toLowerCase();
+  if (v.length === 3) v = v.split("").map((c) => c + c).join("");
+  return "#" + v;
+};
+const rgb = (h) => {
+  const n = parseInt(h.slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+};
+const luma = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+const radios = () => [...document.querySelectorAll('input[name="theme"]')];
+const theme = () => radios().find((r) => r.checked)?.value ?? "auto";
+const COLORS = ["background", "dark_bg", "light_bg", "text", "accent"];
+function fill(c) {
+  const a = c.appearance;
+  radios().forEach((r) => r.checked = r.value === a.theme);
+  inp("background").value = norm(a.background, "#000000");
+  inp("dark_bg").value = norm(a.dark_bg, "#000000");
+  inp("light_bg").value = norm(a.light_bg, "#f5f5f7");
+  inp("text_auto").checked = !a.text;
+  inp("text").value = norm(a.text, "#ffffff");
+  inp("accent_auto").checked = !a.accent;
+  inp("accent").value = norm(a.accent, "#788cff");
+  inp("scale").value = String(c.scale);
+  inp("hide_fullscreen").checked = c.hide_fullscreen;
+  const pages = Array.isArray(c.pages) ? c.pages : FALLBACK.pages;
+  FEATURE_IDS.forEach((id) => inp("f-" + id).checked = pages.includes(id));
+  const w = c.weather ?? FALLBACK.weather;
+  inp("w-lat").value = String(w.lat);
+  inp("w-lon").value = String(w.lon);
+  inp("w-city").value = w.city;
+  sync();
+}
+function collect() {
+  const c = structuredClone(cfg);
+  c.appearance = {
+    theme: theme(),
+    background: inp("background").value,
+    dark_bg: inp("dark_bg").value,
+    light_bg: inp("light_bg").value,
+    text: inp("text_auto").checked ? "" : inp("text").value,
+    accent: inp("accent_auto").checked ? "" : inp("accent").value
+  };
+  c.scale = parseFloat(inp("scale").value);
+  c.hide_fullscreen = inp("hide_fullscreen").checked;
+  c.pages = collectPages();
+  const lat = parseFloat(inp("w-lat").value);
+  const lon = parseFloat(inp("w-lon").value);
+  if (isFinite(lat) && isFinite(lon)) {
+    c.weather = { lat, lon, city: inp("w-city").value.trim() || "Lokasi saya" };
+  }
+  return c;
+}
+// pertahankan urutan & nama kustom di config; hanya tambah/buang fitur yang dikenal
+function collectPages() {
+  const on = new Set(FEATURE_IDS.filter((id) => inp("f-" + id).checked));
+  const base = Array.isArray(cfg.pages) ? cfg.pages : FALLBACK.pages;
+  const out = base.filter((n) => !FEATURE_IDS.includes(n) || on.has(n));
+  for (const id of FEATURE_IDS) if (on.has(id) && !out.includes(id)) out.push(id);
+  return out;
+}
+const weatherValid = () => {
+  const lat = parseFloat(inp("w-lat").value);
+  const lon = parseFloat(inp("w-lon").value);
+  return isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+};
+function sync() {
+  const t = theme();
+  const on = {
+    background: t === "custom",
+    dark_bg: t === "auto" || t === "dark",
+    light_bg: t === "auto" || t === "light",
+    text: !inp("text_auto").checked,
+    accent: !inp("accent_auto").checked
+  };
+  for (const k of COLORS) {
+    $(`row-${k}`).classList.toggle("off", !on[k] && (k === "background" || k === "dark_bg" || k === "light_bg"));
+    inp(k).disabled = !on[k];
+    $(`hex-${k}`).textContent = on[k] ? inp(k).value : k === "text" || k === "accent" ? "otomatis" : "\u2014";
+  }
+  $("scale_val").textContent = `${Number(inp("scale").value).toFixed(2)}\xD7`;
+  const city = inp("w-city").value.trim() || "\u2014";
+  $("w-current").textContent = weatherValid() ? `${city} (${inp("w-lat").value}, ${inp("w-lon").value})` : "koordinat tidak valid";
+  updatePill();
+}
+function updatePill() {
+  const c = collect();
+  const a = c.appearance;
+  const light = a.theme === "light" || a.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches;
+  const bgHex = a.theme === "custom" ? a.background : light ? a.light_bg : a.dark_bg;
+  const bg = rgb(norm(bgHex, "#000000"));
+  const fg = a.text ? rgb(norm(a.text, "#ffffff")) : luma(bg) > 0.55 ? [17, 17, 17] : [255, 255, 255];
+  pill.style.setProperty("--p-bg", `rgb(${bg.join(",")})`);
+  pill.style.setProperty("--p-fg", `rgb(${fg.join(",")})`);
+  pill.style.setProperty("--p-fg-rgb", fg.join(","));
+  pill.style.setProperty("--p-accent", a.accent ? rgb(norm(a.accent, "#788cff")).join(",") : "120,140,255");
+  pill.style.setProperty("--p-scale", String(c.scale));
+}
+let previewTimer = 0;
+function preview() {
+  if (!loaded) return;
+  clearTimeout(previewTimer);
+  previewTimer = window.setTimeout(() => {
+    invoke("cfg_preview", { cfg: collect() }).catch((e) => say(`Pratinjau gagal: ${e}`, "err"));
+  }, 60);
+}
+document.querySelectorAll("input:not([data-weather]):not([data-os])").forEach((el) => {
+  const isScale = el.id === "scale";
+  el.addEventListener("input", () => {
+    sync();
+    if (!isScale) preview();
+  });
+  el.addEventListener("change", () => {
+    sync();
+    preview();
+  });
+});
+function pickPlace(h) {
+  inp("w-lat").value = h.latitude.toFixed(4);
+  inp("w-lon").value = h.longitude.toFixed(4);
+  inp("w-city").value = h.name;
+  $("w-results").replaceChildren();
+  sync();
+  say(`Lokasi dipilih: ${h.name}. Klik Simpan untuk menerapkan.`, "ok");
+}
+function showResults(hits) {
+  const ul = $("w-results");
+  ul.replaceChildren();
+  for (const h of hits) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    const place = [h.name, h.admin1, h.country].filter(Boolean).join(", ");
+    const main = document.createElement("span");
+    main.textContent = place;
+    const sub = document.createElement("small");
+    sub.textContent = `${h.latitude.toFixed(2)}, ${h.longitude.toFixed(2)}`;
+    b.append(main, sub);
+    b.addEventListener("click", () => pickPlace(h));
+    li.append(b);
+    ul.append(li);
+  }
+}
+async function searchPlace() {
+  const q = inp("w-q").value.trim();
+  if (q.length < 2) {
+    say("Ketik minimal 2 huruf nama kota.", "err");
+    return;
+  }
+  say("Mencari\u2026");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 8e3);
+  try {
+    const r = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=id&format=json`,
+      { signal: ctl.signal }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const hits = d.results ?? [];
+    showResults(hits);
+    say(hits.length ? "Pilih salah satu hasil." : "Kota tidak ditemukan. Coba ejaan lain atau isi koordinat manual.", hits.length ? "" : "err");
+  } catch (e) {
+    say(`Pencarian gagal: ${e}`, "err");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+$("w-search").addEventListener("click", () => void searchPlace());
+inp("w-q").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") void searchPlace();
+});
+["w-lat", "w-lon", "w-city"].forEach((id) => inp(id).addEventListener("input", sync));
+async function refreshAutostart() {
+  try {
+    inp("autostart").checked = Boolean(await invoke("autostart_get"));
+  } catch {
+  }
+}
+inp("autostart").addEventListener("change", async () => {
+  const want = inp("autostart").checked;
+  inp("autostart").disabled = true;
+  try {
+    const now = Boolean(await invoke("autostart_set", { on: want }));
+    inp("autostart").checked = now;
+    say(now ? "Notch akan berjalan otomatis saat komputer menyala." : "Jalan otomatis dimatikan.", "ok");
+  } catch (e) {
+    inp("autostart").checked = !want;
+    say(`Gagal mengubah jalan otomatis: ${e}`, "err");
+  } finally {
+    inp("autostart").disabled = false;
+  }
+});
+const buttons = [$("save"), $("restart")];
+const busy = (b) => buttons.forEach((x) => x.disabled = b);
+async function save(restart) {
+  if (!loaded) {
+    say("Pengaturan belum berhasil dimuat, penyimpanan dibatalkan agar file lama tidak tertimpa.", "err");
+    return;
+  }
+  if (!weatherValid()) {
+    say("Koordinat cuaca tidak valid (lintang -90..90, bujur -180..180).", "err");
+    return;
+  }
+  if (!collectPages().some((n) => PAGE_IDS.includes(n))) {
+    say("Pilih minimal satu halaman di bagian Fitur.", "err");
+    return;
+  }
+  busy(true);
+  say("Menyimpan\u2026");
+  let path = "";
+  try {
+    path = await invoke("cfg_save", { cfg: collect() });
+    cfg = collect();
+    say(`Tersimpan \u2713  ${path}`, "ok");
+  } catch (e) {
+    say(`Gagal menyimpan: ${e}`, "err");
+    busy(false);
+    return;
+  }
+  if (restart) {
+    say("Tersimpan \u2713  memulai ulang\u2026", "ok");
+    try {
+      await invoke("cfg_restart");
+    } catch (e) {
+      say(`Tersimpan \u2713  tapi restart gagal: ${e}`, "err");
     }
-    const invoke = (cmd, args) => Promise.race([
-      T.core.invoke(cmd, args),
-      new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
-    ]);
-    const FALLBACK = {
-      scale: 1,
-      hide_fullscreen: true,
-      appearance: {
-        theme: "auto",
-        background: "#000000",
-        text: "",
-        dark_bg: "#000000",
-        light_bg: "#f5f5f7",
-        accent: ""
-      }
-    };
-    const $ = (id) => document.getElementById(id);
-    const inp = (id) => $(id);
-    const statusEl = $("status");
-    const pill = $("pill");
-
-    function say(text, kind = "") {
-      statusEl.textContent = text;
-      statusEl.dataset.kind = kind;
-    }
-    window.addEventListener("error", (e) => say(`Error: ${e.message}`, "err"));
-    window.addEventListener("unhandledrejection", (e) => say(`Error: ${String(e.reason)}`, "err"));
-    let cfg = structuredClone(FALLBACK);
-    let loaded = false;
-    const norm = (h, fallback) => {
-      const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h ?? "").trim());
-      if (!m) return fallback;
-      let v = m[1].toLowerCase();
-      if (v.length === 3) v = v.split("").map((c) => c + c).join("");
-      return "#" + v;
-    };
-    const rgb = (h) => {
-      const n = parseInt(h.slice(1), 16);
-      return [n >> 16 & 255, n >> 8 & 255, n & 255];
-    };
-    const luma = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
-    const radios = () => [...document.querySelectorAll('input[name="theme"]')];
-    const theme = () => radios().find((r) => r.checked)?.value ?? "auto";
-    const COLORS = ["background", "dark_bg", "light_bg", "text", "accent"];
-
-    function fill(c) {
-      const a = c.appearance;
-      radios().forEach((r) => r.checked = r.value === a.theme);
-      inp("background").value = norm(a.background, "#000000");
-      inp("dark_bg").value = norm(a.dark_bg, "#000000");
-      inp("light_bg").value = norm(a.light_bg, "#f5f5f7");
-      inp("text_auto").checked = !a.text;
-      inp("text").value = norm(a.text, "#ffffff");
-      inp("accent_auto").checked = !a.accent;
-      inp("accent").value = norm(a.accent, "#788cff");
-      inp("scale").value = String(c.scale);
-      inp("hide_fullscreen").checked = c.hide_fullscreen;
-      sync();
-    }
-
-    function collect() {
-      const c = structuredClone(cfg);
-      c.appearance = {
-        theme: theme(),
-        background: inp("background").value,
-        dark_bg: inp("dark_bg").value,
-        light_bg: inp("light_bg").value,
-        text: inp("text_auto").checked ? "" : inp("text").value,
-        accent: inp("accent_auto").checked ? "" : inp("accent").value
-      };
-      c.scale = parseFloat(inp("scale").value);
-      c.hide_fullscreen = inp("hide_fullscreen").checked;
-      return c;
-    }
-
-    function sync() {
-      const t = theme();
-      const on = {
-        background: t === "custom",
-        dark_bg: t === "auto" || t === "dark",
-        light_bg: t === "auto" || t === "light",
-        text: !inp("text_auto").checked,
-        accent: !inp("accent_auto").checked
-      };
-      for (const k of COLORS) {
-        $(`row-${k}`).classList.toggle("off", !on[k] && (k === "background" || k === "dark_bg" || k === "light_bg"));
-        inp(k).disabled = !on[k];
-        $(`hex-${k}`).textContent = on[k] ? inp(k).value : k === "text" || k === "accent" ? "otomatis" : "\u2014";
-      }
-      $("scale_val").textContent = `${Number(inp("scale").value).toFixed(2)}\xD7`;
-      updatePill();
-    }
-
-    function updatePill() {
-      const c = collect();
-      const a = c.appearance;
-      const light = a.theme === "light" || a.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches;
-      const bgHex = a.theme === "custom" ? a.background : light ? a.light_bg : a.dark_bg;
-      const bg = rgb(norm(bgHex, "#000000"));
-      const fg = a.text ? rgb(norm(a.text, "#ffffff")) : luma(bg) > 0.55 ? [17, 17, 17] : [255, 255, 255];
-      pill.style.setProperty("--p-bg", `rgb(${bg.join(",")})`);
-      pill.style.setProperty("--p-fg", `rgb(${fg.join(",")})`);
-      pill.style.setProperty("--p-fg-rgb", fg.join(","));
-      pill.style.setProperty("--p-accent", a.accent ? rgb(norm(a.accent, "#788cff")).join(",") : "120,140,255");
-      pill.style.setProperty("--p-scale", String(c.scale));
-    }
-    let previewTimer = 0;
-
-    function preview() {
-      if (!loaded) return;
-      clearTimeout(previewTimer);
-      previewTimer = window.setTimeout(() => {
-        invoke("cfg_preview", {
-          cfg: collect()
-        }).catch((e) => say(`Pratinjau gagal: ${e}`, "err"));
-      }, 60);
-    }
-    document.querySelectorAll("input").forEach((el) => {
-      const isScale = el.id === "scale";
-      el.addEventListener("input", () => {
-        sync();
-        if (!isScale) preview();
-      });
-      el.addEventListener("change", () => {
-        sync();
-        preview();
-      });
-    });
-    const buttons = [$("save"), $("restart")];
-    const busy = (b) => buttons.forEach((x) => x.disabled = b);
-    async function save(restart) {
-      if (!loaded) {
-        say("Pengaturan belum berhasil dimuat, penyimpanan dibatalkan agar file lama tidak tertimpa.", "err");
-        return;
-      }
-      busy(true);
-      say("Menyimpan\u2026");
-      let path = "";
-      try {
-        path = await invoke("cfg_save", {
-          cfg: collect()
-        });
-        cfg = collect();
-        say(`Tersimpan \u2713  ${path}`, "ok");
-      } catch (e) {
-        say(`Gagal menyimpan: ${e}`, "err");
-        busy(false);
-        return;
-      }
-      if (restart) {
-        say("Tersimpan \u2713  memulai ulang\u2026", "ok");
-        try {
-          await invoke("cfg_restart");
-        } catch (e) {
-          say(`Tersimpan \u2713  tapi restart gagal: ${e}`, "err");
-        }
-      }
-      busy(false);
-    }
-    $("save").addEventListener("click", () => void save(false));
-    $("restart").addEventListener("click", () => void save(true));
+  }
+  busy(false);
+}
+$("save").addEventListener("click", () => void save(false));
+$("restart").addEventListener("click", () => void save(true));
+fill(cfg);
+(async () => {
+  try {
+    cfg = await invoke("cfg_get");
+    loaded = true;
     fill(cfg);
-    (async () => {
-      try {
-        cfg = await invoke("cfg_get");
-        loaded = true;
-        fill(cfg);
-        say("Siap.");
-      } catch (e) {
-        say(`Gagal membaca pengaturan: ${e}`, "err");
-      }
-    })();
-  </script>
-</body>
+    say("Siap.");
+    void refreshAutostart();
+  } catch (e) {
+    say(`Gagal membaca pengaturan: ${e}`, "err");
+  }
+})();
 
+</script>
+</body>
 </html>

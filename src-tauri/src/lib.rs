@@ -1,6 +1,7 @@
 use tauri::Emitter;
 use tauri::{Manager, PhysicalPosition};
 
+mod autostart;
 mod battery;
 mod bluetooth;
 mod config;
@@ -12,6 +13,9 @@ mod weather;
 mod stats;
 mod fullscreen;
 mod clipboard;
+mod privacy;
+mod lyrics;
+mod shelf;
 #[cfg(target_os = "windows")]
 mod winps;
 // area klik pil (x, lebar, tinggi) dalam piksel logis. Dipakai di Windows.
@@ -219,8 +223,10 @@ pub fn run() {
                 center_later(&win);
             }
 
-            // ikon tray: Pengaturan + Keluar (notch tidak punya taskbar)
-            {
+            // ikon tray: Pengaturan + Keluar (notch tidak punya taskbar).
+            // Tidak fatal: saat dijalankan otomatis ketika login, tray kadang belum siap
+            // (mis. GNOME tanpa AppIndicator); aplikasi tetap harus jalan.
+            let tray_result: Result<(), Box<dyn std::error::Error>> = (|| {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::TrayIconBuilder;
                 let mi_set = MenuItem::with_id(app, "settings", "Pengaturan", true, None::<&str>)?;
@@ -242,6 +248,10 @@ pub fn run() {
                     tray = tray.icon(icon.clone());
                 }
                 tray.build(app)?;
+                Ok(())
+            })();
+            if let Err(e) = tray_result {
+                eprintln!("tray gagal dibuat (pengaturan tidak bisa dibuka lewat tray): {e}");
             }
 
             bluetooth::start(app.handle().clone());
@@ -253,6 +263,8 @@ pub fn run() {
             media::start(app.handle().clone());
             stats::start(app.handle().clone()); 
             clipboard::start(app.handle().clone()); 
+            privacy::start(app.handle().clone());
+            shelf::start(app.handle().clone());
             // setelah semua modul mendaftar: satu PowerShell bersama untuk perangkat/kecerahan/Bluetooth
             #[cfg(target_os = "windows")]
             winps::start();
@@ -275,11 +287,20 @@ pub fn run() {
             clipboard::clip_list,
             clipboard::clip_copy,
             clipboard::clip_clear,
+            lyrics::lyrics_fetch,
+            shelf::shelf_list,
+            shelf::shelf_add,
+            shelf::shelf_remove,
+            shelf::shelf_clear,
+            shelf::shelf_open,
+            shelf::shelf_reveal,
             config::cfg_get,
             config::cfg_preview,
             config::cfg_save,
             config::cfg_restart,
-            bluetooth::bt_list
+            bluetooth::bt_list,
+            autostart::autostart_get,
+            autostart::autostart_set
         ])
         .run(tauri::generate_context!())
         .expect("gagal menjalankan aplikasi");

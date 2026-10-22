@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 // ---------- konfigurasi (dari config.toml lewat Rust) ----------
 type Appearance = {
@@ -22,13 +23,15 @@ type Cfg = {
 };
 const FALLBACK: Cfg = {
   scale: 1,
-  pages: ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard"],
+  pages: ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf", "lyrics", "privacy"],
   timing: { hub_auto_ms: 4000, card_ms: 3500, hud_ms: 1500, hover_open_ms: 150, hover_close_ms: 450, sleep_after_s: 60 },
   pomodoro: { focus_min: 25, break_min: 5, long_break_min: 15, rounds: 4 },
   appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
 };
 const CFG: Cfg = { ...FALLBACK, ...((window as any).__CFG__ ?? {}) };
 const T = CFG.timing;
+// fitur tambahan (bukan halaman) juga diatur lewat daftar pages di config
+const featureOn = (name: string) => CFG.pages.includes(name);
 
 const $ = (id: string) => document.getElementById(id)!;
 const notch = $("notch");
@@ -37,7 +40,7 @@ const eyeEls = document.querySelectorAll<HTMLElement>(".eye");
 const isWin = navigator.userAgent.includes("Windows");
 
 // ---------- state bersama ----------
-type View = "bt" | "dev" | "hub" | "hud";
+type View = "bt" | "dev" | "hub" | "hud" | "lyr";
 let override: View | null = null;
 let playing = false;
 let hideTimer: number | undefined;
@@ -51,13 +54,15 @@ let closeAt = 0;
 let settleUntil = 0;
 
 // ---------- ukuran (dikalikan skala dari config) ----------
+// lebar jendela = lebar pil + 20 (10 di tiap sisi untuk lengkung "telinga" notch)
 const BASE_SIZES: Record<string, [number, number]> = {
-  idle: [140, 28],
-  compact: [240, 40],
-  hub: [410, 140],
-  bt: [350, 80],
-  dev: [350, 80],
-  hud: [310, 60],
+  idle: [150, 28],
+  compact: [250, 40],
+  hub: [420, 140],
+  bt: [360, 80],
+  dev: [360, 80],
+  hud: [320, 60],
+  lyr: [420, 230],
 };
 const BASE_HIT: Record<string, [number, number]> = {
   idle: [130, 24],
@@ -66,6 +71,7 @@ const BASE_HIT: Record<string, [number, number]> = {
   bt: [340, 74],
   dev: [340, 74],
   hud: [300, 52],
+  lyr: [400, 222],
 };
 const scaleMap = (m: Record<string, [number, number]>) =>
   Object.fromEntries(
@@ -276,6 +282,7 @@ function setPage(i: number) {
   dotsEl.querySelectorAll(".dot").forEach((d, n) => d.classList.toggle("active", n === page));
   if (names[page] === "quick" || names[page] === "tools") refreshQuick();
   if (names[page] === "clipboard") refreshClip();
+  if (names[page] === "shelf") refreshShelf();
 }
 setPage(0);
 
@@ -320,6 +327,8 @@ let wheelLock = false;
 notch.addEventListener("wheel", (e) => {
   if (notch.dataset.view !== "hub") return;
   if ((e.target as HTMLElement).closest(".clip-list")) return; // biarkan daftar clipboard di-scroll
+  const sh = (e.target as HTMLElement).closest<HTMLElement>(".sh-list"); // shelf: scroll mendatar
+  if (sh && sh.scrollWidth > sh.clientWidth) { sh.scrollLeft += e.deltaY || e.deltaX; return; }
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
   if (Math.abs(d) < 10 || wheelLock) return;
   wheelLock = true;
@@ -352,7 +361,7 @@ setInterval(() => {
   const now = Date.now();
   if (dragging || now < settleUntil) return;
 
-  if (override === "hub") {
+  if (override === "hub" || override === "lyr") {
     if (inside) {
       if (!hubByHover) { clearTimeout(hideTimer); hubByHover = true; }
       closeAt = 0;
@@ -365,6 +374,10 @@ setInterval(() => {
     if (!override && inside && now - insideSince > T.hover_open_ms) openHub(page);
   }
 }, 120);
+
+// ---------- nonaktifkan klik kanan (menu bawaan webview) ----------
+// fase capture: menu bawaan diblokir di mana pun; handler lain (mis. klik kanan item shelf) tetap jalan
+window.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 
 // ---------- klik notch ----------
 let clicks: number[] = [];
@@ -450,6 +463,7 @@ function accentFrom(img: HTMLImageElement) {
 type Media = { active: boolean; title: string; artist: string; playing: boolean; position: number; length: number };
 const artEl = $("art") as HTMLImageElement;
 const cArtEl = $("c-art") as HTMLImageElement;
+const lyArtEl = $("ly-art") as HTMLImageElement;
 let lastTitle = "";
 
 // gambar bawaan saat tidak ada media / tidak ada artwork
@@ -468,6 +482,7 @@ function showDefaultArt() {
   artEl.onload = null;
   artEl.src = DEFAULT_ART;
   cArtEl.src = DEFAULT_ART;
+  lyArtEl.src = DEFAULT_ART;
   artEl.style.visibility = cArtEl.style.visibility = "visible";
   if (!fixedAccent()) document.documentElement.style.removeProperty("--accent"); // kembali ke warna bawaan
 }
@@ -491,12 +506,13 @@ function showArt(src: string) {
         (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
         0, 0, ART_PX, ART_PX
       );
-      small = c.toDataURL("image/jpeg", 0.85);
+      small = c.toDataURL("image/webp", 0.85); // webp menjaga transparansi (jpeg mengubahnya jadi hitam)
       c.width = c.height = 0; // lepaskan bitmap canvas
     } catch { /* gambar lintas domain tidak bisa dibaca canvas: pakai aslinya */ }
     artEl.onload = () => accentFrom(artEl);
     artEl.src = small;
     cArtEl.src = small;
+    lyArtEl.src = small;
     artEl.style.visibility = cArtEl.style.visibility = "visible";
   };
   img.src = src;
@@ -513,6 +529,8 @@ listen<Media>("media", (e) => {
 
   $("m-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
   $("m-artist").textContent = m.active ? m.artist : "Putar musik untuk memulai";
+  $("ly-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
+  $("ly-artist").textContent = m.active ? m.artist : "";
   if (!m.active) showDefaultArt();
   $("m-progress").style.width = m.length > 0 ? `${(m.position / m.length) * 100}%` : "0%";
   $("t-pos").textContent = fmt(m.position);
@@ -525,6 +543,7 @@ listen<Media>("media", (e) => {
   lastTitle = m.title;
 
   if (playing !== wasPlaying) updateBase();
+  onMediaForLyrics(m);
 });
 
 listen<string | null>("media-art", (e) => {
@@ -614,15 +633,16 @@ const ICONS: Record<string, string> = {
   audio:    `<path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z"/>`,
   phone:    `<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>`,
   camera:   `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
+  mic:      `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`,
   printer:  `<path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/>`,
 };
 const LABELS: Record<string, string> = {
   charger: "Charger", usb: "USB", usbc: "USB Type-C", storage: "Penyimpanan",
   keyboard: "Keyboard", mouse: "Mouse", audio: "Audio", phone: "Ponsel",
-  camera: "Kamera", printer: "Printer",
+  camera: "Kamera", mic: "Mikrofon", printer: "Printer",
 };
 
-function showDevice(kind: string, name: string, connected: boolean) {
+function showDevice(kind: string, name: string, connected: boolean, sub?: string) {
   const icon = $("dev-icon");
   icon.dataset.kind = ICONS[kind] ? kind : "usb";
   icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[kind] ?? ICONS.usb}</svg>`;
@@ -632,7 +652,7 @@ function showDevice(kind: string, name: string, connected: boolean) {
     ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>`
     : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
   $("dev-name").textContent = name;
-  $("dev-sub").textContent = `${LABELS[kind] ?? "Perangkat"} · ${connected ? "Terhubung" : "Dilepas"}`;
+  $("dev-sub").textContent = sub ?? `${LABELS[kind] ?? "Perangkat"} · ${connected ? "Terhubung" : "Dilepas"}`;
 
   hubByHover = false;
   expand("dev", connected ? T.card_ms : 2000);
@@ -698,7 +718,7 @@ const HUD_ICONS = {
 };
 
 function showHud(kind: string, value: number, muted: boolean) {
-  if (override === "hub" && inside) return;
+  if ((override === "hub" || override === "lyr") && inside) return;
 
   const v = Math.max(0, Math.min(100, Math.round(value)));
   const icon =
@@ -907,8 +927,251 @@ document.getElementById("clip-clear")?.addEventListener("click", (e) => {
 
 refreshClip();
 
+// ---------- indikator mic / kamera ----------
+type Privacy = { mic: boolean; cam: boolean; mic_app: string; cam_app: string };
+let priv: Privacy | null = null;
+
+listen<Privacy>("privacy", (e) => {
+  if (!featureOn("privacy")) { notch.removeAttribute("data-priv"); return; }
+  const p = e.payload;
+  const prev = priv;
+  priv = p;
+
+  const on = [p.cam ? "cam" : "", p.mic ? "mic" : ""].filter(Boolean).join(" ");
+  if (on) notch.dataset.priv = on;
+  else notch.removeAttribute("data-priv");
+
+  if (!prev) return; // event pertama hanya menandai keadaan awal, tanpa kartu
+  if (p.cam && !prev.cam) {
+    showDevice("camera", "Kamera aktif", true, p.cam_app ? `Dipakai ${p.cam_app}` : "Sedang digunakan");
+    flash("suspicious", 2500);
+  } else if (p.mic && !prev.mic) {
+    showDevice("mic", "Mikrofon aktif", true, p.mic_app ? `Dipakai ${p.mic_app}` : "Sedang digunakan");
+    flash("suspicious", 2500);
+  }
+});
+
+// ---------- lirik lagu (diperluas dari halaman media) ----------
+type LyLine = { t: number; text: string };
+type Lyrics = { synced: boolean; lines: LyLine[] };
+
+let ly: Lyrics | null = null;
+let lyKey = "";
+let lyState: "idle" | "loading" | "none" | "ok" = "idle";
+let lyToken = 0;
+let lyIdx = -2;
+const LY_LEAD = 0.3; // detik: tampilkan baris sedikit lebih awal supaya terasa sinkron
+const lyLines = $("ly-lines");
+const lyScroll = $("ly-scroll");
+
+// jam media: posisi dari Rust datang tiap detik, di sini diinterpolasi supaya mulus
+let clockPos = 0, clockLen = 0, clockAt = 0, clockPlaying = false;
+const nowPos = () => clockPos + (clockPlaying ? (performance.now() - clockAt) / 1000 : 0);
+
+function onMediaForLyrics(m: Media) {
+  clockPos = m.position;
+  clockLen = m.length;
+  clockAt = performance.now();
+  clockPlaying = m.active && m.playing;
+  if (!featureOn("lyrics")) return; // fitur lirik dimatikan di pengaturan
+
+  const key = m.active && m.title ? `${m.artist}|${m.title}` : "";
+  if (key === lyKey) return;
+
+  lyKey = key;
+  ly = null;
+  const token = ++lyToken;
+  if (!key) { lyState = "idle"; renderLyrics(); return; }
+
+  lyState = "loading";
+  renderLyrics();
+  invoke<Lyrics | null>("lyrics_fetch", { title: m.title, artist: m.artist, length: m.length })
+    .then((r) => {
+      if (token !== lyToken) return; // lagu sudah ganti
+      ly = r && r.lines.length ? r : null;
+      lyState = ly ? "ok" : "none";
+      renderLyrics();
+    })
+    .catch(() => {
+      if (token !== lyToken) return;
+      lyState = "none";
+      renderLyrics();
+    });
+}
+
+// bangun daftar baris (dipanggil saat status lirik berubah, bukan tiap detik)
+function renderLyrics() {
+  document.getElementById("m-lyrics")?.classList.toggle("off", lyState === "idle" || lyState === "none");
+  lyLines.classList.toggle("plain", !!ly && !ly.synced);
+  lyLines.replaceChildren();
+  lyIdx = -2;
+
+  if (lyState !== "ok" || !ly) {
+    const d = document.createElement("div");
+    d.className = "ly-msg";
+    d.textContent =
+      lyState === "loading" ? "Mencari lirik…"
+      : lyState === "none" ? "Lirik tidak ditemukan"
+      : "Putar musik untuk melihat lirik";
+    lyLines.appendChild(d);
+    return;
+  }
+  ly.lines.forEach((l) => {
+    const d = document.createElement("div");
+    d.className = "ly-l";
+    d.textContent = l.text || "♪";
+    lyLines.appendChild(d);
+  });
+  if (notch.dataset.view === "lyr") tickLyrics(true);
+}
+
+function lyIndex(): number {
+  if (!ly) return -1;
+  const p = nowPos() + LY_LEAD;
+  let lo = 0, hi = ly.lines.length - 1, r = -1; // baris terakhir dengan t <= p
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (ly.lines[mid].t <= p) { r = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return r;
+}
+
+function centerLyric(instant: boolean) {
+  const el = lyLines.querySelector<HTMLElement>(".ly-l.cur");
+  if (!el) return;
+  lyScroll.scrollTo({
+    top: el.offsetTop - lyScroll.clientHeight / 2 + el.offsetHeight / 2,
+    behavior: instant ? "auto" : "smooth",
+  });
+}
+
+// sorot baris yang sedang dinyanyikan (lirik tanpa waktu hanya bisa di-scroll manual)
+function tickLyrics(force = false) {
+  if (lyState !== "ok" || !ly || !ly.synced) return;
+  const i = lyIndex();
+  if (i === lyIdx && !force) return;
+  lyIdx = i;
+  lyLines.querySelector(".cur")?.classList.remove("cur");
+  if (i >= 0 && i < lyLines.children.length) lyLines.children[i].classList.add("cur");
+  centerLyric(force);
+}
+setInterval(() => { if (notch.dataset.view === "lyr") tickLyrics(); }, 200);
+
+function openLyrics() {
+  hubByHover = true; // menutup otomatis saat kursor keluar, seperti hub
+  closeAt = 0;
+  expand("lyr", 0);
+  tickLyrics(true);
+}
+if (!featureOn("lyrics")) document.getElementById("m-lyrics")?.remove();
+document.getElementById("m-lyrics")?.addEventListener("click", (e) => { e.stopPropagation(); openLyrics(); });
+$("ly-back").addEventListener("click", (e) => { e.stopPropagation(); openHub(pageOf("media")); });
+renderLyrics(); // pesan awal "Putar musik..."
+
+// ---------- shelf file ----------
+type ShelfItem = { path: string; name: string; dir: boolean };
+const EXT_ICON: Record<string, string> = {
+  png: "🖼️", jpg: "🖼️", jpeg: "🖼️", gif: "🖼️", webp: "🖼️", svg: "🖼️", bmp: "🖼️",
+  mp3: "🎵", flac: "🎵", wav: "🎵", ogg: "🎵", m4a: "🎵",
+  mp4: "🎬", mkv: "🎬", mov: "🎬", avi: "🎬", webm: "🎬",
+  pdf: "📕", doc: "📝", docx: "📝", txt: "📝", md: "📝", odt: "📝",
+  xls: "📊", xlsx: "📊", csv: "📊", ppt: "📽️", pptx: "📽️",
+  zip: "🗜️", rar: "🗜️", "7z": "🗜️", gz: "🗜️", tar: "🗜️",
+  js: "📜", ts: "📜", py: "📜", rs: "📜", json: "📜", html: "📜", css: "📜",
+  exe: "⚙️", msi: "⚙️", deb: "⚙️", appimage: "⚙️",
+};
+const iconFor = (it: ShelfItem) =>
+  it.dir ? "📁" : EXT_ICON[(it.name.split(".").pop() ?? "").toLowerCase()] ?? "📄";
+
+function paintShelf(items: ShelfItem[]) {
+  const list = document.getElementById("sh-list");
+  if (!list) return; // halaman shelf dimatikan di config
+  $("sh-count").textContent = items.length ? `Shelf · ${items.length}` : "Shelf";
+  list.replaceChildren();
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "sh-empty";
+    empty.textContent = "Seret file ke notch";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach((it) => {
+    const b = document.createElement("button"); // button: tidak memicu geser halaman
+    b.className = "sh-item";
+    b.title = `${it.path}\nKlik: buka · Klik kanan: tampilkan di folder`;
+
+    const ic = document.createElement("span");
+    ic.className = "ic";
+    ic.textContent = iconFor(it);
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = it.name;
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "×";
+    b.append(ic, nm, x);
+
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if ((e.target as HTMLElement).closest(".x")) {
+        invoke<ShelfItem[]>("shelf_remove", { path: it.path }).then(paintShelf).catch(() => {});
+      } else {
+        invoke("shelf_open", { path: it.path });
+        flash("happy", 1000);
+      }
+    });
+    b.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      invoke("shelf_reveal", { path: it.path });
+    });
+    list.appendChild(b);
+  });
+}
+
+function refreshShelf() {
+  invoke<ShelfItem[]>("shelf_list").then(paintShelf).catch(() => {});
+}
+
+document.getElementById("sh-clear")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  invoke<ShelfItem[]>("shelf_clear").then(paintShelf).catch(() => {});
+  flash("surprised", 900);
+});
+
+// file diseret dari aplikasi lain ke notch: buka halaman shelf saat masuk, simpan saat dilepas
+if (names.includes("shelf")) {
+  getCurrentWebview()
+    .onDragDropEvent((ev) => {
+      const p = ev.payload;
+      if (p.type === "enter") {
+        notch.classList.add("dropping");
+        hubByHover = false;
+        openHub(pageOf("shelf"), 8000);
+        flash("surprised", 1200);
+      } else if (p.type === "leave") {
+        notch.classList.remove("dropping");
+        expand("hub", 1200);
+      } else if (p.type === "drop") {
+        notch.classList.remove("dropping");
+        if (p.paths.length === 0) return;
+        invoke<ShelfItem[]>("shelf_add", { paths: p.paths })
+          .then((items) => {
+            paintShelf(items);
+            openHub(pageOf("shelf"), 3500);
+            flash("love", 1500);
+          })
+          .catch(() => {});
+      }
+    })
+    .catch(() => {});
+}
+refreshShelf();
+
 // ---------- tes manual lewat keyboard ----------
-// 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
+// M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
 const keyMoods: Mood[] = ["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious"];
 const demo = Object.keys(ICONS);
 let demoI = 0;
@@ -930,6 +1193,10 @@ document.addEventListener("keydown", (e) => {
     openHub(pageOf("weather"), 5000);
   }
   if (k === "h") openHub(page, 5000);
+  if (k === "m") {
+    if (notch.hasAttribute("data-priv")) notch.removeAttribute("data-priv");
+    else { notch.dataset.priv = "cam mic"; showDevice("camera", "Kamera aktif", true, "Dipakai demo"); }
+  }
   if (k === "u") showHud("volume", 20 + Math.random() * 80, false);
   if (k === "i") showHud("brightness", 10 + Math.random() * 90, false);
   if (k === "p") { remaining = 3; running = true; endAt = Date.now() + 3000; openHub(pageOf("timer"), 6000); }

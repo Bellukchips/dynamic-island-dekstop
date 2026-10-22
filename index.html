@@ -11,7 +11,11 @@
 
 <body>
   <div id="stage">
+    <div id="shell"><!-- pembungkus: telinga lengkung berada di luar #notch (yang overflow: hidden) -->
     <div id="notch" data-view="idle" data-playing="false">
+
+      <!-- indikator privasi: titik hijau = kamera, oranye = mikrofon -->
+      <div id="privacy" aria-hidden="true"><i class="pv-cam"></i><i class="pv-mic"></i></div>
 
       <!-- idle: mata -->
       <div class="layer l-idle">
@@ -64,6 +68,9 @@
                   </button>
                   <button id="m-next" aria-label="Berikutnya"><svg viewBox="0 0 24 24">
                       <path d="M16 6h2v12h-2zM14.5 12 6 6v12z" />
+                    </svg></button>
+                  <button id="m-lyrics" class="off" aria-label="Lirik"><svg viewBox="0 0 24 24">
+                      <path d="M4 6h16M4 12h10M4 18h13" />
                     </svg></button>
                 </div>
               </div>
@@ -185,6 +192,21 @@
               </div>
             </div>
 
+            <!-- halaman: shelf file (seret file ke notch) -->
+            <div class="page p-shelf" data-page="shelf">
+              <div class="sh-head">
+                <span id="sh-count">Shelf</span>
+                <button id="sh-clear" aria-label="Kosongkan shelf">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="sh-list" id="sh-list">
+                <div class="sh-empty">Seret file ke notch</div>
+              </div>
+            </div>
+
             <!-- halaman 8: riwayat clipboard -->
             <div class="page p-clip" data-page="clipboard">
               <div class="clip-head">
@@ -202,6 +224,21 @@
 
           </div>
           <div class="dots" id="dots"></div>
+        </div>
+      </div>
+
+      <!-- lirik: tampilan diperluas dari halaman media -->
+      <div class="layer l-lyr">
+        <div class="ly-top">
+          <img id="ly-art" alt="" />
+          <div class="ly-meta">
+            <div id="ly-title">-</div>
+            <div id="ly-artist"></div>
+          </div>
+          <button id="ly-back" aria-label="Kembali"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6" /></svg></button>
+        </div>
+        <div class="ly-scroll" id="ly-scroll">
+          <div id="ly-lines"></div>
         </div>
       </div>
 
@@ -240,6 +277,7 @@
         </div>
         <span id="hud-val">0</span>
       </div>
+    </div>
     </div>
   </div>
 </body>

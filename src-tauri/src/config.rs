@@ -196,6 +196,11 @@ pub fn cfg_save(app: tauri::AppHandle, mut cfg: Config) -> Result<String, String
     if cfg.pages.is_empty() {
         cfg.pages = Config::default().pages;
     }
+    cfg.weather.lat = cfg.weather.lat.clamp(-90.0, 90.0);
+    cfg.weather.lon = cfg.weather.lon.clamp(-180.0, 180.0);
+    if cfg.weather.city.trim().is_empty() {
+        cfg.weather.city = "Lokasi saya".into();
+    }
     let p = path();
     let text = toml::to_string_pretty(&cfg).map_err(|e| format!("gagal membuat TOML: {e}"))?;
     if let Some(dir) = p.parent() {
@@ -203,6 +208,8 @@ pub fn cfg_save(app: tauri::AppHandle, mut cfg: Config) -> Result<String, String
     }
     std::fs::write(&p, text).map_err(|e| format!("gagal menulis {}: {e}", p.display()))?;
     println!("config: disimpan ke {}", p.display());
+    // lokasi cuaca berlaku langsung tanpa restart
+    crate::weather::set_location(cfg.weather.lat, cfg.weather.lon);
     let _ = app.emit("config-changed", &cfg);
     Ok(p.display().to_string())
 }
