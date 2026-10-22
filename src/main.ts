@@ -965,12 +965,11 @@ const lyLines = $("ly-lines");
 const lyScroll = $("ly-scroll");
 
 // jam media: posisi dari Rust datang tiap detik, di sini diinterpolasi supaya mulus
-let clockPos = 0, clockLen = 0, clockAt = 0, clockPlaying = false;
+let clockPos = 0, clockAt = 0, clockPlaying = false;
 const nowPos = () => clockPos + (clockPlaying ? (performance.now() - clockAt) / 1000 : 0);
 
 function onMediaForLyrics(m: Media) {
   clockPos = m.position;
-  clockLen = m.length;
   clockAt = performance.now();
   clockPlaying = m.active && m.playing;
   if (!featureOn("lyrics")) return; // fitur lirik dimatikan di pengaturan
