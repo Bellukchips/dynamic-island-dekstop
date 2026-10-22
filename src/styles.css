@@ -1535,3 +1535,5 @@ body {
   right: calc(var(--e) * -1);
   background: radial-gradient(circle at 100% 100%, transparent calc(var(--e) - 0.5px), var(--bg) var(--e));
 }
+
+.ly-note { padding: 0 0 8px; font-size: 11px; opacity: 0.5; }

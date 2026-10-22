@@ -963,13 +963,18 @@ let lyIdx = -2;
 const LY_LEAD = 0.3; // detik: tampilkan baris sedikit lebih awal supaya terasa sinkron
 const lyLines = $("ly-lines");
 const lyScroll = $("ly-scroll");
+const markManual = () => { lyManualAt = Date.now(); };
+lyScroll.addEventListener("wheel", markManual, { passive: true });
+lyScroll.addEventListener("pointerdown", markManual);
 
 // jam media: posisi dari Rust datang tiap detik, di sini diinterpolasi supaya mulus
-let clockPos = 0, clockAt = 0, clockPlaying = false;
+let clockPos = 0, clockLen = 0, clockAt = 0, clockPlaying = false;
+let lyManualAt = 0; // waktu terakhir pengguna menggulir sendiri (auto-scroll berhenti sebentar)
 const nowPos = () => clockPos + (clockPlaying ? (performance.now() - clockAt) / 1000 : 0);
 
 function onMediaForLyrics(m: Media) {
   clockPos = m.position;
+  clockLen = m.length;
   clockAt = performance.now();
   clockPlaying = m.active && m.playing;
   if (!featureOn("lyrics")) return; // fitur lirik dimatikan di pengaturan
@@ -1015,6 +1020,12 @@ function renderLyrics() {
     lyLines.appendChild(d);
     return;
   }
+  if (!ly.synced) {
+    const note = document.createElement("div");
+    note.className = "ly-note";
+    note.textContent = "Lirik tanpa waktu — gulir otomatis hanya perkiraan";
+    lyLines.appendChild(note);
+  }
   ly.lines.forEach((l) => {
     const d = document.createElement("div");
     d.className = "ly-l";
@@ -1044,15 +1055,25 @@ function centerLyric(instant: boolean) {
   });
 }
 
-// sorot baris yang sedang dinyanyikan (lirik tanpa waktu hanya bisa di-scroll manual)
+// sorot baris yang sedang dinyanyikan. Lirik tanpa waktu: gulir kira-kira sesuai persentase lagu.
 function tickLyrics(force = false) {
-  if (lyState !== "ok" || !ly || !ly.synced) return;
+  if (lyState !== "ok" || !ly) return;
+  const manual = Date.now() - lyManualAt < 4000; // pengguna baru menggulir: jangan ditarik balik
+
+  if (!ly.synced) {
+    if (clockLen <= 0 || (manual && !force)) return;
+    const max = lyScroll.scrollHeight - lyScroll.clientHeight;
+    lyScroll.scrollTop = Math.max(0, Math.min(1, nowPos() / clockLen)) * max;
+    return;
+  }
+
   const i = lyIndex();
   if (i === lyIdx && !force) return;
   lyIdx = i;
   lyLines.querySelector(".cur")?.classList.remove("cur");
-  if (i >= 0 && i < lyLines.children.length) lyLines.children[i].classList.add("cur");
-  centerLyric(force);
+  const el = i >= 0 ? lyLines.querySelectorAll(".ly-l")[i] : undefined;
+  el?.classList.add("cur");
+  if (!manual || force) centerLyric(force);
 }
 setInterval(() => { if (notch.dataset.view === "lyr") tickLyrics(); }, 200);
 
