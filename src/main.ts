@@ -460,8 +460,10 @@ const DEFAULT_ART =
   );
 let artIsDefault = false;
 
+let artToken = 0; // membatalkan pengecilan gambar yang tertunda kalau sudah ada yang lebih baru
 function showDefaultArt() {
   if (artIsDefault) return;
+  artToken++;
   artIsDefault = true;
   artEl.onload = null;
   artEl.src = DEFAULT_ART;
@@ -470,12 +472,34 @@ function showDefaultArt() {
   if (!fixedAccent()) document.documentElement.style.removeProperty("--accent"); // kembali ke warna bawaan
 }
 
+// Cover album bisa beberapa MB (data URL) dan didekode penuh oleh webview, dua kali (hub + kartu kecil).
+// Dikecilkan dulu ke 192px: string besar & bitmap besar langsung bisa dibuang dari memori.
+const ART_PX = 192;
 function showArt(src: string) {
   artIsDefault = false;
-  artEl.onload = () => accentFrom(artEl);
-  artEl.src = src;
-  cArtEl.src = src;
-  artEl.style.visibility = cArtEl.style.visibility = "visible";
+  const token = ++artToken;
+  const img = new Image();
+  img.onload = () => {
+    if (token !== artToken) return; // sudah ada gambar yang lebih baru
+    let small = src;
+    try {
+      const c = document.createElement("canvas");
+      c.width = c.height = ART_PX;
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      c.getContext("2d")!.drawImage(
+        img,
+        (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
+        0, 0, ART_PX, ART_PX
+      );
+      small = c.toDataURL("image/jpeg", 0.85);
+      c.width = c.height = 0; // lepaskan bitmap canvas
+    } catch { /* gambar lintas domain tidak bisa dibaca canvas: pakai aslinya */ }
+    artEl.onload = () => accentFrom(artEl);
+    artEl.src = small;
+    cArtEl.src = small;
+    artEl.style.visibility = cArtEl.style.visibility = "visible";
+  };
+  img.src = src;
 }
 
 showDefaultArt();

@@ -116,39 +116,7 @@ mod imp {
 mod imp {
     use super::BtEvent;
     use std::collections::{HashMap, HashSet};
-    use std::io::{BufRead, BufReader};
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
-    use std::time::Duration;
     use tauri::{AppHandle, Emitter};
-
-    const NO_WINDOW: u32 = 0x0800_0000;
-
-    // Tiap 3 detik cetak perangkat Bluetooth yang sedang TERHUBUNG:
-    //   BT|<instanceId>|<baterai atau kosong>|<nama>
-    // diakhiri baris "---". Properti:
-    //   {83DA6326-...} 15 = DEVPKEY_Device_IsConnected
-    //   {104EA319-...} 2  = tingkat baterai perangkat Bluetooth (jika dilaporkan)
-    const SCRIPT: &str = r#"
-$ErrorActionPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$conn = '{83DA6326-97A6-4088-9453-A1923F573B29} 15'
-$batt = '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2'
-while ($true) {
-  Get-PnpDevice -Class Bluetooth -PresentOnly | Where-Object {
-    $_.InstanceId -like 'BTHENUM\DEV_*' -or $_.InstanceId -like 'BTHLE\DEV_*'
-  } | ForEach-Object {
-    $id = $_.InstanceId
-    $c = (Get-PnpDeviceProperty -InstanceId $id -KeyName $conn).Data
-    if ($c -eq $true) {
-      $b = (Get-PnpDeviceProperty -InstanceId $id -KeyName $batt).Data
-      'BT|' + $id + '|' + $b + '|' + $_.FriendlyName
-    }
-  }
-  '---'
-  Start-Sleep -Seconds 3
-}
-"#;
 
     type Snapshot = HashMap<String, (String, Option<u8>)>; // kunci perangkat -> (nama, baterai)
 
@@ -170,29 +138,15 @@ while ($true) {
         out
     }
 
-    fn watch(app: &AppHandle) {
-        let child = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-            .creation_flags(NO_WINDOW)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn();
-        let Ok(mut child) = child else {
-            eprintln!("bluetooth: PowerShell gagal dijalankan");
-            return;
-        };
-        let Some(out) = child.stdout.take() else {
-            let _ = child.kill();
-            return;
-        };
-
+    // baris datang dari PowerShell bersama (winps.rs), tag "T:":
+    //   BT|<instanceId>|<baterai atau kosong>|<nama>, diakhiri "---"
+    fn watch(app: &AppHandle, rx: std::sync::mpsc::Receiver<String>) {
         let mut announced: HashMap<String, String> = HashMap::new(); // sudah diketahui: kunci -> nama
         let mut waiting: HashSet<String> = HashSet::new(); // baru muncul, baterai belum terbaca
         let mut first = true;
         let mut buf: Vec<String> = Vec::new();
 
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
+        for line in rx {
             let line = line.trim().to_string();
             if line != "---" {
                 if !line.is_empty() {
@@ -244,15 +198,11 @@ while ($true) {
             }
             first = false;
         }
-        let _ = child.kill();
     }
 
     pub fn start(app: AppHandle) {
-        std::thread::spawn(move || loop {
-            watch(&app);
-            // PowerShell berhenti: coba lagi nanti
-            std::thread::sleep(Duration::from_secs(10));
-        });
+        let rx = crate::winps::subscribe("T");
+        std::thread::spawn(move || watch(&app, rx));
     }
 }
 

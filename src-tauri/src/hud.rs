@@ -96,16 +96,11 @@ mod imp {
 #[cfg(target_os = "windows")]
 mod imp {
     use super::HudEvent;
-    use std::io::{BufRead, BufReader};
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
     use std::time::Duration;
     use tauri::{AppHandle, Emitter};
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
     use windows::Win32::Media::Audio::{eMultimedia, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
-
-    const NO_WINDOW: u32 = 0x0800_0000;
 
     fn volume() -> windows::core::Result<(u8, bool)> {
         unsafe {
@@ -118,30 +113,11 @@ mod imp {
         }
     }
 
-    // kecerahan layar (hanya laptop / monitor internal) lewat WMI
-    const BR_SCRIPT: &str = r#"
-$ErrorActionPreference = 'SilentlyContinue'
-while ($true) {
-  $b = (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness | Select-Object -First 1).CurrentBrightness
-  if ($b -ne $null) { "B|$b" }
-  Start-Sleep -Milliseconds 700
-}
-"#;
-
-    fn brightness_watcher(app: AppHandle) {
-        let child = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", BR_SCRIPT])
-            .creation_flags(NO_WINDOW)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn();
-        let Ok(mut child) = child else { return };
-        let Some(out) = child.stdout.take() else { return };
-
+    // kecerahan layar (hanya laptop / monitor internal): baris "B|nn" dari PowerShell bersama (winps.rs), tag "H:"
+    fn brightness_watcher(app: AppHandle, rx: std::sync::mpsc::Receiver<String>) {
         let mut last: Option<u8> = None;
         let mut first = true;
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
+        for line in rx {
             if let Some(v) = line.trim().strip_prefix("B|").and_then(|s| s.parse::<u8>().ok()) {
                 if !first && Some(v) != last {
                     let _ = app.emit("hud", HudEvent { kind: "brightness", value: v, muted: false });
@@ -153,8 +129,9 @@ while ($true) {
     }
 
     pub fn start(app: AppHandle) {
+        let rx = crate::winps::subscribe("H");
         let a = app.clone();
-        std::thread::spawn(move || brightness_watcher(a));
+        std::thread::spawn(move || brightness_watcher(a, rx));
 
         std::thread::spawn(move || {
             unsafe {

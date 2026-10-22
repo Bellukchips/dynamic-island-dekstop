@@ -12,6 +12,8 @@ mod weather;
 mod stats;
 mod fullscreen;
 mod clipboard;
+#[cfg(target_os = "windows")]
+mod winps;
 // area klik pil (x, lebar, tinggi) dalam piksel logis. Dipakai di Windows.
 #[cfg(target_os = "windows")]
 static HIT: std::sync::Mutex<(i32, i32, i32)> = std::sync::Mutex::new((5, 130, 24));
@@ -164,7 +166,12 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             let mut last_inside = true;
             let w = win.clone();
-            std::thread::spawn(move || loop {
+            std::thread::spawn(move || {
+              // kirim posisi hanya saat kursor bergerak (plus denyut ~4x/detik saat diam,
+              // karena frontend menghitung ulang hover saat ukuran notch berubah)
+              let mut last_emit = (i32::MIN, i32::MIN);
+              let mut still: u32 = 0;
+              loop {
                 if let (Ok(cur), Ok(pos), Ok(size), Ok(scale)) = (
                     w.cursor_position(),
                     w.outer_position(),
@@ -173,10 +180,19 @@ pub fn run() {
                 ) {
                     let cx = pos.x as f64 + size.width as f64 / 2.0;
                     let cy = pos.y as f64 + 12.0 * scale;
-                    let _ = w.emit(
-                        "cursor",
-                        serde_json::json!({ "dx": (cur.x - cx) / scale, "dy": (cur.y - cy) / scale }),
-                    );
+                    let (dx, dy) = ((cur.x - cx) / scale, (cur.y - cy) / scale);
+                    let key = (dx.round() as i32, dy.round() as i32);
+                    let send = if key != last_emit {
+                        last_emit = key;
+                        still = 0;
+                        true
+                    } else {
+                        still = still.wrapping_add(1);
+                        still % 8 == 0
+                    };
+                    if send {
+                        let _ = w.emit("cursor", serde_json::json!({ "dx": dx, "dy": dy }));
+                    }
 
                     #[cfg(target_os = "windows")]
                     {
@@ -193,6 +209,7 @@ pub fn run() {
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_millis(33));
+              }
             });
 
             // Fallback X11/XWayland dan Windows: posisikan manual
@@ -236,6 +253,9 @@ pub fn run() {
             media::start(app.handle().clone());
             stats::start(app.handle().clone()); 
             clipboard::start(app.handle().clone()); 
+            // setelah semua modul mendaftar: satu PowerShell bersama untuk perangkat/kecerahan/Bluetooth
+            #[cfg(target_os = "windows")]
+            winps::start();
             Ok(())
         })
         .on_window_event(|window, event| {

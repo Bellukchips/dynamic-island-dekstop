@@ -1,7 +1,7 @@
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
-#[derive(Serialize, Clone, Default)]
+#[derive(Serialize, Clone, Default, PartialEq)]
 pub struct MediaState {
     pub active: bool,
     pub title: String,
@@ -15,6 +15,26 @@ pub struct MediaState {
 pub(crate) fn data_url(mime: &str, bytes: &[u8]) -> String {
     use base64::{engine::general_purpose::STANDARD, Engine};
     format!("data:{mime};base64,{}", STANDARD.encode(bytes))
+}
+
+// Kirim hanya saat keadaan berubah (posisi lagu yang berjalan tetap terkirim tiap detik).
+// Diulang tiap 5 detik sebagai pengingat untuk frontend yang baru selesai dimuat.
+pub(crate) struct Dedup {
+    last: Option<MediaState>,
+    at: std::time::Instant,
+}
+impl Dedup {
+    pub(crate) fn new() -> Self {
+        Self { last: None, at: std::time::Instant::now() }
+    }
+    pub(crate) fn emit(&mut self, app: &AppHandle, s: MediaState) {
+        if self.last.as_ref() == Some(&s) && self.at.elapsed() < std::time::Duration::from_secs(5) {
+            return;
+        }
+        self.at = std::time::Instant::now();
+        let _ = app.emit("media", s.clone());
+        self.last = Some(s);
+    }
 }
 
 pub fn start(app: AppHandle) {
@@ -54,6 +74,7 @@ mod imp {
                 }
             };
             let mut last_art = String::new();
+            let mut dedup = super::Dedup::new();
 
             loop {
                 let mut state = MediaState::default();
@@ -81,7 +102,7 @@ mod imp {
                     }
                 }
 
-                let _ = app.emit("media", state);
+                dedup.emit(&app, state);
                 std::thread::sleep(Duration::from_millis(1000));
             }
         });
@@ -179,6 +200,7 @@ mod imp {
                 let _ = RoInitialize(RO_INIT_MULTITHREADED);
             }
             let mut last_key = String::new();
+            let mut dedup = super::Dedup::new();
             let mut art_done = false;
             let mut tries: u8 = 0;
 
@@ -216,7 +238,7 @@ mod imp {
                     }
                 }
 
-                let _ = app.emit("media", state);
+                dedup.emit(&app, state);
                 std::thread::sleep(Duration::from_millis(1000));
             }
         });

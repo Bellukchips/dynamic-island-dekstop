@@ -195,40 +195,9 @@ mod imp {
 mod imp {
     use super::DeviceEvent;
     use std::collections::{HashMap, HashSet};
-    use std::io::{BufRead, BufReader};
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
     use std::time::Duration;
     use tauri::{AppHandle, Emitter};
     use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
-
-    const NO_WINDOW: u32 = 0x0800_0000;
-
-
-    const SCRIPT: &str = r#"
-    $ErrorActionPreference = 'SilentlyContinue'
-    $mm = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
-    while ($true) {
-    Get-PnpDevice -PresentOnly |
-        Where-Object { $_.InstanceId -like 'USB\VID_*' } |
-        ForEach-Object { $_.InstanceId + '|' + $_.Class + '|' + $_.FriendlyName }
-
-    # jack 3.5mm: endpoint render yang DeviceState = 1 (aktif), bernama headphone/headset
-    Get-ChildItem $mm | ForEach-Object {
-        $st = (Get-ItemProperty $_.PSPath).DeviceState
-        if ($st -eq 1) {
-        $p = Get-ItemProperty ($_.PSPath + '\Properties')
-        $desc = $p.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
-        $adapter = $p.'{b3f8fa53-0004-438e-9003-51a46e139bfc},6'
-        if (($desc -match 'Headphone|Headset|Earphone|Earbud|Handset') -and ($adapter -notmatch 'USB|Bluetooth|Hands-Free')) {
-            'JACK|' + $desc + ' (' + $adapter + ')'
-        }
-        }
-    }
-    '---'
-    Start-Sleep -Seconds 2
-    }
-    "#;
 
     // satu perangkat fisik bisa punya beberapa entri (antarmuka &MI_xx), jadi dikelompokkan
     fn parse(lines: &[String]) -> HashMap<String, (String, String)> {
@@ -286,24 +255,12 @@ mod imp {
         out
     }
 
-    fn watcher(app: AppHandle) {
-        let child = Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-            .creation_flags(NO_WINDOW)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn();
-        let Ok(mut child) = child else {
-            eprintln!("devices: PowerShell gagal dijalankan");
-            return;
-        };
-        let Some(out) = child.stdout.take() else { return };
-
+    // baris datang dari proses PowerShell bersama (winps.rs), tag "D:"
+    fn watcher(app: AppHandle, rx: std::sync::mpsc::Receiver<String>) {
         let mut known: Option<HashMap<String, (String, String)>> = None;
         let mut buf: Vec<String> = Vec::new();
 
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
+        for line in rx {
             let line = line.trim().to_string();
             if line == "---" {
                 let now = parse(&buf);
@@ -364,8 +321,9 @@ mod imp {
     }
 
     pub fn start(app: AppHandle) {
+        let rx = crate::winps::subscribe("D");
         let a = app.clone();
-        std::thread::spawn(move || watcher(a));
+        std::thread::spawn(move || watcher(a, rx));
         std::thread::spawn(move || charger_watcher(app));
     }
 }
