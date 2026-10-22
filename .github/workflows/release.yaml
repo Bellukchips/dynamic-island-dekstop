@@ -1,23 +1,63 @@
 name: Release
 
 # Dijalankan manual: GitHub -> tab Actions -> Release -> Run workflow
+# Hasil: tag v<versi> dibuat & di-push otomatis, lalu release dipublikasikan
+# langsung berisi installer .exe, exe portabel, dan AppImage.
 on:
   workflow_dispatch:
     inputs:
-      draft:
-        description: "Simpan sebagai draft (tinjau dulu sebelum dipublikasikan)"
-        type: boolean
-        default: true
       prerelease:
         description: "Tandai sebagai pre-release"
         type: boolean
         default: false
 
 permissions:
-  contents: write # dibutuhkan untuk membuat release dan mengunggah file
+  contents: write # membuat tag, release, dan mengunggah file
 
 jobs:
-  release:
+  # 1) buat tag + draft release (draft supaya belum publik sebelum semua build selesai)
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      release_id: ${{ steps.rel.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ambil versi dari tauri.conf.json
+        id: ver
+        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Buat dan push tag
+        run: |
+          tag="v${{ steps.ver.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::Tag $tag sudah ada. Naikkan 'version' di src-tauri/tauri.conf.json (dan Cargo.toml) lalu jalankan lagi."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Buat draft release
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ steps.ver.outputs.version }}"
+          id=$(gh api -X POST "repos/${{ github.repository }}/releases" \
+            -f tag_name="$tag" \
+            -f name="Notch $tag" \
+            -f body="Unduh installer Windows (.exe), exe portabel, atau AppImage (Linux) di bagian Assets." \
+            -F draft=true \
+            -F prerelease=${{ inputs.prerelease }} \
+            --jq .id)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  # 2) build Windows (.exe) dan Linux (AppImage), unggah ke release tadi
+  build:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -26,7 +66,6 @@ jobs:
             args: "--bundles nsis" # installer .exe
           - os: ubuntu-22.04 # glibc lebih lama = AppImage jalan di lebih banyak distro
             args: "--bundles appimage"
-
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -55,22 +94,13 @@ jobs:
       - name: Pasang dependensi frontend
         run: npm install
 
-      - name: Ambil versi dari tauri.conf.json
-        id: ver
-        shell: bash
-        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Build dan buat release
+      - name: Build dan unggah ke release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: 1 # runner CI tidak punya FUSE
         with:
-          tagName: v__VERSION__ # diganti otomatis dari versi di tauri.conf.json
-          releaseName: "Notch v__VERSION__"
-          releaseBody: "Unduh installer Windows (.exe) atau AppImage (Linux) di bagian Assets."
-          releaseDraft: ${{ inputs.draft }}
-          prerelease: ${{ inputs.prerelease }}
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}
 
       # exe portabel (tanpa instalasi); membutuhkan WebView2, sudah bawaan Windows 10/11
@@ -80,6 +110,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          v="${{ steps.ver.outputs.version }}"
-          cp src-tauri/target/release/notch.exe "notch_${v}_x64_portable.exe"
-          gh release upload "v${v}" "notch_${v}_x64_portable.exe" --clobber
+          v="${{ needs.prepare.outputs.version }}"
+          f="notch_${v}_x64_portable.exe"
+          cp src-tauri/target/release/notch.exe "$f"
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$f" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }}/assets?name=$f"
+
+  # 3) semua build berhasil -> publikasikan release
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publikasikan release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }}" -F draft=false
+
+  # kalau ada build yang gagal/dibatalkan: hapus draft dan tag supaya bisa dijalankan ulang
+  cleanup:
+    needs: [prepare, build]
+    if: ${{ always() && needs.prepare.result == 'success' && needs.build.result != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hapus draft release dan tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X DELETE "repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }}" || true
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/v${{ needs.prepare.outputs.version }}" || true
