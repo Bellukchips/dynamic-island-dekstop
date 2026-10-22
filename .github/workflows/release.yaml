@@ -1,0 +1,85 @@
+name: Release
+
+# Dijalankan manual: GitHub -> tab Actions -> Release -> Run workflow
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Simpan sebagai draft (tinjau dulu sebelum dipublikasikan)"
+        type: boolean
+        default: true
+      prerelease:
+        description: "Tandai sebagai pre-release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # dibutuhkan untuk membuat release dan mengunggah file
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: "--bundles nsis" # installer .exe
+          - os: ubuntu-22.04 # glibc lebih lama = AppImage jalan di lebih banyak distro
+            args: "--bundles appimage"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pasang dependensi sistem (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file pkg-config patchelf \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libssl-dev libxdo-dev \
+            libdbus-1-dev libgtk-layer-shell-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable # edition 2024 butuh Rust >= 1.85
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Pasang dependensi frontend
+        run: npm install
+
+      - name: Ambil versi dari tauri.conf.json
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build dan buat release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: 1 # runner CI tidak punya FUSE
+        with:
+          tagName: v__VERSION__ # diganti otomatis dari versi di tauri.conf.json
+          releaseName: "Notch v__VERSION__"
+          releaseBody: "Unduh installer Windows (.exe) atau AppImage (Linux) di bagian Assets."
+          releaseDraft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          args: ${{ matrix.args }}
+
+      # exe portabel (tanpa instalasi); membutuhkan WebView2, sudah bawaan Windows 10/11
+      - name: Unggah exe portabel (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          cp src-tauri/target/release/notch.exe "notch_${v}_x64_portable.exe"
+          gh release upload "v${v}" "notch_${v}_x64_portable.exe" --clobber

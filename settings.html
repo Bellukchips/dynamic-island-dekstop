@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notch — Pengaturan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --line: color-mix(in srgb, currentColor 14%, transparent);
+      --muted: color-mix(in srgb, currentColor 60%, transparent);
+      --focus: #4c8dff;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px 24px 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 17px;
+      font-weight: 650;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    #status {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: right;
+      min-height: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    #status[data-kind="ok"] {
+      color: #1f9d55;
+    }
+
+    #status[data-kind="err"] {
+      color: #d64545;
+    }
+
+    /* pratinjau */
+    .stage {
+      margin: 16px 0 6px;
+      height: 92px;
+      border-radius: 12px;
+      background: linear-gradient(160deg, #6f7a8c, #a9b2c0);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: hidden;
+    }
+
+    #pill {
+      --p-bg: #000;
+      --p-fg: #fff;
+      --p-fg-rgb: 255, 255, 255;
+      --p-accent: 120, 140, 255;
+      --p-scale: 1;
+      width: calc(210px * var(--p-scale));
+      height: calc(44px * var(--p-scale));
+      background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
+      color: var(--p-fg);
+      border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(10px * var(--p-scale));
+      font-size: calc(12px * var(--p-scale));
+      position: relative;
+      overflow: hidden;
+      transition: background .15s, color .15s;
+    }
+
+    #pill i {
+      width: calc(7px * var(--p-scale));
+      height: calc(7px * var(--p-scale));
+      border-radius: 50%;
+      background: var(--p-fg);
+    }
+
+    #pill span {
+      opacity: .85;
+    }
+
+    #pill::after {
+      content: "";
+      position: absolute;
+      left: 14%;
+      right: 14%;
+      bottom: calc(5px * var(--p-scale));
+      height: 2px;
+      border-radius: 2px;
+      background: rgb(var(--p-accent));
+      opacity: .9;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 0 0 4px;
+    }
+
+    section {
+      border-top: 1px solid var(--line);
+      margin-top: 16px;
+      padding-top: 4px;
+    }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 650;
+      margin: 10px 0 4px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      min-height: 40px;
+    }
+
+    .row.off {
+      opacity: .4;
+    }
+
+    .row>label:first-child,
+    .row>span:first-child {
+      flex: 1;
+    }
+
+    .ctl {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    code {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 62px;
+      text-align: right;
+    }
+
+    /* segmented */
+    .seg {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 3px;
+      margin: 8px 0 4px;
+    }
+
+    .seg label {
+      position: relative;
+    }
+
+    .seg input {
+      position: absolute;
+      opacity: 0;
+      inset: 0;
+      cursor: pointer;
+    }
+
+    .seg span {
+      display: block;
+      text-align: center;
+      padding: 6px 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .seg input:checked+span {
+      background: color-mix(in srgb, currentColor 14%, transparent);
+      font-weight: 600;
+    }
+
+    .seg input:focus-visible+span {
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+    }
+
+    input[type="color"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: none;
+      cursor: pointer;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: 0;
+      border-radius: 50%;
+    }
+
+    input[type="color"]:disabled {
+      cursor: not-allowed;
+    }
+
+    input[type="range"] {
+      width: 180px;
+      accent-color: var(--focus);
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--focus);
+    }
+
+    .auto {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    input:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 22px;
+    }
+
+    button {
+      font: inherit;
+      padding: 9px 16px;
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--focus);
+      border-color: transparent;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: progress;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Pengaturan Notch</h1>
+    <div id="status" role="status" aria-live="polite">Memuat… (kalau tulisan ini tidak berubah, script tidak berjalan)</div>
+  </header>
+
+  <div class="stage">
+    <div id="pill"><i></i><i></i><span>Notch</span></div>
+  </div>
+  <p class="hint">Pratinjau. Perubahan langsung terlihat di notch asli.</p>
+
+  <section>
+    <h2>Warna</h2>
+    <div class="seg" role="radiogroup" aria-label="Mode warna">
+      <label><input type="radio" name="theme" value="auto" /><span>Ikuti OS</span></label>
+      <label><input type="radio" name="theme" value="dark" /><span>Gelap</span></label>
+      <label><input type="radio" name="theme" value="light" /><span>Terang</span></label>
+      <label><input type="radio" name="theme" value="custom" /><span>Kustom</span></label>
+    </div>
+
+    <div class="row" id="row-background">
+      <label for="background">Warna notch</label>
+      <div class="ctl"><code id="hex-background"></code><input type="color" id="background" /></div>
+    </div>
+    <div class="row" id="row-dark_bg">
+      <label for="dark_bg">Warna notch di tema gelap</label>
+      <div class="ctl"><code id="hex-dark_bg"></code><input type="color" id="dark_bg" /></div>
+    </div>
+    <div class="row" id="row-light_bg">
+      <label for="light_bg">Warna notch di tema terang</label>
+      <div class="ctl"><code id="hex-light_bg"></code><input type="color" id="light_bg" /></div>
+    </div>
+    <div class="row" id="row-text">
+      <label for="text">Warna teks</label>
+      <div class="ctl">
+        <label class="auto"><input type="checkbox" id="text_auto" /> otomatis</label>
+        <code id="hex-text"></code><input type="color" id="text" />
+      </div>
+    </div>
+    <div class="row" id="row-accent">
+      <label for="accent">Warna aksen</label>
+      <div class="ctl">
+        <label class="auto"><input type="checkbox" id="accent_auto" /> dari cover album</label>
+        <code id="hex-accent"></code><input type="color" id="accent" />
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ukuran</h2>
+    <div class="row">
+      <label for="scale">Skala notch</label>
+      <div class="ctl"><input type="range" id="scale" min="0.5" max="1.5" step="0.05" /><code id="scale_val"></code></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Perilaku</h2>
+    <div class="row">
+      <label for="hide_fullscreen">Sembunyikan notch saat layar penuh <small style="color:var(--muted)">(butuh restart)</small></label>
+      <input type="checkbox" id="hide_fullscreen" />
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="primary" id="save">Simpan</button>
+    <button id="restart">Simpan &amp; restart</button>
+  </div>
+
+  <script>
+    const T = window.__TAURI__;
+    if (!T || !T.core) {
+      document.getElementById("status").textContent = "Error: window.__TAURI__ tidak ada (cek withGlobalTauri: true di tauri.conf.json)";
+      document.getElementById("status").dataset.kind = "err";
+      throw new Error("__TAURI__ tidak tersedia");
+    }
+    const invoke = (cmd, args) => Promise.race([
+      T.core.invoke(cmd, args),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
+    ]);
+    const FALLBACK = {
+      scale: 1,
+      hide_fullscreen: true,
+      appearance: {
+        theme: "auto",
+        background: "#000000",
+        text: "",
+        dark_bg: "#000000",
+        light_bg: "#f5f5f7",
+        accent: ""
+      }
+    };
+    const $ = (id) => document.getElementById(id);
+    const inp = (id) => $(id);
+    const statusEl = $("status");
+    const pill = $("pill");
+
+    function say(text, kind = "") {
+      statusEl.textContent = text;
+      statusEl.dataset.kind = kind;
+    }
+    window.addEventListener("error", (e) => say(`Error: ${e.message}`, "err"));
+    window.addEventListener("unhandledrejection", (e) => say(`Error: ${String(e.reason)}`, "err"));
+    let cfg = structuredClone(FALLBACK);
+    let loaded = false;
+    const norm = (h, fallback) => {
+      const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h ?? "").trim());
+      if (!m) return fallback;
+      let v = m[1].toLowerCase();
+      if (v.length === 3) v = v.split("").map((c) => c + c).join("");
+      return "#" + v;
+    };
+    const rgb = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      return [n >> 16 & 255, n >> 8 & 255, n & 255];
+    };
+    const luma = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+    const radios = () => [...document.querySelectorAll('input[name="theme"]')];
+    const theme = () => radios().find((r) => r.checked)?.value ?? "auto";
+    const COLORS = ["background", "dark_bg", "light_bg", "text", "accent"];
+
+    function fill(c) {
+      const a = c.appearance;
+      radios().forEach((r) => r.checked = r.value === a.theme);
+      inp("background").value = norm(a.background, "#000000");
+      inp("dark_bg").value = norm(a.dark_bg, "#000000");
+      inp("light_bg").value = norm(a.light_bg, "#f5f5f7");
+      inp("text_auto").checked = !a.text;
+      inp("text").value = norm(a.text, "#ffffff");
+      inp("accent_auto").checked = !a.accent;
+      inp("accent").value = norm(a.accent, "#788cff");
+      inp("scale").value = String(c.scale);
+      inp("hide_fullscreen").checked = c.hide_fullscreen;
+      sync();
+    }
+
+    function collect() {
+      const c = structuredClone(cfg);
+      c.appearance = {
+        theme: theme(),
+        background: inp("background").value,
+        dark_bg: inp("dark_bg").value,
+        light_bg: inp("light_bg").value,
+        text: inp("text_auto").checked ? "" : inp("text").value,
+        accent: inp("accent_auto").checked ? "" : inp("accent").value
+      };
+      c.scale = parseFloat(inp("scale").value);
+      c.hide_fullscreen = inp("hide_fullscreen").checked;
+      return c;
+    }
+
+    function sync() {
+      const t = theme();
+      const on = {
+        background: t === "custom",
+        dark_bg: t === "auto" || t === "dark",
+        light_bg: t === "auto" || t === "light",
+        text: !inp("text_auto").checked,
+        accent: !inp("accent_auto").checked
+      };
+      for (const k of COLORS) {
+        $(`row-${k}`).classList.toggle("off", !on[k] && (k === "background" || k === "dark_bg" || k === "light_bg"));
+        inp(k).disabled = !on[k];
+        $(`hex-${k}`).textContent = on[k] ? inp(k).value : k === "text" || k === "accent" ? "otomatis" : "\u2014";
+      }
+      $("scale_val").textContent = `${Number(inp("scale").value).toFixed(2)}\xD7`;
+      updatePill();
+    }
+
+    function updatePill() {
+      const c = collect();
+      const a = c.appearance;
+      const light = a.theme === "light" || a.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches;
+      const bgHex = a.theme === "custom" ? a.background : light ? a.light_bg : a.dark_bg;
+      const bg = rgb(norm(bgHex, "#000000"));
+      const fg = a.text ? rgb(norm(a.text, "#ffffff")) : luma(bg) > 0.55 ? [17, 17, 17] : [255, 255, 255];
+      pill.style.setProperty("--p-bg", `rgb(${bg.join(",")})`);
+      pill.style.setProperty("--p-fg", `rgb(${fg.join(",")})`);
+      pill.style.setProperty("--p-fg-rgb", fg.join(","));
+      pill.style.setProperty("--p-accent", a.accent ? rgb(norm(a.accent, "#788cff")).join(",") : "120,140,255");
+      pill.style.setProperty("--p-scale", String(c.scale));
+    }
+    let previewTimer = 0;
+
+    function preview() {
+      if (!loaded) return;
+      clearTimeout(previewTimer);
+      previewTimer = window.setTimeout(() => {
+        invoke("cfg_preview", {
+          cfg: collect()
+        }).catch((e) => say(`Pratinjau gagal: ${e}`, "err"));
+      }, 60);
+    }
+    document.querySelectorAll("input").forEach((el) => {
+      const isScale = el.id === "scale";
+      el.addEventListener("input", () => {
+        sync();
+        if (!isScale) preview();
+      });
+      el.addEventListener("change", () => {
+        sync();
+        preview();
+      });
+    });
+    const buttons = [$("save"), $("restart")];
+    const busy = (b) => buttons.forEach((x) => x.disabled = b);
+    async function save(restart) {
+      if (!loaded) {
+        say("Pengaturan belum berhasil dimuat, penyimpanan dibatalkan agar file lama tidak tertimpa.", "err");
+        return;
+      }
+      busy(true);
+      say("Menyimpan\u2026");
+      let path = "";
+      try {
+        path = await invoke("cfg_save", {
+          cfg: collect()
+        });
+        cfg = collect();
+        say(`Tersimpan \u2713  ${path}`, "ok");
+      } catch (e) {
+        say(`Gagal menyimpan: ${e}`, "err");
+        busy(false);
+        return;
+      }
+      if (restart) {
+        say("Tersimpan \u2713  memulai ulang\u2026", "ok");
+        try {
+          await invoke("cfg_restart");
+        } catch (e) {
+          say(`Tersimpan \u2713  tapi restart gagal: ${e}`, "err");
+        }
+      }
+      busy(false);
+    }
+    $("save").addEventListener("click", () => void save(false));
+    $("restart").addEventListener("click", () => void save(true));
+    fill(cfg);
+    (async () => {
+      try {
+        cfg = await invoke("cfg_get");
+        loaded = true;
+        fill(cfg);
+        say("Siap.");
+      } catch (e) {
+        say(`Gagal membaca pengaturan: ${e}`, "err");
+      }
+    })();
+  </script>
+</body>
+
+</html>

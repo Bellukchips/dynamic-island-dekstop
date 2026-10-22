@@ -1,0 +1,62 @@
+[package]
+name = "notch"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2024"
+
+[lib]
+# The `_lib` suffix is needed to avoid name conflicts on Windows.
+name = "notch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+toml = "0.8"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+sysinfo = { version = "0.39", default-features = false, features = ["system", "network"] }
+arboard = { version = "3", default-features = false }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
+mpris = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Media_Control",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_System_Power",
+  "Win32_System_WinRT",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_UI_Shell_PropertiesSystem",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Devices",
+  "Devices_Radios",
+  "Foundation",
+  "Foundation_Collections",  
+  "Win32_System_Power",
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
