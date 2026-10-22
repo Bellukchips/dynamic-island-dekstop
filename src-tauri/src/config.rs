@@ -74,14 +74,36 @@ impl Default for Appearance {
     }
 }
 
-// Catatan: di TOML, nilai biasa (scale, hide_fullscreen, pages) harus berada
-// SEBELUM tabel (weather, timing, pomodoro), jadi urutan field di sini penting.
+// Naikkan angka ini setiap kali ada fitur baru yang perlu dinyalakan untuk config lama.
+const PAGES_VERSION: u32 = 2;
+// Fitur yang ditambahkan setelah config.toml lama dibuat.
+const NEW_FEATURES: &[&str] = &["shelf", "lyrics", "privacy"];
+
+// Config lama (pages_version = 0) mendapat fitur baru satu kali. Setelah disimpan dari UI,
+// angka versinya ikut tersimpan, jadi pilihan pengguna tidak ditimpa lagi.
+fn migrate(cfg: &mut Config) {
+    if cfg.pages_version < PAGES_VERSION {
+        for f in NEW_FEATURES {
+            if !cfg.pages.iter().any(|p| p == f) {
+                cfg.pages.push((*f).to_string());
+            }
+        }
+        cfg.pages_version = PAGES_VERSION;
+    }
+}
+
+// Catatan: di TOML, nilai biasa (scale, hide_fullscreen, pages, pages_version) harus berada
+// SEBELUM tabel (weather, timing, pomodoro, appearance), jadi urutan field di sini penting.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
     pub scale: f64,            // 1.0 = normal, 0.8 = 80%
     pub hide_fullscreen: bool, // sembunyikan notch saat game/video fullscreen
-    pub pages: Vec<String>,    // urutan halaman hub: media, weather, battery, timer, quick, tools
+    pub pages: Vec<String>,    // fitur aktif + urutan halaman hub
+    // 0 = file lama (belum pernah dimigrasi); diisi PAGES_VERSION saat disimpan dari UI.
+    // #[serde(default)] di level field memakai 0, bukan nilai dari Config::default().
+    #[serde(default)]
+    pub pages_version: u32,
     pub weather: Weather,
     pub timing: Timing,
     pub pomodoro: Pomodoro,
@@ -92,10 +114,14 @@ impl Default for Config {
         Self {
             scale: 1.0,
             hide_fullscreen: true,
-            pages: ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
+            pages: [
+                "media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard",
+                "shelf", "lyrics", "privacy",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            pages_version: PAGES_VERSION,
             weather: Weather::default(),
             timing: Timing::default(),
             pomodoro: Pomodoro::default(),
@@ -162,6 +188,7 @@ pub fn init() {
     if cfg.pages.is_empty() {
         cfg.pages = Config::default().pages;
     }
+    migrate(&mut cfg);
     println!("config: {}", p.display());
     let _ = CFG.set(cfg);
 }
@@ -175,10 +202,12 @@ pub fn get() -> &'static Config {
 // baca dari file (bukan dari CFG statis) supaya selalu yang terbaru
 #[tauri::command]
 pub fn cfg_get() -> Config {
-    std::fs::read_to_string(path())
+    let mut cfg: Config = std::fs::read_to_string(path())
         .ok()
         .and_then(|s| toml::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    migrate(&mut cfg); // UI menampilkan keadaan yang sama dengan yang sedang berjalan
+    cfg
 }
 
 // pratinjau langsung: hanya dikirim ke notch, tidak menulis file
@@ -196,6 +225,7 @@ pub fn cfg_save(app: tauri::AppHandle, mut cfg: Config) -> Result<String, String
     if cfg.pages.is_empty() {
         cfg.pages = Config::default().pages;
     }
+    cfg.pages_version = PAGES_VERSION; // pilihan fitur dari UI dianggap final
     cfg.weather.lat = cfg.weather.lat.clamp(-90.0, 90.0);
     cfg.weather.lon = cfg.weather.lon.clamp(-180.0, 180.0);
     if cfg.weather.city.trim().is_empty() {

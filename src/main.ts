@@ -32,6 +32,8 @@ const CFG: Cfg = { ...FALLBACK, ...((window as any).__CFG__ ?? {}) };
 const T = CFG.timing;
 // fitur tambahan (bukan halaman) juga diatur lewat daftar pages di config
 const featureOn = (name: string) => CFG.pages.includes(name);
+// indikator mic/kamera bisa dinyalakan/dimatikan langsung dari jendela pengaturan (tanpa restart)
+let privacyOn = featureOn("privacy");
 
 const $ = (id: string) => document.getElementById(id)!;
 const notch = $("notch");
@@ -124,7 +126,7 @@ function applyScale(v: number) {
 }
 
 // dari jendela pengaturan: pratinjau langsung / hasil simpan
-listen<{ appearance?: Appearance; scale?: number }>("config-changed", (e) => {
+listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-changed", (e) => {
   const p = e.payload;
   if (!p) return;
   if (p.appearance) {
@@ -132,6 +134,14 @@ listen<{ appearance?: Appearance; scale?: number }>("config-changed", (e) => {
     applyTheme();
   }
   if (typeof p.scale === "number" && p.scale !== CFG.scale) applyScale(p.scale);
+  // indikator mic/kamera langsung menyala/mati sesuai centang di pengaturan
+  if (Array.isArray(p.pages)) {
+    const on = p.pages.includes("privacy");
+    if (on !== privacyOn) {
+      privacyOn = on;
+      paintPrivacy();
+    }
+  }
 });
 
 function setHit(view: string, winW: number) {
@@ -931,17 +941,23 @@ refreshClip();
 type Privacy = { mic: boolean; cam: boolean; mic_app: string; cam_app: string };
 let priv: Privacy | null = null;
 
-listen<Privacy>("privacy", (e) => {
-  if (!featureOn("privacy")) { notch.removeAttribute("data-priv"); return; }
-  const p = e.payload;
-  const prev = priv;
-  priv = p;
-
-  const on = [p.cam ? "cam" : "", p.mic ? "mic" : ""].filter(Boolean).join(" ");
+// titik di notch mengikuti status terakhir dari Rust, selama fitur dinyalakan
+function paintPrivacy() {
+  const on =
+    privacyOn && priv
+      ? [priv.cam ? "cam" : "", priv.mic ? "mic" : ""].filter(Boolean).join(" ")
+      : "";
   if (on) notch.dataset.priv = on;
   else notch.removeAttribute("data-priv");
+}
 
-  if (!prev) return; // event pertama hanya menandai keadaan awal, tanpa kartu
+listen<Privacy>("privacy", (e) => {
+  const p = e.payload;
+  const prev = priv;
+  priv = p; // selalu disimpan, supaya langsung tampil saat fitur dinyalakan dari pengaturan
+  paintPrivacy();
+
+  if (!privacyOn || !prev) return; // event pertama hanya menandai keadaan awal, tanpa kartu
   if (p.cam && !prev.cam) {
     showDevice("camera", "Kamera aktif", true, p.cam_app ? `Dipakai ${p.cam_app}` : "Sedang digunakan");
     flash("suspicious", 2500);
