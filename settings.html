@@ -68,13 +68,17 @@
     input[type="range"] { width: 180px; accent-color: var(--focus); }
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--focus); }
     .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-    input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-    input[type="text"], input[type="search"], input[type="number"] {
+    input[type="text"], input[type="search"], input[type="number"], select {
       font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
       background: transparent; color: inherit; min-width: 0; }
     input[type="number"] { width: 130px; text-align: right; }
     .row input[type="text"] { width: 200px; }
+    .row input.wide { width: 250px; }
+    .row input.emoji { width: 64px; text-align: center; font-size: 18px; }
+    .emojis { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+    .emo-btn { padding: 4px 8px; font-size: 18px; line-height: 1; border-radius: 8px; }
     .search { display: flex; gap: 8px; margin: 6px 0; }
     .search input { flex: 1; }
     .results { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 4px; }
@@ -168,6 +172,52 @@
   </section>
 
   <section>
+    <h2>Pesan saat pointer diam</h2>
+    <p class="hint" style="margin:6px 0">Kalau pointer tidak bergerak cukup lama, notch menyapa dengan pesan imut. Muncul sekali untuk tiap periode diam. Perubahan di sini langsung berlaku.</p>
+    <div class="row">
+      <label for="n-enabled">Aktifkan</label>
+      <input type="checkbox" id="n-enabled" />
+    </div>
+    <div class="row">
+      <label for="n-min">Muncul setelah diam (menit)</label>
+      <input type="number" id="n-min" min="1" max="240" step="1" />
+    </div>
+    <div class="row">
+      <label for="n-msg">Pesan</label>
+      <input type="text" id="n-msg" class="wide" maxlength="80" placeholder="Kamu kemana, kok diam saja?" />
+    </div>
+    <div class="row">
+      <label for="n-emoji">Emoji</label>
+      <input type="text" id="n-emoji" class="emoji" maxlength="12" />
+    </div>
+    <div class="emojis" id="n-presets" aria-label="Pilihan emoji"></div>
+    <div class="row">
+      <label for="n-mood">Ekspresi mata</label>
+      <select id="n-mood">
+        <option value="sad">Sedih</option>
+        <option value="normal">Normal</option>
+        <option value="happy">Senang</option>
+        <option value="sleepy">Mengantuk</option>
+        <option value="surprised">Kaget</option>
+        <option value="angry">Marah</option>
+        <option value="love">Jatuh cinta</option>
+        <option value="suspicious">Curiga</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="n-sec">Lama tampil (detik)</label>
+      <input type="number" id="n-sec" min="2" max="30" step="1" />
+    </div>
+    <div class="row">
+      <label for="n-silent">Jangan muncul saat musik/video diputar</label>
+      <input type="checkbox" id="n-silent" />
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button type="button" id="n-test">Coba tampilkan</button>
+    </div>
+  </section>
+
+  <section>
     <h2>Cuaca</h2>
     <p class="hint" style="margin:6px 0">Lokasi saat ini: <b id="w-current">…</b></p>
     <div class="search">
@@ -218,8 +268,10 @@ const FALLBACK = {
   pages: [...FEATURE_IDS],
   weather: { lat: -6.9175, lon: 107.6191, city: "Bandung" },
   hide_fullscreen: true,
-  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" }
+  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
+  nudge: { enabled: true, idle_min: 2, message: "Kamu kemana, kok diam saja?", emoji: "🥺", mood: "sad", show_ms: 6000, only_silent: true }
 };
+const EMOJIS = ["🥺", "😴", "👀", "😢", "🥹", "🐱", "🐣", "💤", "😼", "🤔"];
 const $ = (id) => document.getElementById(id);
 const inp = (id) => $(id);
 const statusEl = $("status");
@@ -265,6 +317,14 @@ function fill(c) {
   inp("w-lat").value = String(w.lat);
   inp("w-lon").value = String(w.lon);
   inp("w-city").value = w.city;
+  const n = c.nudge ?? FALLBACK.nudge;
+  inp("n-enabled").checked = !!n.enabled;
+  inp("n-min").value = String(n.idle_min);
+  inp("n-msg").value = n.message;
+  inp("n-emoji").value = n.emoji;
+  inp("n-mood").value = n.mood;
+  inp("n-sec").value = String(Math.round(n.show_ms / 1e3));
+  inp("n-silent").checked = !!n.only_silent;
   sync();
 }
 function collect() {
@@ -285,7 +345,23 @@ function collect() {
   if (isFinite(lat) && isFinite(lon)) {
     c.weather = { lat, lon, city: inp("w-city").value.trim() || "Lokasi saya" };
   }
+  c.nudge = collectNudge();
   return c;
+}
+// bilangan bulat (u32 di Rust) dengan batas; nilai kosong/aneh memakai nilai sebelumnya
+function collectNudge() {
+  const base = cfg.nudge ?? FALLBACK.nudge;
+  const mins = parseInt(inp("n-min").value, 10);
+  const secs = parseFloat(inp("n-sec").value);
+  return {
+    enabled: inp("n-enabled").checked,
+    idle_min: Number.isFinite(mins) ? Math.min(240, Math.max(1, mins)) : base.idle_min,
+    message: inp("n-msg").value.trim() || base.message,
+    emoji: inp("n-emoji").value.trim() || base.emoji,
+    mood: inp("n-mood").value || base.mood,
+    show_ms: Number.isFinite(secs) ? Math.round(Math.min(30, Math.max(2, secs)) * 1e3) : base.show_ms,
+    only_silent: inp("n-silent").checked
+  };
 }
 // pertahankan urutan & nama kustom di config; hanya tambah/buang fitur yang dikenal
 function collectPages() {
@@ -351,6 +427,35 @@ document.querySelectorAll("input:not([data-weather]):not([data-os])").forEach((e
     preview();
   });
 });
+inp("n-mood").addEventListener("change", () => {
+  sync();
+  preview();
+});
+
+// ---------- pesan saat pointer diam ----------
+for (const e of EMOJIS) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "emo-btn";
+  b.textContent = e;
+  b.title = `Pakai ${e}`;
+  b.addEventListener("click", () => {
+    inp("n-emoji").value = e;
+    inp("n-emoji").dispatchEvent(new Event("input"));
+  });
+  $("n-presets").append(b);
+}
+// tampilkan contoh di notch dengan isi form saat ini (belum perlu disimpan)
+$("n-test").addEventListener("click", async () => {
+  try {
+    await invoke("nudge_test", { nudge: collectNudge() });
+    say("Contoh pesan ditampilkan di notch.", "ok");
+  } catch (e) {
+    say(`Gagal menampilkan contoh: ${e}`, "err");
+  }
+});
+
+// ---------- lokasi cuaca ----------
 function pickPlace(h) {
   inp("w-lat").value = h.latitude.toFixed(4);
   inp("w-lon").value = h.longitude.toFixed(4);
@@ -407,6 +512,8 @@ inp("w-q").addEventListener("keydown", (ev) => {
   if (ev.key === "Enter") void searchPlace();
 });
 ["w-lat", "w-lon", "w-city"].forEach((id) => inp(id).addEventListener("input", sync));
+
+// ---------- jalan otomatis saat OS menyala ----------
 async function refreshAutostart() {
   try {
     inp("autostart").checked = Boolean(await invoke("autostart_get"));
@@ -427,6 +534,8 @@ inp("autostart").addEventListener("change", async () => {
     inp("autostart").disabled = false;
   }
 });
+
+// ---------- simpan ----------
 const buttons = [$("save"), $("restart")];
 const busy = (b) => buttons.forEach((x) => x.disabled = b);
 async function save(restart) {

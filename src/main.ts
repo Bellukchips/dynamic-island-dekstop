@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-
+import { initNudge } from "./nudge";
 // ---------- konfigurasi (dari config.toml lewat Rust) ----------
 type Appearance = {
   theme: string;      // "auto" | "dark" | "light" | "custom"
@@ -224,7 +224,7 @@ function collapse() {
 }
 
 // ---------- mood: dasar + sementara ----------
-type Mood = "normal" | "happy" | "sleepy" | "surprised" | "angry" | "love" | "suspicious";
+type Mood = "normal" | "happy" | "sleepy" | "surprised" | "angry" | "love" | "suspicious" | "sad";
 let baseMood: Mood = "normal";
 let tempTimer: number | undefined;
 let sleeping = false;
@@ -1309,6 +1309,19 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight" && override === "hub") setPage(page + 1);
   if (e.key === "ArrowLeft" && override === "hub") setPage(page - 1);
 });
-
+initNudge({
+  lastMove: () => lastCursorMove,   // gerakan pointer terakhir, dari event "cursor" Rust
+  playing: () => playing,
+  canShow: () => override === null, // jangan menimpa kartu/hub yang sedang tampil
+  card: (title, sub, ms) => {
+    $("dev-icon").classList.remove("off", "play");
+    $("dev-chip").classList.remove("off");
+    $("dev-name").textContent = title;
+    $("dev-sub").textContent = sub;
+    hubByHover = false;
+    expand("dev", ms);
+  },
+  mood: (m, ms) => flash(m as Mood, ms),
+});
 render();
 updateBase();

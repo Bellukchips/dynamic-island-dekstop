@@ -298,6 +298,7 @@ pub fn run() {
             config::cfg_preview,
             config::cfg_save,
             config::cfg_restart,
+            config::nudge_test,
             bluetooth::bt_list,
             autostart::autostart_get,
             autostart::autostart_set

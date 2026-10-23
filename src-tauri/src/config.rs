@@ -74,6 +74,56 @@ impl Default for Appearance {
     }
 }
 
+// Pesan imut saat pointer lama diam ("Kamu kemana, kok diam saja?").
+// Logikanya ada di frontend (src/nudge.ts); di sini hanya menyimpan dan merapikan nilainya.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct Nudge {
+    pub enabled: bool,
+    pub idle_min: u32,       // menit pointer diam sebelum pesan muncul (1..240)
+    pub message: String,     // maksimal 80 karakter
+    pub emoji: String,       // ikon pesan
+    pub mood: String,        // ekspresi mata: normal|happy|sleepy|surprised|angry|love|suspicious|sad
+    pub show_ms: u32,        // lama pesan tampil (2000..30000)
+    pub only_silent: bool,   // jangan muncul saat musik/video diputar
+}
+impl Default for Nudge {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            idle_min: 2,
+            message: "Kamu kemana, kok diam saja?".into(),
+            emoji: "🥺".into(),
+            mood: "sad".into(),
+            show_ms: 6000,
+            only_silent: true,
+        }
+    }
+}
+
+const NUDGE_MOODS: &[&str] =
+    &["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious", "sad"];
+
+impl Nudge {
+    // nilai dari file / UI bisa kosong atau di luar batas: rapikan ke yang aman
+    fn sanitize(&mut self) {
+        let d = Nudge::default();
+        self.idle_min = self.idle_min.clamp(1, 240);
+        self.show_ms = self.show_ms.clamp(2_000, 30_000);
+        self.message = self.message.trim().chars().take(80).collect();
+        if self.message.is_empty() {
+            self.message = d.message;
+        }
+        self.emoji = self.emoji.trim().chars().take(12).collect();
+        if self.emoji.is_empty() {
+            self.emoji = d.emoji;
+        }
+        if !NUDGE_MOODS.contains(&self.mood.as_str()) {
+            self.mood = d.mood;
+        }
+    }
+}
+
 // Naikkan angka ini setiap kali ada fitur baru yang perlu dinyalakan untuk config lama.
 const PAGES_VERSION: u32 = 2;
 // Fitur yang ditambahkan setelah config.toml lama dibuat.
@@ -93,7 +143,7 @@ fn migrate(cfg: &mut Config) {
 }
 
 // Catatan: di TOML, nilai biasa (scale, hide_fullscreen, pages, pages_version) harus berada
-// SEBELUM tabel (weather, timing, pomodoro, appearance), jadi urutan field di sini penting.
+// SEBELUM tabel (weather, timing, pomodoro, appearance, nudge), jadi urutan field di sini penting.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
@@ -108,6 +158,7 @@ pub struct Config {
     pub timing: Timing,
     pub pomodoro: Pomodoro,
     pub appearance: Appearance,
+    pub nudge: Nudge,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -126,6 +177,7 @@ impl Default for Config {
             timing: Timing::default(),
             pomodoro: Pomodoro::default(),
             appearance: Appearance::default(),
+            nudge: Nudge::default(),
         }
     }
 }
@@ -158,17 +210,36 @@ light_bg = "#f5f5f7"
 accent = ""             # kosong = otomatis dari cover album, contoh: "#ff6b6b"
 "##;
 
+// ditambahkan ke config.toml (lama maupun template bawaan) yang belum punya section [nudge]
+const NUDGE_BLOCK: &str = r##"
+[nudge]
+enabled = true                       # pesan muncul saat pointer lama diam
+idle_min = 2                         # menit pointer diam sebelum pesan muncul
+message = "Kamu kemana, kok diam saja?"
+emoji = "🥺"
+mood = "sad"                         # normal | happy | sleepy | surprised | angry | love | suspicious | sad
+show_ms = 6000                       # lama pesan tampil (milidetik)
+only_silent = true                   # jangan muncul saat musik/video sedang diputar
+"##;
+
 pub fn init() {
     let p = path();
     let mut cfg = match std::fs::read_to_string(&p) {
         Ok(s) => {
-            // user lama: tambahkan blok [appearance] di akhir file kalau belum ada
+            // user lama: tambahkan blok yang belum ada di akhir file
+            let mut extra = String::new();
             if !s.contains("[appearance]") {
+                extra.push_str(APPEARANCE_BLOCK);
+            }
+            if !s.contains("[nudge]") {
+                extra.push_str(NUDGE_BLOCK);
+            }
+            if !extra.is_empty() {
                 use std::io::Write;
                 let _ = std::fs::OpenOptions::new()
                     .append(true)
                     .open(&p)
-                    .and_then(|mut f| f.write_all(APPEARANCE_BLOCK.as_bytes()));
+                    .and_then(|mut f| f.write_all(extra.as_bytes()));
             }
             toml::from_str::<Config>(&s).unwrap_or_else(|e| {
                 eprintln!("config: file rusak, memakai bawaan ({e})");
@@ -180,14 +251,22 @@ pub fn init() {
             if let Some(dir) = p.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            let _ = std::fs::write(&p, DEFAULT_TOML);
-            toml::from_str::<Config>(DEFAULT_TOML).unwrap_or_default()
+            let mut text = DEFAULT_TOML.to_string();
+            if !text.contains("[appearance]") {
+                text.push_str(APPEARANCE_BLOCK);
+            }
+            if !text.contains("[nudge]") {
+                text.push_str(NUDGE_BLOCK);
+            }
+            let _ = std::fs::write(&p, &text);
+            toml::from_str::<Config>(&text).unwrap_or_default()
         }
     };
     cfg.scale = cfg.scale.clamp(0.5, 1.5);
     if cfg.pages.is_empty() {
         cfg.pages = Config::default().pages;
     }
+    cfg.nudge.sanitize();
     migrate(&mut cfg);
     println!("config: {}", p.display());
     let _ = CFG.set(cfg);
@@ -206,14 +285,16 @@ pub fn cfg_get() -> Config {
         .ok()
         .and_then(|s| toml::from_str(&s).ok())
         .unwrap_or_default();
+    cfg.nudge.sanitize();
     migrate(&mut cfg); // UI menampilkan keadaan yang sama dengan yang sedang berjalan
     cfg
 }
 
 // pratinjau langsung: hanya dikirim ke notch, tidak menulis file
 #[tauri::command]
-pub fn cfg_preview(app: tauri::AppHandle, cfg: Config) {
+pub fn cfg_preview(app: tauri::AppHandle, mut cfg: Config) {
     use tauri::Emitter;
+    cfg.nudge.sanitize();
     let _ = app.emit("config-changed", &cfg);
 }
 
@@ -231,6 +312,7 @@ pub fn cfg_save(app: tauri::AppHandle, mut cfg: Config) -> Result<String, String
     if cfg.weather.city.trim().is_empty() {
         cfg.weather.city = "Lokasi saya".into();
     }
+    cfg.nudge.sanitize();
     let p = path();
     let text = toml::to_string_pretty(&cfg).map_err(|e| format!("gagal membuat TOML: {e}"))?;
     if let Some(dir) = p.parent() {
@@ -252,4 +334,11 @@ pub fn cfg_restart(app: tauri::AppHandle) -> Result<(), String> {
         return Err("mode dev: tutup lalu jalankan ulang `npm run tauri dev` secara manual".into());
     }
     app.restart();
+}
+
+#[tauri::command]
+pub fn nudge_test(app: tauri::AppHandle, mut nudge: Nudge) {
+    use tauri::Emitter;
+    nudge.sanitize();
+    let _ = app.emit("nudge-test", &nudge);
 }
