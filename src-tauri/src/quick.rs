@@ -94,6 +94,9 @@ mod imp {
     use std::sync::Once;
     use std::time::Duration;
     use windows::Devices::Radios::{Radio, RadioKind, RadioState};
+    use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+    use windows::Win32::Media::Audio::{eCapture, eConsole, IMMDeviceEnumerator, MMDeviceEnumerator};
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
     use windows::Win32::System::Power::{
         SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
     };
@@ -134,6 +137,29 @@ mod imp {
             let on = r.State().ok() == Some(RadioState::On);
             let next = if on { RadioState::Off } else { RadioState::On };
             if let Ok(op) = r.SetStateAsync(next) { let _ = op.get(); }
+        }
+    }
+
+    // ---- mute mikrofon: kontrol volume pada perangkat rekam DEFAULT ----
+    // (sama dengan tombol mute mic di pengaturan suara Windows; mempengaruhi semua aplikasi)
+    fn mic_volume() -> Option<IAudioEndpointVolume> {
+        unsafe {
+            // thread pemanggil (pool async Tauri) belum tentu sudah memulai COM; aman dipanggil berulang
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+            let dev = en.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
+            dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).ok()
+        }
+    }
+    fn mic_muted() -> Option<bool> {
+        unsafe { Some(mic_volume()?.GetMute().ok()?.as_bool()) }
+    }
+    fn mic_flip() {
+        if let Some(v) = mic_volume() {
+            unsafe {
+                let muted = v.GetMute().map(|b| b.as_bool()).unwrap_or(false);
+                let _ = v.SetMute(!muted, std::ptr::null());
+            }
         }
     }
 
@@ -182,7 +208,7 @@ mod imp {
         }
     }
 
-    pub fn mic() -> Option<bool> { None }
+    pub fn mic() -> Option<bool> { mic_muted() }
     pub fn wifi() -> Option<bool> { is_on(RadioKind::WiFi) }
     pub fn bt() -> Option<bool> { is_on(RadioKind::Bluetooth) }
     pub fn awake() -> Option<bool> {
@@ -196,6 +222,7 @@ mod imp {
 
     pub fn toggle(kind: &str) {
         match kind {
+            "mic" => mic_flip(),
             "wifi" => flip(RadioKind::WiFi),
             "bt" => flip(RadioKind::Bluetooth),
             "awake" => {

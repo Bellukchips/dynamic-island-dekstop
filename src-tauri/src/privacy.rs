@@ -14,19 +14,65 @@ pub struct Privacy {
 // Jeda antar pembacaan. Indikator hilang paling lambat sekitar segini setelah mic/kamera dimatikan.
 const POLL_MS: u64 = 1000;
 
+// Penyaring "kedip": kamera dianggap menyala setelah terbaca aktif `on` kali berturut-turut, dan
+// dianggap mati setelah terbaca tidak aktif `off` kali berturut-turut. Browser, PipeWire, dsb. sering
+// membuka perangkat kamera sekilas (enumerasi / probe) tanpa benar-benar merekam; tanpa penyaring ini
+// sentuhan sesaat itu langsung menjadi titik hijau dan kartu "Kamera aktif".
+struct Debounce {
+    on: u32,
+    off: u32,
+    on_n: u32,
+    off_n: u32,
+    shown: bool,
+    app: String,
+}
+
+impl Debounce {
+    fn new(on: u32, off: u32) -> Self {
+        Self { on, off, on_n: 0, off_n: 0, shown: false, app: String::new() }
+    }
+
+    fn feed(&mut self, active: bool, app: &str) -> (bool, String) {
+        if active {
+            self.on_n += 1;
+            self.off_n = 0;
+            if !self.shown && self.on_n >= self.on {
+                self.shown = true;
+            }
+            if self.shown {
+                self.app = app.to_string();
+            }
+        } else {
+            self.off_n += 1;
+            self.on_n = 0;
+            if self.shown && self.off_n >= self.off {
+                self.shown = false;
+                self.app.clear();
+            }
+        }
+        (self.shown, self.app.clone())
+    }
+}
+
 // Kirim hanya saat berubah; diulang tiap 5 detik untuk frontend yang baru selesai dimuat.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
         imp::init();
         let mut last: Option<Privacy> = None;
         let mut at = Instant::now();
+        let mut cam_filter = Debounce::new(imp::CAM_ON_CONFIRM, imp::CAM_OFF_CONFIRM);
+        let mut mic_filter = Debounce::new(imp::MIC_ON_CONFIRM, imp::MIC_OFF_CONFIRM);
         // NOTCH_DEBUG=1: cetak bukti mentah deteksi (hanya saat berubah) untuk mencari tahu kenapa suatu perangkat tak terdeteksi
         let debug = std::env::var_os("NOTCH_DEBUG").is_some();
         let mut last_dbg = String::new();
         loop {
-            let cur = imp::read();
+            let raw = imp::read();
+            let (cam, cam_app) = cam_filter.feed(raw.cam, &raw.cam_app);
+            let (mic, mic_app) = mic_filter.feed(raw.mic, &raw.mic_app);
+            let cur = Privacy { mic, mic_app, cam, cam_app };
+
             if debug {
-                let d = imp::debug();
+                let d = format!("{} | cam_mentah={} cam_ditampilkan={}", imp::debug(), raw.cam, cur.cam);
                 if d != last_dbg {
                     println!("privacy[debug]: {d}");
                     last_dbg = d;
@@ -54,7 +100,14 @@ pub fn start(app: AppHandle) {
 #[cfg(target_os = "linux")]
 mod imp {
     use super::Privacy;
+    use std::path::Path;
     use std::process::Command;
+
+    // 3 pembacaan berturut-turut (~3 dtk) sebelum titik/kartu kamera muncul; hilang setelah 2.
+    pub const CAM_ON_CONFIRM: u32 = 3;
+    pub const CAM_OFF_CONFIRM: u32 = 2;
+    pub const MIC_ON_CONFIRM: u32 = 1;
+    pub const MIC_OFF_CONFIRM: u32 = 1;
 
     const IGNORE_MIC: &[&str] = &[
         "pavucontrol", "PulseAudio Volume Control", "Volume Control",
@@ -103,20 +156,30 @@ mod imp {
         finish(open, corked, peak, &name)
     }
 
+    // Satu kamera sering punya dua node: node tangkap (index 0) dan node metadata (index 1).
+    // Hanya node tangkap yang berarti "sedang merekam"; metadata sering dibuka sekilas oleh alat/browser.
+    fn is_capture_node(target: &Path) -> bool {
+        let Some(n) = target.file_name().and_then(|n| n.to_str()) else { return false };
+        std::fs::read_to_string(format!("/sys/class/video4linux/{n}/index"))
+            .map(|s| s.trim() == "0")
+            .unwrap_or(true) // tidak bisa dipastikan: anggap node tangkap
+    }
+
     // Hasil pemindaian /proc untuk file /dev/video*.
-    // `app`: proses pengguna pertama yang membukanya (yang bukan proses sistem).
-    // `ignored_fds`: jumlah file kamera yang dipegang wireplumber/pipewire.
+    // `app`: proses pengguna pertama yang membuka NODE TANGKAP kamera.
+    // `accounted_fds`: SEMUA file /dev/video* yang terlihat tetapi bukan pemakaian kamera (milik
+    // wireplumber/pipewire, atau node metadata). Dipakai untuk membandingkan dengan refcnt modul.
     struct Scan {
         app: Option<String>,
-        ignored_fds: u32,
+        accounted_fds: u32,
     }
 
     // Proses yang tidak dumpable (browser ber-sandbox, Flatpak/Snap) tidak bisa dibaca fd-nya oleh
     // pengguna biasa, jadi "tidak terlihat" belum berarti "tidak dipakai".
     fn scan() -> Scan {
-        let mut ignored_fds = 0u32;
+        let mut accounted_fds = 0u32;
         let Ok(dir) = std::fs::read_dir("/proc") else {
-            return Scan { app: None, ignored_fds };
+            return Scan { app: None, accounted_fds };
         };
         let me = std::process::id();
         for p in dir.flatten() {
@@ -139,15 +202,16 @@ mod imp {
                         .map(|s| s.trim().to_string())
                         .unwrap_or_default()
                 });
-                if IGNORE_CAM.contains(&c.as_str()) {
-                    ignored_fds += 1; // dihitung, lalu lanjut: proses ini bukan pemakai kamera
+                // proses sistem, atau node metadata: dihitung sebagai "sudah dijelaskan", bukan pemakai kamera
+                if IGNORE_CAM.contains(&c.as_str()) || !is_capture_node(&target) {
+                    accounted_fds += 1;
                     continue;
                 }
                 let name = if c.is_empty() { "aplikasi".to_string() } else { c.clone() };
-                return Scan { app: Some(name), ignored_fds };
+                return Scan { app: Some(name), accounted_fds };
             }
         }
-        Scan { app: None, ignored_fds }
+        Scan { app: None, accounted_fds }
     }
 
     // Modul uvcvideo (kebanyakan webcam laptop): refcnt = jumlah file kamera yang sedang terbuka.
@@ -160,32 +224,28 @@ mod imp {
             .ok()
     }
 
-    // Kamera lewat PipeWire (portal): node Video/Source atau stream Video yang berstatus running.
+    // Kamera lewat PipeWire (portal): stream Video yang berstatus running.
+    // (Node "Video/Source" saja tidak dihitung: statusnya bisa "running" sekilas saat probe.)
     fn pipewire_cam() -> Option<String> {
         let out = Command::new("pw-dump").output().ok()?;
         if !out.status.success() {
             return None;
         }
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-        let mut source_running = false;
         for o in v.as_array()? {
             if o["type"] != "PipeWire:Interface:Node" || o["info"]["state"] != "running" {
                 continue;
             }
             let props = &o["info"]["props"];
-            match props["media.class"].as_str() {
-                Some("Stream/Input/Video") => {
-                    let name = props["application.name"]
-                        .as_str()
-                        .or_else(|| props["node.name"].as_str())
-                        .unwrap_or("aplikasi");
-                    return Some(name.to_string());
-                }
-                Some("Video/Source") => source_running = true,
-                _ => {}
+            if props["media.class"].as_str() == Some("Stream/Input/Video") {
+                let name = props["application.name"]
+                    .as_str()
+                    .or_else(|| props["node.name"].as_str())
+                    .unwrap_or("aplikasi");
+                return Some(name.to_string());
             }
         }
-        source_running.then(|| "aplikasi".to_string())
+        None
     }
 
     fn cam() -> Option<String> {
@@ -193,11 +253,11 @@ mod imp {
         if let Some(app) = s.app {
             return Some(app);
         }
-        // Tidak ada pemakai yang terlihat. Wireplumber sering ikut membuka /dev/video* (hanya memantau),
-        // jadi yang dibandingkan adalah jumlah file terbuka dengan yang dipegang proses sistem:
-        // kalau lebih banyak, berarti ada aplikasi lain (mis. Chrome ber-sandbox) yang memakai kamera.
+        // Tidak ada pemakai yang terlihat. Bandingkan file terbuka menurut kernel (refcnt) dengan yang
+        // sudah kita jelaskan (sistem + metadata). Selisih = ada aplikasi lain yang tak terbaca
+        // (mis. Chrome ber-sandbox) memakai kamera.
         if let Some(n) = uvc_refcnt() {
-            if n > s.ignored_fds {
+            if n > s.accounted_fds {
                 return Some("aplikasi".to_string());
             }
         }
@@ -214,9 +274,9 @@ mod imp {
     pub fn debug() -> String {
         let s = scan();
         format!(
-            "scan.app={:?} ignored_fds={} uvc_refcnt={:?} pipewire_cam={:?} pw-dump_ada={}",
+            "scan.app={:?} accounted_fds={} uvc_refcnt={:?} pipewire_cam={:?} pw-dump_ada={}",
             s.app,
-            s.ignored_fds,
+            s.accounted_fds,
             uvc_refcnt(),
             pipewire_cam(),
             Command::new("pw-dump").arg("--version").output().is_ok()
@@ -227,40 +287,117 @@ mod imp {
 // ======================= Windows =======================
 // Mic: sesi audio rekam yang aktif (WASAPI), sama seperti yang dilihat Windows. Registry ConsentStore
 // hanya dipakai kalau WASAPI gagal diperiksa, karena catatannya bisa terlambat diperbarui.
-// Kamera: registry ConsentStore (Start lebih baru dari Stop), lalu cadangan: layanan Camera Frame Server berjalan.
+// Kamera: monitor sensor Media Foundation (proses yang benar-benar streaming), lalu registry ConsentStore
+// (prosesnya harus masih hidup), lalu cadangan terakhir: layanan Camera Frame Server.
 #[cfg(target_os = "windows")]
 mod imp {
     use super::Privacy;
     use std::os::windows::process::CommandExt;
     use std::process::Command;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::Mutex;
-    use windows::core::Interface;
+    use std::time::{Duration, Instant};
+    use windows::core::{implement, Interface, Ref};
     use windows::Win32::Media::Audio::{
         eCapture, AudioSessionStateActive, IAudioSessionControl2, IAudioSessionManager2,
         IMMDeviceEnumerator, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
     };
+    use windows::Win32::Media::MediaFoundation::{
+        IMFSensorActivitiesReport, IMFSensorActivitiesReportCallback, IMFSensorActivitiesReportCallback_Impl,
+        MFCreateSensorActivityMonitor, MFStartup, MFSTARTUP_FULL, MF_VERSION,
+    };
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 
+    // Registry akurat, tidak perlu menunggu lama.
+    pub const CAM_ON_CONFIRM: u32 = 1;
+    pub const CAM_OFF_CONFIRM: u32 = 1;
+    // Mic: aplikasi sering membuka sesi rekam sekilas (cek perangkat); butuh 2 pembacaan berturut-turut.
+    pub const MIC_ON_CONFIRM: u32 = 2;
+    pub const MIC_OFF_CONFIRM: u32 = 1;
+
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    // PID proses yang SAAT INI sedang streaming dari kamera, diisi oleh callback Media Foundation.
+    static CAM_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    // true = monitor sensor berhasil dijalankan (Windows 10 2004+ / 11 dan driver kamera yang mendukung)
+    static MONITOR_OK: AtomicBool = AtomicBool::new(false);
+    // berapa kali monitor mengirim laporan, dan ringkasan laporan terakhir (untuk NOTCH_DEBUG)
+    static REPORTS: AtomicU32 = AtomicU32::new(0);
+    static LAST_REPORT: Mutex<String> = Mutex::new(String::new());
+
+    // Sumber kebenaran resmi: API yang sama dengan indikator kamera bawaan Windows. Melaporkan proses mana
+    // yang benar-benar STREAMING, jadi browser yang hanya mengenumerasi kamera (layanan FrameServer ikut
+    // hidup, tapi tidak ada yang merekam) tidak dihitung.
+    #[implement(IMFSensorActivitiesReportCallback)]
+    struct SensorCb;
+
+    impl IMFSensorActivitiesReportCallback_Impl for SensorCb_Impl {
+        fn OnActivitiesReport(&self, report: Ref<'_, IMFSensorActivitiesReport>) -> windows::core::Result<()> {
+            let Some(report) = report.as_ref() else { return Ok(()) };
+            let me = std::process::id();
+            let mut pids: Vec<u32> = Vec::new();
+            let mut summary = String::new();
+            unsafe {
+                let devices = report.GetCount().unwrap_or(0);
+                summary.push_str(&format!("perangkat={devices}"));
+                for i in 0..devices {
+                    let Ok(dev) = report.GetActivityReport(i) else { continue };
+                    for j in 0..dev.GetProcessCount().unwrap_or(0) {
+                        let Ok(act) = dev.GetProcessActivity(j) else { continue };
+                        let streaming = act.GetStreamingState().map(|b| b.as_bool()).unwrap_or(false);
+                        let pid = act.GetProcessId().unwrap_or(0);
+                        summary.push_str(&format!(" [pid {pid} streaming={streaming}]"));
+                        if streaming && pid != 0 && pid != me && !pids.contains(&pid) {
+                            pids.push(pid);
+                        }
+                    }
+                }
+            }
+            REPORTS.fetch_add(1, Ordering::Relaxed);
+            if let Ok(mut g) = LAST_REPORT.lock() {
+                *g = summary;
+            }
+            if let Ok(mut g) = CAM_PIDS.lock() {
+                *g = pids;
+            }
+            Ok(())
+        }
+    }
+
+    fn start_sensor_monitor() -> bool {
+        unsafe {
+            if MFStartup(MF_VERSION, MFSTARTUP_FULL).is_err() {
+                return false;
+            }
+            let cb: IMFSensorActivitiesReportCallback = SensorCb.into();
+            let Ok(monitor) = MFCreateSensorActivityMonitor(&cb) else { return false };
+            if monitor.Start().is_err() {
+                return false;
+            }
+            // monitor & callback harus hidup selama aplikasi berjalan
+            std::mem::forget(monitor);
+            std::mem::forget(cb);
+            true
+        }
+    }
 
     pub fn init() {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED).ok();
         }
+        MONITOR_OK.store(start_sensor_monitor(), Ordering::Relaxed);
     }
 
-    // PID proses yang sedang merekam lewat salah satu mikrofon.
-    // None            = enumerasi gagal (hasilnya tidak bisa dipercaya)
-    // Some(None)      = berhasil diperiksa, tidak ada yang merekam
-    // Some(Some(pid)) = ada yang merekam
-    fn mic_pid() -> Option<Option<u32>> {
+    // Semua PID proses yang punya sesi rekam berstatus Active di salah satu mikrofon.
+    // None = enumerasi gagal (hasilnya tidak bisa dipercaya); Some(kosong) = tidak ada yang merekam.
+    fn mic_pids() -> Option<Vec<u32>> {
         unsafe {
             let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
             let devs = en.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE).ok()?;
             let me = std::process::id();
             let n = devs.GetCount().ok()?;
             let mut inspected = 0u32;
+            let mut pids: Vec<u32> = Vec::new();
             for i in 0..n {
                 let Ok(dev) = devs.Item(i) else { continue };
                 let Ok(mgr) = dev.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { continue };
@@ -273,23 +410,37 @@ mod imp {
                     }
                     let Ok(ctl2) = ctl.cast::<IAudioSessionControl2>() else { continue };
                     if let Ok(pid) = ctl2.GetProcessId() {
-                        if pid != 0 && pid != me {
-                            return Some(Some(pid));
+                        if pid != 0 && pid != me && !pids.contains(&pid) {
+                            pids.push(pid);
                         }
                     }
                 }
             }
-            if n > 0 && inspected == 0 { None } else { Some(None) }
+            if n > 0 && inspected == 0 { None } else { Some(pids) }
         }
     }
 
-    static LAST_NAME: Mutex<(u32, String)> = Mutex::new((0, String::new()));
+    // Proses yang sering menahan sesi mic terbuka tanpa benar-benar merekam. Tambahkan sendiri lewat
+    // variabel lingkungan NOTCH_MIC_IGNORE, mis. "nahimic.exe,voicemeeter.exe" (pisahkan dengan koma).
+    const IGNORE_MIC: &[&str] = &["audiodg.exe"];
+
+    fn mic_ignored(name: &str) -> bool {
+        let n = name.to_lowercase();
+        if IGNORE_MIC.contains(&n.as_str()) {
+            return true;
+        }
+        std::env::var("NOTCH_MIC_IGNORE")
+            .map(|v| v.split(',').any(|x| x.trim().eq_ignore_ascii_case(&n)))
+            .unwrap_or(false)
+    }
+
+    static NAMES: Mutex<Vec<(u32, String)>> = Mutex::new(Vec::new());
 
     // nama proses dari PID (di-cache supaya tasklist tidak dipanggil tiap siklus)
     fn proc_name(pid: u32) -> String {
-        if let Ok(g) = LAST_NAME.lock() {
-            if g.0 == pid && !g.1.is_empty() {
-                return g.1.clone();
+        if let Ok(g) = NAMES.lock() {
+            if let Some((_, n)) = g.iter().find(|(p, _)| *p == pid) {
+                return n.clone();
             }
         }
         let name = Command::new("tasklist")
@@ -305,8 +456,11 @@ mod imp {
             })
             .filter(|n| !n.is_empty() && !n.starts_with("INFO"))
             .unwrap_or_else(|| "aplikasi".to_string());
-        if let Ok(mut g) = LAST_NAME.lock() {
-            *g = (pid, name.clone());
+        if let Ok(mut g) = NAMES.lock() {
+            if g.len() >= 8 {
+                g.remove(0);
+            }
+            g.push((pid, name.clone()));
         }
         name
     }
@@ -367,20 +521,52 @@ mod imp {
     // Dipakai = Start terisi dan lebih baru dari Stop. Stop = 0 (sedang jalan) ikut tercakup,
     // begitu juga Windows yang tidak mengosongkan Stop saat kamera menyala lagi.
     fn is_active(start: u64, stop: Option<u64>) -> bool {
-        start != 0 && matches!(stop, Some(s) if start > s)
+        // Stop tidak ada sama sekali = aplikasi ini belum pernah berhenti memakai perangkat
+        start != 0 && start > stop.unwrap_or(0)
+    }
+
+    // (nama exe, apakah berjalan, kapan dicek) -- satu entri cache, berlaku 5 detik
+    static RUN_CACHE: Mutex<Option<(String, bool, Instant)>> = Mutex::new(None);
+
+    // Windows tidak menutup entri registry kalau aplikasinya crash / di-kill: Start > Stop selamanya,
+    // dan kamera tampak "aktif" terus. Untuk aplikasi Win32 (kunci berisi path "C:#...#app.exe")
+    // pastikan prosesnya memang masih ada. Aplikasi Store (tanpa path) tidak bisa dicek dari nama.
+    fn still_running(key: &str) -> bool {
+        let last = key.rsplit('\\').next().unwrap_or(key);
+        if !last.contains('#') {
+            return true;
+        }
+        let exe = last.rsplit('#').next().unwrap_or(last).to_string();
+        if let Ok(g) = RUN_CACHE.lock() {
+            if let Some((n, alive, at)) = g.as_ref() {
+                if *n == exe && at.elapsed() < Duration::from_secs(5) {
+                    return *alive;
+                }
+            }
+        }
+        let alive = Command::new("tasklist")
+            .args(["/FI", &format!("IMAGENAME eq {exe}"), "/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase().contains(&exe.to_lowercase()))
+            .unwrap_or(true); // gagal memeriksa: percayai registry
+        if let Ok(mut g) = RUN_CACHE.lock() {
+            *g = Some((exe, alive, Instant::now()));
+        }
+        alive
     }
 
     fn in_use(kind: &str) -> Option<String> {
         entries(kind)
             .into_iter()
-            .find(|(_, start, stop)| is_active(*start, *stop))
+            .filter(|(_, start, stop)| is_active(*start, *stop))
+            .find(|(k, _, _)| still_running(k))
             .map(|(k, _, _)| pretty(&k))
     }
 
-    // Cadangan untuk kamera: di sebagian Windows 11 registry ConsentStore tidak diperbarui saat kamera menyala.
-    // Aplikasi berbasis Media Foundation (Camera, Edge/Chrome, Teams baru) memakai layanan "Windows Camera Frame
-    // Server", yang hanya berjalan selama ada yang memakai kamera. Aplikasi DirectShow tidak lewat layanan ini.
-    // Perkiraan, bukan kepastian: kalau titik kamera menyala padahal kamera mati, ubah konstanta ini jadi false.
+    // Cadangan terakhir, hanya dipakai kalau monitor sensor tidak bisa dijalankan: layanan "Windows Camera
+    // Frame Server" berjalan. Perkiraan kasar: layanan ini juga hidup saat browser sekadar mengenumerasi
+    // kamera dan bisa bertahan lama setelahnya. Ubah jadi false kalau titik kamera menyala sendiri.
     const CAM_FRAMESERVER_FALLBACK: bool = true;
 
     fn frame_server_running() -> bool {
@@ -393,25 +579,33 @@ mod imp {
     }
 
     // Terbukti: registry ikut melaporkan "aktif" saat Camera Frame Server berjalan. Berarti registry
-    // diperbarui langsung, dan Frame Server tidak perlu dipakai lagi (layanan itu masih berjalan
-    // beberapa saat setelah kamera mati, sehingga indikator jadi lambat hilang).
+    // diperbarui langsung, dan Frame Server tidak perlu dipakai lagi.
     static REG_LIVE: AtomicBool = AtomicBool::new(false);
 
     pub fn read() -> Privacy {
         // WASAPI adalah sumber utama mic. Registry hanya dipakai kalau pemeriksaan WASAPI gagal,
         // karena catatannya bisa terlambat diperbarui dan membuat indikator lama hilang.
-        let m = match mic_pid() {
-            Some(Some(pid)) => Some(proc_name(pid)),
-            Some(None) => None,
+        let m = match mic_pids() {
+            Some(pids) => pids
+                .into_iter()
+                .map(proc_name)
+                .find(|n| !mic_ignored(n)),
             None => in_use("microphone"),
         };
 
+        // kamera: 1) monitor sensor (paling akurat)  2) registry (proses harus masih hidup)
+        // 3) FrameServer, HANYA selama monitor sensor belum terbukti bekerja (tidak tersedia / belum pernah melapor)
+        let streaming = CAM_PIDS.lock().ok().and_then(|g| g.first().copied()).map(proc_name);
         let reg = in_use("webcam");
-        let fs = CAM_FRAMESERVER_FALLBACK && frame_server_running();
+        // monitor dianggap terbukti bekerja setelah ia pernah mengirim minimal satu laporan
+        let monitor_proven = MONITOR_OK.load(Ordering::Relaxed) && REPORTS.load(Ordering::Relaxed) > 0;
+        let fs = CAM_FRAMESERVER_FALLBACK && !monitor_proven && frame_server_running();
         if reg.is_some() && fs {
             REG_LIVE.store(true, Ordering::Relaxed);
         }
-        let c = reg.or_else(|| (fs && !REG_LIVE.load(Ordering::Relaxed)).then(|| "aplikasi".to_string()));
+        let c = streaming
+            .or(reg)
+            .or_else(|| (fs && !REG_LIVE.load(Ordering::Relaxed)).then(|| "aplikasi".to_string()));
 
         Privacy { mic: m.is_some(), cam: c.is_some(), mic_app: m.unwrap_or_default(), cam_app: c.unwrap_or_default() }
     }
@@ -420,12 +614,13 @@ mod imp {
         let reg: Vec<String> = entries("webcam")
             .iter()
             .map(|(k, start, stop)| {
+                let active = is_active(*start, *stop);
                 format!(
                     "{} start={:#x} stop={:?}{}",
                     pretty(k),
                     start,
                     stop,
-                    if is_active(*start, *stop) { " *AKTIF*" } else { "" }
+                    if !active { "" } else if still_running(k) { " *AKTIF*" } else { " *BASI (proses sudah mati)*" }
                 )
             })
             .collect();
@@ -435,11 +630,33 @@ mod imp {
             .map(|(k, _, _)| pretty(k))
             .collect();
         format!(
-            "webcam_registry=[{}] | FrameServer_running={} | registry_live={} | mic_wasapi={:?} | mic_registry_aktif={:?}",
+            "sensor_monitor_ok={} sensor_laporan={} sensor_terakhir=[{}] sensor_streaming_pids={:?} | FrameServerMonitor_ada={} | webcam_registry=[{}] | FrameServer_running={} (fallback={}) | registry_live={} | mic_sesi_aktif=[{}] | mic_registry_aktif={:?}",
+            MONITOR_OK.load(Ordering::Relaxed),
+            REPORTS.load(Ordering::Relaxed),
+            LAST_REPORT.lock().map(|g| g.clone()).unwrap_or_default(),
+            CAM_PIDS.lock().map(|g| g.clone()).unwrap_or_default(),
+            Command::new("tasklist")
+                .args(["/FI", "IMAGENAME eq FrameServerMonitor.exe", "/FO", "CSV", "/NH"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase().contains("frameservermonitor"))
+                .unwrap_or(false),
             reg.join("; "),
             frame_server_running(),
+            CAM_FRAMESERVER_FALLBACK,
             REG_LIVE.load(Ordering::Relaxed),
-            mic_pid(),
+            match mic_pids() {
+                None => "enumerasi gagal".to_string(),
+                Some(p) => p
+                    .into_iter()
+                    .map(|pid| {
+                        let n = proc_name(pid);
+                        let ign = if mic_ignored(&n) { " DIABAIKAN" } else { "" };
+                        format!("{pid}:{n}{ign}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            },
             mic_reg
         )
     }
@@ -448,11 +665,46 @@ mod imp {
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 mod imp {
     use super::Privacy;
+    pub const CAM_ON_CONFIRM: u32 = 1;
+    pub const CAM_OFF_CONFIRM: u32 = 1;
+    pub const MIC_ON_CONFIRM: u32 = 1;
+    pub const MIC_OFF_CONFIRM: u32 = 1;
     pub fn init() {}
     pub fn read() -> Privacy {
         Privacy::default()
     }
     pub fn debug() -> String {
         String::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blip_is_ignored_but_real_use_is_shown() {
+        let mut f = Debounce::new(3, 2);
+        // sentuhan sesaat (1-2 pembacaan) tidak menyalakan indikator
+        assert!(!f.feed(true, "chrome").0);
+        assert!(!f.feed(true, "chrome").0);
+        assert!(!f.feed(false, "").0);
+        // pemakaian nyata: menyala di pembacaan ke-3 berturut-turut
+        assert!(!f.feed(true, "zoom").0);
+        assert!(!f.feed(true, "zoom").0);
+        assert_eq!(f.feed(true, "zoom"), (true, "zoom".to_string()));
+        // satu pembacaan kosong tidak mematikan (kedip sebaliknya)
+        assert!(f.feed(false, "").0);
+        assert!(f.feed(true, "zoom").0);
+        // dua pembacaan kosong berturut-turut: mati
+        assert!(f.feed(false, "").0);
+        assert_eq!(f.feed(false, ""), (false, String::new()));
+    }
+
+    #[test]
+    fn immediate_when_confirm_is_one() {
+        let mut f = Debounce::new(1, 1);
+        assert_eq!(f.feed(true, "Teams"), (true, "Teams".to_string()));
+        assert_eq!(f.feed(false, ""), (false, String::new()));
     }
 }

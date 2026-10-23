@@ -30,6 +30,7 @@ gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
 mpris = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+windows-core = "0.61"   # dibutuhkan makro #[implement] (callback sensor kamera)
 windows = { version = "0.61", features = [
   "Foundation",
   "Foundation_Collections",
@@ -44,12 +45,9 @@ windows = { version = "0.61", features = [
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",
+  "Win32_Media_MediaFoundation",   # <-- BARU: IMFSensorActivityMonitor (indikator kamera)
   "Devices",
   "Devices_Radios",
-  "Foundation",
-  "Foundation_Collections",  
-  "Win32_System_Power",
-  "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
 ] }
