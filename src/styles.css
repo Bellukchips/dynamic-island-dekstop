@@ -1254,37 +1254,104 @@ body {
   text-align: center;
   opacity: 0.5;
 }
+/* ---------- indikator privasi (versi 2) ----------
+   Hapus SEMUA aturan #privacy / .pv-* / pv-pulse yang lama di styles.css, lalu tempel blok ini.
+   HTML tidak berubah. */
 
-/* ---------- indikator privasi (kamera / mikrofon) ---------- */
 #privacy {
   position: absolute;
   z-index: 6;
-  top: 8px;
-  right: 12px;
   display: none;
-  gap: 5px;
+  align-items: center;
+  gap: 4px;
   pointer-events: none;
+  /* tampilan lebar (hub, lirik, kartu): titik kecil di tengah tepi atas, seperti lampu kamera notch.
+     Area ini kosong; pojok kanan atas dipakai equalizer dan titik halaman. */
+  top: 6px;
+  right: 50%;
+  transform: translateX(50%);
+  transition:
+    top 0.45s cubic-bezier(0.34, 1.2, 0.5, 1),
+    right 0.45s cubic-bezier(0.34, 1.2, 0.5, 1),
+    transform 0.45s cubic-bezier(0.34, 1.2, 0.5, 1);
 }
-#notch[data-priv] #privacy { display: flex; }
-#privacy i {
-  display: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  animation: pv-pulse 1.8s ease-in-out infinite;
-}
-#notch[data-priv~="cam"] .pv-cam { display: block; background: #30d158; box-shadow: 0 0 6px #30d158; }
-#notch[data-priv~="mic"] .pv-mic { display: block; background: #ff9f0a; box-shadow: 0 0 6px #ff9f0a; }
-#notch[data-view="compact"] #privacy { top: 13px; right: 46px; } /* geser dari batang equalizer */
-#notch[data-view="hub"] #privacy { top: 12px; right: 14px; }
-#notch[data-view="bt"] #privacy,
-#notch[data-view="dev"] #privacy,
-#notch[data-view="hud"] #privacy { display: none; }
-@keyframes pv-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+#notch[data-priv] #privacy {
+  display: flex;
 }
 
+/* idle: lencana di sisi kanan pil, sejajar dengan mata */
+#notch[data-view="idle"] #privacy {
+  top: 4px;
+  right: 8px;
+  transform: none;
+}
+/* compact: di sebelah kiri equalizer */
+#notch[data-view="compact"] #privacy {
+  top: 9px;
+  right: 46px;
+  transform: none;
+}
+
+/* lencana bulat berwarna dengan ikon gelap di dalamnya */
+#notch #privacy .pv-cam,
+#notch #privacy .pv-mic {
+  display: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(var(--pv));
+  color: rgba(0, 0, 0, 0.78);
+  line-height: 0;
+  box-shadow:
+    0 0 0 2px rgba(var(--pv), 0.22),
+    0 0 10px rgba(var(--pv), 0.5);
+  animation: pv-ring 2s ease-in-out infinite;
+  transition:
+    width 0.3s,
+    height 0.3s;
+}
+#notch #privacy .pv-cam {
+  --pv: 48, 209, 88;
+}
+#notch #privacy .pv-mic {
+  --pv: 255, 159, 10;
+}
+#notch[data-priv~="cam"] #privacy .pv-cam,
+#notch[data-priv~="mic"] #privacy .pv-mic {
+  display: grid;
+}
+
+#notch #privacy svg {
+  display: block;
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.8;
+}
+
+/* di luar idle/compact: hanya titik, ikon disembunyikan supaya tidak menabrak isi halaman */
+#notch:not([data-view="idle"]):not([data-view="compact"]) #privacy .pv-cam,
+#notch:not([data-view="idle"]):not([data-view="compact"]) #privacy .pv-mic {
+  width: 7px;
+  height: 7px;
+}
+#notch:not([data-view="idle"]):not([data-view="compact"]) #privacy svg {
+  display: none;
+}
+
+@keyframes pv-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(var(--pv), 0.22),
+      0 0 10px rgba(var(--pv), 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(var(--pv), 0.1),
+      0 0 14px rgba(var(--pv), 0.3);
+  }
+}
 /* ---------- halaman shelf ---------- */
 .p-shelf {
   box-sizing: border-box;
@@ -1316,8 +1383,13 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-.p-shelf .sh-head button:hover { background: rgba(var(--fg-rgb), 0.14); }
-.p-shelf .sh-head svg { width: 13px; height: 13px; }
+.p-shelf .sh-head button:hover {
+  background: rgba(var(--fg-rgb), 0.14);
+}
+.p-shelf .sh-head svg {
+  width: 13px;
+  height: 13px;
+}
 .p-shelf .sh-list {
   display: flex;
   flex: 1;
@@ -1329,7 +1401,9 @@ body {
   scrollbar-width: none;
   border-radius: 12px;
 }
-.p-shelf .sh-list::-webkit-scrollbar { display: none; }
+.p-shelf .sh-list::-webkit-scrollbar {
+  display: none;
+}
 .p-shelf .sh-item {
   all: unset;
   box-sizing: border-box;
@@ -1347,9 +1421,16 @@ body {
   cursor: pointer;
   transition: background 0.15s;
 }
-.p-shelf .sh-item:hover { background: rgba(var(--fg-rgb), 0.18); }
-.p-shelf .sh-item:active { background: rgba(var(--accent), 0.35); }
-.p-shelf .sh-item .ic { font-size: 24px; line-height: 1; }
+.p-shelf .sh-item:hover {
+  background: rgba(var(--fg-rgb), 0.18);
+}
+.p-shelf .sh-item:active {
+  background: rgba(var(--accent), 0.35);
+}
+.p-shelf .sh-item .ic {
+  font-size: 24px;
+  line-height: 1;
+}
 .p-shelf .sh-item .nm {
   max-width: 50px;
   font-size: 9.5px;
@@ -1371,8 +1452,12 @@ body {
   font-size: 11px;
   line-height: 1;
 }
-.p-shelf .sh-item:hover .x { display: grid; }
-.p-shelf .sh-item .x:hover { background: rgba(255, 69, 58, 0.85); }
+.p-shelf .sh-item:hover .x {
+  display: grid;
+}
+.p-shelf .sh-item .x:hover {
+  background: rgba(255, 69, 58, 0.85);
+}
 .p-shelf .sh-empty {
   flex: 1;
   display: grid;
@@ -1381,7 +1466,10 @@ body {
   border-radius: 12px;
   font-size: 12px;
   opacity: 0.6;
-  transition: border-color 0.15s, opacity 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    opacity 0.15s,
+    background 0.15s;
 }
 #notch.dropping .p-shelf .sh-empty {
   border-color: rgb(var(--accent));
@@ -1393,9 +1481,10 @@ body {
   outline-offset: -2px;
 }
 
-
 /* ---------- lirik (tampilan diperluas dari halaman media) ---------- */
-.btns { position: relative; }
+.btns {
+  position: relative;
+}
 .btns #m-lyrics {
   position: absolute;
   right: 0;
@@ -1411,7 +1500,9 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.btns #m-lyrics.off { opacity: 0.35; }
+.btns #m-lyrics.off {
+  opacity: 0.35;
+}
 
 #notch[data-view="lyr"] {
   width: 400px;
@@ -1450,7 +1541,10 @@ body {
   background: linear-gradient(135deg, #333, #111);
   pointer-events: none;
 }
-.ly-meta { flex: 1; min-width: 0; }
+.ly-meta {
+  flex: 1;
+  min-width: 0;
+}
 #ly-title {
   font-size: 13px;
   font-weight: 650;
@@ -1477,18 +1571,30 @@ body {
   color: var(--fg);
   transition: background 0.15s;
 }
-#ly-back:hover { background: rgba(var(--fg-rgb), 0.14); }
-#ly-back svg { width: 16px; height: 16px; }
+#ly-back:hover {
+  background: rgba(var(--fg-rgb), 0.14);
+}
+#ly-back svg {
+  width: 16px;
+  height: 16px;
+}
 .ly-scroll {
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+  -webkit-mask-image: linear-gradient(
+    transparent,
+    #000 22%,
+    #000 78%,
+    transparent
+  );
   mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
 }
-.ly-scroll::-webkit-scrollbar { display: none; }
+.ly-scroll::-webkit-scrollbar {
+  display: none;
+}
 #ly-lines {
   position: relative; /* offsetTop baris dihitung dari sini untuk memusatkan baris aktif */
   padding: 60px 6px;
@@ -1500,16 +1606,25 @@ body {
   font-weight: 700;
   line-height: 1.35;
   opacity: 0.32;
-  transition: opacity 0.3s, transform 0.3s;
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
 }
 .ly-l.cur {
   opacity: 1;
   transform: scale(1.04);
   text-shadow: 0 0 14px rgba(var(--accent), 0.55);
 }
-#ly-lines.plain .ly-l { font-size: 13px; font-weight: 500; opacity: 0.8; }
-.ly-msg { padding: 40px 0; font-size: 13px; opacity: 0.55; }
-
+#ly-lines.plain .ly-l {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.ly-msg {
+  padding: 40px 0;
+  font-size: 13px;
+  opacity: 0.55;
+}
 
 /* ---------- lengkung "telinga" di sisi atas notch (seperti notch MacBook) ---------- */
 #shell {
@@ -1522,18 +1637,40 @@ body {
   content: "";
   position: absolute;
   top: 0;
-  width: calc(var(--e) + 0.5px); /* tumpang tindih 0.5px agar tidak ada garis tipis */
+  width: calc(
+    var(--e) + 0.5px
+  ); /* tumpang tindih 0.5px agar tidak ada garis tipis */
   height: var(--e);
   pointer-events: none;
   z-index: 1;
 }
 #shell::before {
   left: calc(var(--e) * -1);
-  background: radial-gradient(circle at 0 100%, transparent calc(var(--e) - 0.5px), var(--bg) var(--e));
+  background: radial-gradient(
+    circle at 0 100%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
 }
 #shell::after {
   right: calc(var(--e) * -1);
-  background: radial-gradient(circle at 100% 100%, transparent calc(var(--e) - 0.5px), var(--bg) var(--e));
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
 }
 
-.ly-note { padding: 0 0 8px; font-size: 11px; opacity: 0.5; }
+.ly-note {
+  padding: 0 0 8px;
+  font-size: 11px;
+  opacity: 0.5;
+}
+#art[data-icon],
+#c-art[data-icon],
+#ly-art[data-icon] {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  object-fit: contain;
+}

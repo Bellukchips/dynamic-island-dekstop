@@ -11,54 +11,119 @@
 
 <body>
   <div id="stage">
-    <div id="shell"><!-- pembungkus: telinga lengkung berada di luar #notch (yang overflow: hidden) -->
-    <div id="notch" data-view="idle" data-playing="false">
+    <div id="shell">
+      <!-- pembungkus: telinga lengkung berada di luar #notch (yang overflow: hidden) -->
+      <div id="notch" data-view="idle" data-playing="false">
 
-      <!-- indikator privasi: titik hijau = kamera, oranye = mikrofon -->
-      <div id="privacy" aria-hidden="true"><i class="pv-cam"></i><i class="pv-mic"></i></div>
-
-      <!-- idle: mata -->
-      <div class="layer l-idle">
-        <div class="eyes" data-mood="normal">
-          <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
-          <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
+        <!-- indikator privasi: titik hijau = kamera, oranye = mikrofon -->
+        <div id="privacy" aria-hidden="true">
+          <i class="pv-cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+              <circle cx="12" cy="13" r="3.5" />
+            </svg></i>
+          <i class="pv-mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg></i>
         </div>
-      </div>
 
-      <!-- compact: musik mini -->
-      <div class="layer l-compact">
-        <img id="c-art" alt="" />
-        <div class="bars"><i></i><i></i><i></i><i></i></div>
-      </div>
+        <!-- idle: mata -->
+        <div class="layer l-idle">
+          <div class="eyes" data-mood="normal">
+            <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
+            <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
+          </div>
+        </div>
 
-      <!-- hub: halaman yang bisa digeser -->
-      <div class="layer l-hub">
-        <div class="pages" id="pages">
-          <div class="track" id="track">
+        <!-- compact: musik mini -->
+        <div class="layer l-compact">
+          <img id="c-art" alt="" />
+          <div class="bars"><i></i><i></i><i></i><i></i></div>
+        </div>
 
-            <!-- halaman 1: media -->
-            <div class="page p-media" data-page="media">
-              <img id="art" alt="" />
-              <div class="m-body">
-                <div class="m-top">
-                  <div class="m-text">
-                    <div id="m-title">-</div>
-                    <div id="m-artist"></div>
+        <!-- hub: halaman yang bisa digeser -->
+        <div class="layer l-hub">
+          <div class="pages" id="pages">
+            <div class="track" id="track">
+
+              <!-- halaman 1: media -->
+              <div class="page p-media" data-page="media">
+                <img id="art" alt="" />
+                <div class="m-body">
+                  <div class="m-top">
+                    <div class="m-text">
+                      <div id="m-title">-</div>
+                      <div id="m-artist"></div>
+                    </div>
+                    <div class="bars"><i></i><i></i><i></i><i></i></div>
                   </div>
-                  <div class="bars"><i></i><i></i><i></i><i></i></div>
-                </div>
-                <div class="m-time">
-                  <span id="t-pos">0:00</span>
-                  <div class="bar">
-                    <div id="m-progress"></div>
+                  <div class="m-time">
+                    <span id="t-pos">0:00</span>
+                    <div class="bar">
+                      <div id="m-progress"></div>
+                    </div>
+                    <span id="t-len">0:00</span>
                   </div>
-                  <span id="t-len">0:00</span>
+                  <div class="btns">
+                    <button id="m-prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24">
+                        <path d="M6 6h2v12H6zM9.5 12 18 6v12z" />
+                      </svg></button>
+                    <button id="m-toggle" class="main" aria-label="Putar/Jeda">
+                      <svg class="i-play" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      <svg class="i-pause" viewBox="0 0 24 24">
+                        <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+                      </svg>
+                    </button>
+                    <button id="m-next" aria-label="Berikutnya"><svg viewBox="0 0 24 24">
+                        <path d="M16 6h2v12h-2zM14.5 12 6 6v12z" />
+                      </svg></button>
+                    <button id="m-lyrics" class="off" aria-label="Lirik"><svg viewBox="0 0 24 24">
+                        <path d="M4 6h16M4 12h10M4 18h13" />
+                      </svg></button>
+                  </div>
                 </div>
-                <div class="btns">
-                  <button id="m-prev" aria-label="Sebelumnya"><svg viewBox="0 0 24 24">
-                      <path d="M6 6h2v12H6zM9.5 12 18 6v12z" />
+              </div>
+
+              <!-- halaman 2: cuaca -->
+              <div class="page p-wx" data-page="weather">
+                <div class="wx-icon" id="wx-icon" data-kind="clear"><span id="wx-emoji"></span><i class="drops"></i></div>
+                <div class="wx-text">
+                  <strong id="wx-temp">--&deg;</strong>
+                  <small id="wx-desc">Memuat cuaca...</small>
+                </div>
+                <div class="wx-meta">
+                  <span id="wx-feels"></span>
+                  <span id="wx-hum"></span>
+                </div>
+              </div>
+
+              <!-- halaman 3: baterai -->
+              <div class="page p-bat" data-page="battery">
+                <div class="bat-big">
+                  <strong id="bat-pct">--%</strong>
+                  <small id="bat-sub">Tidak ada baterai</small>
+                </div>
+                <div class="bat-bar">
+                  <div id="bat-fill"></div>
+                </div>
+              </div>
+
+              <!-- halaman 4: timer -->
+              <div class="page p-timer" data-page="timer">
+                <div class="pom-top">
+                  <strong id="pom-time">25:00</strong>
+                  <small id="pom-label">Fokus · ronde 1</small>
+                </div>
+                <div class="pom-bar">
+                  <div id="pom-fill"></div>
+                </div>
+                <div class="pom-btns">
+                  <button id="pom-reset" aria-label="Ulang"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5" />
                     </svg></button>
-                  <button id="m-toggle" class="main" aria-label="Putar/Jeda">
+                  <button id="pom-toggle" class="main" aria-label="Mulai/Jeda">
                     <svg class="i-play" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
@@ -66,218 +131,169 @@
                       <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
                     </svg>
                   </button>
-                  <button id="m-next" aria-label="Berikutnya"><svg viewBox="0 0 24 24">
+                  <button id="pom-skip" aria-label="Lewati"><svg viewBox="0 0 24 24">
                       <path d="M16 6h2v12h-2zM14.5 12 6 6v12z" />
-                    </svg></button>
-                  <button id="m-lyrics" class="off" aria-label="Lirik"><svg viewBox="0 0 24 24">
-                      <path d="M4 6h16M4 12h10M4 18h13" />
                     </svg></button>
                 </div>
               </div>
-            </div>
 
-            <!-- halaman 2: cuaca -->
-            <div class="page p-wx" data-page="weather">
-              <div class="wx-icon" id="wx-icon" data-kind="clear"><span id="wx-emoji"></span><i class="drops"></i></div>
-              <div class="wx-text">
-                <strong id="wx-temp">--&deg;</strong>
-                <small id="wx-desc">Memuat cuaca...</small>
-              </div>
-              <div class="wx-meta">
-                <span id="wx-feels"></span>
-                <span id="wx-hum"></span>
-              </div>
-            </div>
-
-            <!-- halaman 3: baterai -->
-            <div class="page p-bat" data-page="battery">
-              <div class="bat-big">
-                <strong id="bat-pct">--%</strong>
-                <small id="bat-sub">Tidak ada baterai</small>
-              </div>
-              <div class="bat-bar">
-                <div id="bat-fill"></div>
-              </div>
-            </div>
-
-            <!-- halaman 4: timer -->
-            <div class="page p-timer" data-page="timer">
-              <div class="pom-top">
-                <strong id="pom-time">25:00</strong>
-                <small id="pom-label">Fokus · ronde 1</small>
-              </div>
-              <div class="pom-bar">
-                <div id="pom-fill"></div>
-              </div>
-              <div class="pom-btns">
-                <button id="pom-reset" aria-label="Ulang"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5" />
-                  </svg></button>
-                <button id="pom-toggle" class="main" aria-label="Mulai/Jeda">
-                  <svg class="i-play" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  <svg class="i-pause" viewBox="0 0 24 24">
-                    <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-                  </svg>
-                </button>
-                <button id="pom-skip" aria-label="Lewati"><svg viewBox="0 0 24 24">
-                    <path d="M16 6h2v12h-2zM14.5 12 6 6v12z" />
-                  </svg></button>
-              </div>
-            </div>
-
-            <!-- halaman 5: kontrol cepat -->
-            <div class="page p-quick" data-page="quick">
-              <button class="q-btn na" id="q-mic">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="9" y="3" width="6" height="11" rx="3" />
-                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-                </svg>
-                <span>Mic</span>
-              </button>
-              <button class="q-btn na" id="q-wifi">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 20h.01" />
-                </svg>
-                <span>Wi-Fi</span>
-              </button>
-              <button class="q-btn na" id="q-bt">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M7 7l10 10-5 5V2l5 5L7 17" />
-                </svg>
-                <span>Bluetooth</span>
-              </button>
-            </div>
-
-            <!-- halaman 6: alat (keep awake, tema, kunci) -->
-            <div class="page p-quick" data-page="tools">
-              <button class="q-btn na" id="q-awake">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 8h10v6a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4zM16 9h2a2 2 0 0 1 0 4h-2M8 2v2M12 2v2" />
-                </svg>
-                <span>Keep awake</span>
-              </button>
-              <button class="q-btn na" id="q-dark">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-                </svg>
-                <span>Tema</span>
-              </button>
-              <button class="q-btn" id="q-lock">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="5" y="11" width="14" height="10" rx="2" />
-                  <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-                </svg>
-                <span>Kunci</span>
-              </button>
-            </div>
-
-            <!-- halaman 7: status sistem -->
-            <div class="page p-stats" data-page="stats">
-              <div class="st-row">
-                <span>CPU</span>
-                <div class="st-bar"><div id="st-cpu"></div></div>
-                <b id="st-cpu-v">0%</b>
-              </div>
-              <div class="st-row">
-                <span>RAM</span>
-                <div class="st-bar"><div id="st-ram"></div></div>
-                <b id="st-ram-v">0%</b>
-              </div>
-              <div class="st-net">
-                <span id="st-down">&darr; 0 KB/s</span>
-                <span id="st-ram-gb">0 / 0 GB</span>
-                <span id="st-up">&uarr; 0 KB/s</span>
-              </div>
-            </div>
-
-            <!-- halaman: shelf file (seret file ke notch) -->
-            <div class="page p-shelf" data-page="shelf">
-              <div class="sh-head">
-                <span id="sh-count">Shelf</span>
-                <button id="sh-clear" aria-label="Kosongkan shelf">
+              <!-- halaman 5: kontrol cepat -->
+              <div class="page p-quick" data-page="quick">
+                <button class="q-btn na" id="q-mic">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
                   </svg>
+                  <span>Mic</span>
                 </button>
-              </div>
-              <div class="sh-list" id="sh-list">
-                <div class="sh-empty">Seret file ke notch</div>
-              </div>
-            </div>
-
-            <!-- halaman 8: riwayat clipboard -->
-            <div class="page p-clip" data-page="clipboard">
-              <div class="clip-head">
-                <span id="clip-count">Clipboard</span>
-                <button id="clip-clear" aria-label="Hapus riwayat">
+                <button class="q-btn na" id="q-wifi">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    <path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 20h.01" />
                   </svg>
+                  <span>Wi-Fi</span>
+                </button>
+                <button class="q-btn na" id="q-bt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M7 7l10 10-5 5V2l5 5L7 17" />
+                  </svg>
+                  <span>Bluetooth</span>
                 </button>
               </div>
-              <div class="clip-list" id="clip-list">
-                <div class="clip-empty">Belum ada yang disalin</div>
+
+              <!-- halaman 6: alat (keep awake, tema, kunci) -->
+              <div class="page p-quick" data-page="tools">
+                <button class="q-btn na" id="q-awake">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 8h10v6a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4zM16 9h2a2 2 0 0 1 0 4h-2M8 2v2M12 2v2" />
+                  </svg>
+                  <span>Keep awake</span>
+                </button>
+                <button class="q-btn na" id="q-dark">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+                  </svg>
+                  <span>Tema</span>
+                </button>
+                <button class="q-btn" id="q-lock">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                  </svg>
+                  <span>Kunci</span>
+                </button>
               </div>
+
+              <!-- halaman 7: status sistem -->
+              <div class="page p-stats" data-page="stats">
+                <div class="st-row">
+                  <span>CPU</span>
+                  <div class="st-bar">
+                    <div id="st-cpu"></div>
+                  </div>
+                  <b id="st-cpu-v">0%</b>
+                </div>
+                <div class="st-row">
+                  <span>RAM</span>
+                  <div class="st-bar">
+                    <div id="st-ram"></div>
+                  </div>
+                  <b id="st-ram-v">0%</b>
+                </div>
+                <div class="st-net">
+                  <span id="st-down">&darr; 0 KB/s</span>
+                  <span id="st-ram-gb">0 / 0 GB</span>
+                  <span id="st-up">&uarr; 0 KB/s</span>
+                </div>
+              </div>
+
+              <!-- halaman: shelf file (seret file ke notch) -->
+              <div class="page p-shelf" data-page="shelf">
+                <div class="sh-head">
+                  <span id="sh-count">Shelf</span>
+                  <button id="sh-clear" aria-label="Kosongkan shelf">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="sh-list" id="sh-list">
+                  <div class="sh-empty">Seret file ke notch</div>
+                </div>
+              </div>
+
+              <!-- halaman 8: riwayat clipboard -->
+              <div class="page p-clip" data-page="clipboard">
+                <div class="clip-head">
+                  <span id="clip-count">Clipboard</span>
+                  <button id="clip-clear" aria-label="Hapus riwayat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="clip-list" id="clip-list">
+                  <div class="clip-empty">Belum ada yang disalin</div>
+                </div>
+              </div>
+
             </div>
-
+            <div class="dots" id="dots"></div>
           </div>
-          <div class="dots" id="dots"></div>
         </div>
-      </div>
 
-      <!-- lirik: tampilan diperluas dari halaman media -->
-      <div class="layer l-lyr">
-        <div class="ly-top">
-          <img id="ly-art" alt="" />
-          <div class="ly-meta">
-            <div id="ly-title">-</div>
-            <div id="ly-artist"></div>
+        <!-- lirik: tampilan diperluas dari halaman media -->
+        <div class="layer l-lyr">
+          <div class="ly-top">
+            <img id="ly-art" alt="" />
+            <div class="ly-meta">
+              <div id="ly-title">-</div>
+              <div id="ly-artist"></div>
+            </div>
+            <button id="ly-back" aria-label="Kembali"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 15l6-6 6 6" />
+              </svg></button>
           </div>
-          <button id="ly-back" aria-label="Kembali"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6" /></svg></button>
+          <div class="ly-scroll" id="ly-scroll">
+            <div id="ly-lines"></div>
+          </div>
         </div>
-        <div class="ly-scroll" id="ly-scroll">
-          <div id="ly-lines"></div>
-        </div>
-      </div>
 
-      <!-- bluetooth -->
-      <div class="layer l-bt">
-        <div class="ring" id="bt-ring" style="--pct:70">
-          <div class="ring-in">
+        <!-- bluetooth -->
+        <div class="layer l-bt">
+          <div class="ring" id="bt-ring" style="--pct:70">
+            <div class="ring-in">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 7l10 10-5 5V2l5 5L7 17" />
+              </svg>
+            </div>
+          </div>
+          <div class="bt-text"><strong id="bt-name">AirBuds Pro</strong><small id="bt-sub">Connected &middot; 70%</small></div>
+          <div class="bt-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M7 7l10 10-5 5V2l5 5L7 17" />
+              <path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z" />
             </svg>
           </div>
         </div>
-        <div class="bt-text"><strong id="bt-name">AirBuds Pro</strong><small id="bt-sub">Connected &middot; 70%</small></div>
-        <div class="bt-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z" />
-          </svg>
-        </div>
-      </div>
 
-      <!-- perangkat colok/cabut -->
-      <div class="layer l-dev">
-        <div class="dev-icon" id="dev-icon" data-kind="usb"></div>
-        <div class="dev-text">
-          <strong id="dev-name">Perangkat</strong>
-          <small id="dev-sub">Terhubung</small>
+        <!-- perangkat colok/cabut -->
+        <div class="layer l-dev">
+          <div class="dev-icon" id="dev-icon" data-kind="usb"></div>
+          <div class="dev-text">
+            <strong id="dev-name">Perangkat</strong>
+            <small id="dev-sub">Terhubung</small>
+          </div>
+          <div class="dev-chip" id="dev-chip"></div>
         </div>
-        <div class="dev-chip" id="dev-chip"></div>
-      </div>
 
-      <!-- HUD volume / brightness -->
-      <div class="layer l-hud">
-        <svg id="hud-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
-        <div class="hud-bar">
-          <div id="hud-fill"></div>
+        <!-- HUD volume / brightness -->
+        <div class="layer l-hud">
+          <svg id="hud-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+          <div class="hud-bar">
+            <div id="hud-fill"></div>
+          </div>
+          <span id="hud-val">0</span>
         </div>
-        <span id="hud-val">0</span>
       </div>
-    </div>
     </div>
   </div>
 </body>

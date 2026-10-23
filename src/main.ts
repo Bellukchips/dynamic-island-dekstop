@@ -490,13 +490,79 @@ function showDefaultArt() {
   artToken++;
   artIsDefault = true;
   artEl.onload = null;
+  for (const el of [artEl, cArtEl, lyArtEl]) el.removeAttribute("data-icon");
   artEl.src = DEFAULT_ART;
   cArtEl.src = DEFAULT_ART;
   lyArtEl.src = DEFAULT_ART;
   artEl.style.visibility = cArtEl.style.visibility = "visible";
   if (!fixedAccent()) document.documentElement.style.removeProperty("--accent"); // kembali ke warna bawaan
 }
+// Ikon aplikasi (mis. logo Chrome) sering datang sebagai tile hitam. Kalau gambar berupa objek
+// di tengah dengan latar hampir hitam yang menyambung dari tepi, latar itu dibuang (flood-fill)
+// lalu objeknya diperbesar. Cover album biasa (tepi tidak seragam gelap / isi memenuhi gambar) tidak disentuh.
+function stripBlackTile(c: HTMLCanvasElement): boolean {
+  const n = c.width;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  const im = ctx.getImageData(0, 0, n, n);
+  const d = im.data;
+  const luma = (p: number) => 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+  const isDark = (k: number) => d[k * 4 + 3] < 40 || luma(k * 4) < 36;
 
+  let edgeDark = 0; // hampir seluruh tepi harus gelap
+  for (let i = 0; i < n; i++) {
+    edgeDark += +isDark(i) + +isDark((n - 1) * n + i) + +isDark(i * n) + +isDark(i * n + n - 1);
+  }
+  if (edgeDark < n * 4 * 0.92) return false;
+
+  const gone = new Uint8Array(n * n);
+  const stack: number[] = [];
+  const push = (k: number) => { if (!gone[k] && isDark(k)) { gone[k] = 1; stack.push(k); } };
+  for (let i = 0; i < n; i++) { push(i); push((n - 1) * n + i); push(i * n); push(i * n + n - 1); }
+  while (stack.length) {
+    const k = stack.pop()!;
+    const x = k % n, y = (k - x) / n;
+    if (x > 0) push(k - 1);
+    if (x < n - 1) push(k + 1);
+    if (y > 0) push(k - n);
+    if (y < n - 1) push(k + n);
+  }
+
+  let x0 = n, y0 = n, x1 = -1, y1 = -1, removed = 0;
+  for (let k = 0; k < n * n; k++) {
+    if (gone[k]) { removed++; continue; }
+    const x = k % n, y = (k - x) / n;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  if (x1 < 0) return false;
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  // harus objek yang berdiri di tengah dengan margin, bukan gambar yang memenuhi bingkai
+  if (removed < n * n * 0.12 || bw > n * 0.88 || bh > n * 0.88) return false;
+  if (Math.abs(cx - n / 2) > n * 0.1 || Math.abs(cy - n / 2) > n * 0.1) return false;
+
+  for (let k = 0; k < n * n; k++) {
+    const p = k * 4;
+    if (gone[k]) { d[p + 3] = 0; continue; }
+    const x = k % n, y = (k - x) / n;
+    const edge = (x > 0 && gone[k - 1]) || (x < n - 1 && gone[k + 1]) || (y > 0 && gone[k - n]) || (y < n - 1 && gone[k + n]);
+    if (edge) { // lunturkan piksel gelap di pinggir objek supaya tidak ada garis hitam
+      const l = luma(p);
+      if (l < 90) d[p + 3] = Math.round(255 * Math.max(0, Math.min(1, l / 90)));
+    }
+  }
+  ctx.putImageData(im, 0, 0);
+
+  const side = Math.ceil(Math.max(bw, bh) * 1.1); // perbesar objek supaya memenuhi kotak
+  const tmp = document.createElement("canvas");
+  tmp.width = tmp.height = n;
+  tmp.getContext("2d")!.drawImage(c, cx - side / 2, cy - side / 2, side, side, 0, 0, n, n);
+  ctx.clearRect(0, 0, n, n);
+  ctx.drawImage(tmp, 0, 0);
+  return true;
+}
 // Cover album bisa beberapa MB (data URL) dan didekode penuh oleh webview, dua kali (hub + kartu kecil).
 // Dikecilkan dulu ke 192px: string besar & bitmap besar langsung bisa dibuang dari memori.
 const ART_PX = 192;
@@ -507,6 +573,7 @@ function showArt(src: string) {
   img.onload = () => {
     if (token !== artToken) return; // sudah ada gambar yang lebih baru
     let small = src;
+    let icon = false;
     try {
       const c = document.createElement("canvas");
       c.width = c.height = ART_PX;
@@ -516,10 +583,13 @@ function showArt(src: string) {
         (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
         0, 0, ART_PX, ART_PX
       );
+      icon = stripBlackTile(c);
       small = c.toDataURL("image/webp", 0.85); // webp menjaga transparansi (jpeg mengubahnya jadi hitam)
       c.width = c.height = 0; // lepaskan bitmap canvas
     } catch { /* gambar lintas domain tidak bisa dibaca canvas: pakai aslinya */ }
+    for (const el of [artEl, cArtEl, lyArtEl]) el.toggleAttribute("data-icon", icon); // ikon aplikasi: tanpa tile gelap
     artEl.onload = () => accentFrom(artEl);
+    artEl.src = small;
     artEl.src = small;
     cArtEl.src = small;
     lyArtEl.src = small;
@@ -634,17 +704,17 @@ listen<{ percent: number; charging: boolean }>("battery", (e) =>
 
 // ---------- perangkat colok / cabut ----------
 const ICONS: Record<string, string> = {
-  charger:  `<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>`,
-  usb:      `<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>`,
-  usbc:     `<rect x="4" y="9" width="16" height="6" rx="3"/><path d="M8 12h8"/>`,
-  storage:  `<rect x="3" y="14" width="18" height="7" rx="2"/><path d="M5 14l2-9h10l2 9"/><path d="M7 17.5h.01M11 17.5h6"/>`,
+  charger: `<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>`,
+  usb: `<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>`,
+  usbc: `<rect x="4" y="9" width="16" height="6" rx="3"/><path d="M8 12h8"/>`,
+  storage: `<rect x="3" y="14" width="18" height="7" rx="2"/><path d="M5 14l2-9h10l2 9"/><path d="M7 17.5h.01M11 17.5h6"/>`,
   keyboard: `<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>`,
-  mouse:    `<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>`,
-  audio:    `<path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z"/>`,
-  phone:    `<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>`,
-  camera:   `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
-  mic:      `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`,
-  printer:  `<path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/>`,
+  mouse: `<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>`,
+  audio: `<path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z"/>`,
+  phone: `<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>`,
+  camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
+  mic: `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`,
+  printer: `<path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/>`,
 };
 const LABELS: Record<string, string> = {
   charger: "Charger", usb: "USB", usbc: "USB Type-C", storage: "Penyimpanan",
@@ -722,9 +792,9 @@ listen<[Weather, boolean]>("weather", (e) => {
 // ---------- HUD volume / brightness ----------
 const HUD_ICONS = {
   mute: `<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/>`,
-  low:  `<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>`,
+  low: `<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>`,
   high: `<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>`,
-  sun:  `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>`,
+  sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>`,
 };
 
 function showHud(kind: string, value: number, muted: boolean) {
@@ -733,9 +803,9 @@ function showHud(kind: string, value: number, muted: boolean) {
   const v = Math.max(0, Math.min(100, Math.round(value)));
   const icon =
     kind === "brightness" ? HUD_ICONS.sun
-    : muted || v === 0 ? HUD_ICONS.mute
-    : v < 50 ? HUD_ICONS.low
-    : HUD_ICONS.high;
+      : muted || v === 0 ? HUD_ICONS.mute
+        : v < 50 ? HUD_ICONS.low
+          : HUD_ICONS.high;
 
   $("hud-icon").innerHTML = icon;
   const fill = $("hud-fill");
@@ -853,14 +923,14 @@ function paintQuick(q: Quick) {
   if (keepAwake !== wasAwake) updateBase();
 }
 function refreshQuick() {
-  invoke<Quick>("quick_state").then(paintQuick).catch(() => {});
+  invoke<Quick>("quick_state").then(paintQuick).catch(() => { });
 }
 ([...Object.keys(qIds), "lock"] as (QKey | "lock")[]).forEach((k) => {
   const id = k === "lock" ? "q-lock" : qIds[k];
   document.getElementById(id)?.addEventListener("click", (e) => {
     e.stopPropagation();
     if (k === "lock") flash("sleepy", 1500);
-    invoke<Quick>("quick_toggle", { kind: k }).then(paintQuick).catch(() => {});
+    invoke<Quick>("quick_toggle", { kind: k }).then(paintQuick).catch(() => { });
   });
 });
 
@@ -924,14 +994,14 @@ function paintClip(items: string[]) {
 }
 
 function refreshClip() {
-  invoke<string[]>("clip_list").then(paintClip).catch(() => {});
+  invoke<string[]>("clip_list").then(paintClip).catch(() => { });
 }
 
 listen<string[]>("clipboard", (e) => paintClip(e.payload));
 
 document.getElementById("clip-clear")?.addEventListener("click", (e) => {
   e.stopPropagation();
-  invoke<string[]>("clip_clear").then(paintClip).catch(() => {});
+  invoke<string[]>("clip_clear").then(paintClip).catch(() => { });
   flash("surprised", 900);
 });
 
@@ -1031,8 +1101,8 @@ function renderLyrics() {
     d.className = "ly-msg";
     d.textContent =
       lyState === "loading" ? "Mencari lirik…"
-      : lyState === "none" ? "Lirik tidak ditemukan"
-      : "Putar musik untuk melihat lirik";
+        : lyState === "none" ? "Lirik tidak ditemukan"
+          : "Putar musik untuk melihat lirik";
     lyLines.appendChild(d);
     return;
   }
@@ -1152,7 +1222,7 @@ function paintShelf(items: ShelfItem[]) {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       if ((e.target as HTMLElement).closest(".x")) {
-        invoke<ShelfItem[]>("shelf_remove", { path: it.path }).then(paintShelf).catch(() => {});
+        invoke<ShelfItem[]>("shelf_remove", { path: it.path }).then(paintShelf).catch(() => { });
       } else {
         invoke("shelf_open", { path: it.path });
         flash("happy", 1000);
@@ -1168,12 +1238,12 @@ function paintShelf(items: ShelfItem[]) {
 }
 
 function refreshShelf() {
-  invoke<ShelfItem[]>("shelf_list").then(paintShelf).catch(() => {});
+  invoke<ShelfItem[]>("shelf_list").then(paintShelf).catch(() => { });
 }
 
 document.getElementById("sh-clear")?.addEventListener("click", (e) => {
   e.stopPropagation();
-  invoke<ShelfItem[]>("shelf_clear").then(paintShelf).catch(() => {});
+  invoke<ShelfItem[]>("shelf_clear").then(paintShelf).catch(() => { });
   flash("surprised", 900);
 });
 
@@ -1199,10 +1269,10 @@ if (names.includes("shelf")) {
             openHub(pageOf("shelf"), 3500);
             flash("love", 1500);
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     })
-    .catch(() => {});
+    .catch(() => { });
 }
 refreshShelf();
 
