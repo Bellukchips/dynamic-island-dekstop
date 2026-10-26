@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
+import { loadFace, saveFace, startClock, type Face } from "./clock";
 // ---------- konfigurasi (dari config.toml lewat Rust) ----------
 type Appearance = {
   theme: string;      // "auto" | "dark" | "light" | "custom"
@@ -23,7 +24,7 @@ type Cfg = {
 };
 const FALLBACK: Cfg = {
   scale: 1,
-  pages: ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf", "lyrics", "privacy"],
+  pages: ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf", "lyrics", "privacy"],
   timing: { hub_auto_ms: 4000, card_ms: 3500, hud_ms: 1500, hover_open_ms: 150, hover_close_ms: 450, sleep_after_s: 60 },
   pomodoro: { focus_min: 25, break_min: 5, long_break_min: 15, rounds: 4 },
   appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
@@ -35,7 +36,18 @@ const featureOn = (name: string) => CFG.pages.includes(name);
 // indikator mic/kamera bisa dinyalakan/dimatikan langsung dari jendela pengaturan (tanpa restart)
 let privacyOn = featureOn("privacy");
 
-const $ = (id: string) => document.getElementById(id)!;
+// Elemen dari halaman yang dimatikan di config tidak ada di DOM (dibuang saat startup).
+// Kembalikan elemen cadangan yang terlepas dari dokumen: operasi padanya tidak berefek, tapi kode di
+// level modul tidak crash. Tanpa ini satu halaman yang dimatikan (mis. timer) menghentikan SELURUH
+// sisa file, termasuk tombol Quick, clipboard, indikator privasi, lirik, dan shelf.
+const missing = new Map<string, HTMLElement>();
+const $ = (id: string): HTMLElement => {
+  const el = document.getElementById(id);
+  if (el) return el;
+  let stub = missing.get(id);
+  if (!stub) { stub = document.createElement("div"); missing.set(id, stub); }
+  return stub;
+};
 const notch = $("notch");
 const eyes = document.querySelector<HTMLElement>(".eyes")!;
 const eyeEls = document.querySelectorAll<HTMLElement>(".eye");
@@ -55,6 +67,11 @@ let hubByHover = false;
 let closeAt = 0;
 let settleUntil = 0;
 
+// Wajah notch saat tidak ada kartu/musik: mata ("eyes") atau jam + tanggal ("clock").
+// Berganti ketika hover dilepas (hub menutup) dan halaman yang terakhir dilihat adalah halaman jam.
+const clockOn = featureOn("clock");
+let idleFace: Face = clockOn ? loadFace() : "eyes";
+
 // ---------- ukuran (dikalikan skala dari config) ----------
 // lebar jendela = lebar pil + 20 (10 di tiap sisi untuk lengkung "telinga" notch)
 const BASE_SIZES: Record<string, [number, number]> = {
@@ -65,6 +82,7 @@ const BASE_SIZES: Record<string, [number, number]> = {
   dev: [360, 80],
   hud: [320, 60],
   lyr: [420, 230],
+  clock: [240, 28],
 };
 const BASE_HIT: Record<string, [number, number]> = {
   idle: [130, 24],
@@ -74,6 +92,7 @@ const BASE_HIT: Record<string, [number, number]> = {
   dev: [340, 74],
   hud: [300, 52],
   lyr: [400, 222],
+  clock: [220, 24],
 };
 const scaleMap = (m: Record<string, [number, number]>) =>
   Object.fromEntries(
@@ -174,7 +193,7 @@ function applySize(view: string) {
 }
 
 function render() {
-  const view = override ?? (playing ? "compact" : "idle");
+  const view = override ?? (playing ? "compact" : idleFace === "clock" ? "clock" : "idle");
   notch.dataset.view = view;
   notch.dataset.playing = String(playing);
 
@@ -184,7 +203,8 @@ function render() {
     settleUntil = Date.now() + 900;
     const prev = lastView;
     const prevW = SIZES[prev]?.[0] ?? SIZES[view][0];
-    const grow = SIZES[view][1] >= (SIZES[prev]?.[1] ?? 0);
+    // jendela membesar dulu hanya kalau TIDAK ada sisi yang mengecil (idle <-> jam sama tinggi tapi beda lebar)
+    const grow = SIZES[view][1] >= (SIZES[prev]?.[1] ?? 0) && SIZES[view][0] >= (SIZES[prev]?.[0] ?? 0);
     lastView = view;
     appliedView = "";
 
@@ -216,10 +236,18 @@ function expand(view: View, ms = 3000) {
   }
 }
 function collapse() {
+  // hub yang dibuka/ditahan pengguna (hover atau klik) lalu dilepas: ingat halaman terakhir.
+  // Di halaman jam -> notch berganti dari mata ke jam + tanggal; di halaman lain -> kembali ke mata.
+  // Hub otomatis (lagu baru, cuaca, timer) tidak mengubah apa-apa.
+  const byUser = override === "hub" && hubByHover;
   clearTimeout(hideTimer);
   override = null;
   hubByHover = false;
   closeAt = 0;
+  if (byUser && clockOn) {
+    idleFace = names[page] === "clock" ? "clock" : "eyes";
+    saveFace(idleFace);
+  }
   render();
 }
 
@@ -275,6 +303,8 @@ CFG.pages.forEach((name) => {
 });
 const names = [...track.querySelectorAll<HTMLElement>(".page")].map((p) => p.dataset.page!);
 const pageOf = (n: string) => Math.max(0, names.indexOf(n));
+// membuka hub dari wajah jam: mulai di halaman jam, supaya melepas hover tanpa menggeser tetap menjaga jam
+const homePage = () => (clockOn && idleFace === "clock" ? pageOf("clock") : page);
 const pageCount = names.length;
 let page = 0;
 
@@ -381,7 +411,7 @@ setInterval(() => {
     }
   } else {
     closeAt = 0;
-    if (!override && inside && now - insideSince > T.hover_open_ms) openHub(page);
+    if (!override && inside && now - insideSince > T.hover_open_ms) openHub(homePage());
   }
 }, 120);
 
@@ -400,7 +430,7 @@ notch.addEventListener("click", () => {
   else flash("happy", 1200);
 
   if (override === "bt" || override === "dev" || override === "hud") collapse();
-  else if (!override) openHub(page);
+  else if (!override) openHub(homePage());
 });
 notch.addEventListener("dblclick", () => flash("love", 2500));
 
@@ -589,7 +619,6 @@ function showArt(src: string) {
     } catch { /* gambar lintas domain tidak bisa dibaca canvas: pakai aslinya */ }
     for (const el of [artEl, cArtEl, lyArtEl]) el.toggleAttribute("data-icon", icon); // ikon aplikasi: tanpa tile gelap
     artEl.onload = () => accentFrom(artEl);
-    artEl.src = small;
     artEl.src = small;
     cArtEl.src = small;
     lyArtEl.src = small;
@@ -840,6 +869,7 @@ const phaseLen = (p: Phase) => (p === "focus" ? POM.focus_min : p === "break" ? 
 let remaining = phaseLen("focus");
 
 function renderPom() {
+  if (!document.getElementById("pom-time")) return; // halaman timer dimatikan di config
   const m = Math.floor(remaining / 60), s = remaining % 60;
   $("pom-time").textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   $("pom-label").textContent =
@@ -923,14 +953,20 @@ function paintQuick(q: Quick) {
   if (keepAwake !== wasAwake) updateBase();
 }
 function refreshQuick() {
-  invoke<Quick>("quick_state").then(paintQuick).catch(() => { });
+  console.log("refreshQuick dipanggil");
+  invoke<Quick>("quick_state")
+    .then((q) => { console.log("quick_state:", q); paintQuick(q); })
+    .catch((e) => console.error("quick_state gagal:", e));
 }
+// klik tombol: Rust mengubah pengaturannya lalu mengembalikan keadaan terbaru
 ([...Object.keys(qIds), "lock"] as (QKey | "lock")[]).forEach((k) => {
   const id = k === "lock" ? "q-lock" : qIds[k];
   document.getElementById(id)?.addEventListener("click", (e) => {
     e.stopPropagation();
     if (k === "lock") flash("sleepy", 1500);
-    invoke<Quick>("quick_toggle", { kind: k }).then(paintQuick).catch(() => { });
+    invoke<Quick>("quick_toggle", { kind: k })
+      .then(paintQuick)
+      .catch((err) => console.error("quick_toggle gagal:", err));
   });
 });
 
@@ -1277,7 +1313,7 @@ if (names.includes("shelf")) {
 refreshShelf();
 
 // ---------- tes manual lewat keyboard ----------
-// M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
+// T ganti mata <-> jam | M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
 const keyMoods: Mood[] = ["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious"];
 const demo = Object.keys(ICONS);
 let demoI = 0;
@@ -1299,6 +1335,7 @@ document.addEventListener("keydown", (e) => {
     openHub(pageOf("weather"), 5000);
   }
   if (k === "h") openHub(page, 5000);
+  if (k === "t" && clockOn) { idleFace = idleFace === "clock" ? "eyes" : "clock"; saveFace(idleFace); render(); }
   if (k === "m") {
     if (notch.hasAttribute("data-priv")) notch.removeAttribute("data-priv");
     else { notch.dataset.priv = "cam mic"; showDevice("camera", "Kamera aktif", true, "Dipakai demo"); }
@@ -1323,5 +1360,6 @@ initNudge({
   },
   mood: (m, ms) => flash(m as Mood, ms),
 });
+if (clockOn) startClock();
 render();
 updateBase();

@@ -7,6 +7,7 @@
   <title>notch</title>
   <link rel="stylesheet" href="/src/styles.css" />
   <link rel="stylesheet" href="/src/nudge.css" />
+  <link rel="stylesheet" href="/src/clock.css" />
   <script type="module" src="/src/main.ts" defer></script>
 </head>
 
@@ -35,7 +36,10 @@
             <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
           </div>
         </div>
-
+        <div class="layer l-clock">
+          <span id="cl-time">00:00</span>
+          <span id="cl-date"></span>
+        </div>
         <!-- compact: musik mini -->
         <div class="layer l-compact">
           <img id="c-art" alt="" />
@@ -86,7 +90,11 @@
                   </div>
                 </div>
               </div>
-
+              
+              <div class="page p-clock" data-page="clock">
+                <div class="ck-time"><strong id="ck-time">00:00</strong><small id="ck-sec">00</small></div>
+                <div class="ck-date"><strong id="ck-day"></strong><small id="ck-full"></small></div>
+              </div>
               <!-- halaman 2: cuaca -->
               <div class="page p-wx" data-page="weather">
                 <div class="wx-icon" id="wx-icon" data-kind="clear"><span id="wx-emoji"></span><i class="drops"></i></div>

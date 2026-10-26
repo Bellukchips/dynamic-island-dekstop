@@ -1,7 +1,9 @@
 use serde::Serialize;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 // mic: true = dimatikan | wifi, bt, awake: true = menyala | dark: true = mode gelap
-// null = tidak didukung
+// null = tidak didukung / tidak terbaca
 #[derive(Serialize, Default, Clone)]
 pub struct Quick {
     mic: Option<bool>,
@@ -144,7 +146,7 @@ mod imp {
     // (sama dengan tombol mute mic di pengaturan suara Windows; mempengaruhi semua aplikasi)
     fn mic_volume() -> Option<IAudioEndpointVolume> {
         unsafe {
-            // thread pemanggil (pool async Tauri) belum tentu sudah memulai COM; aman dipanggil berulang
+            // thread pemanggil belum tentu sudah memulai COM; aman dipanggil berulang
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
             let dev = en.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
@@ -260,24 +262,69 @@ mod imp {
     pub fn toggle(_kind: &str) {}
 }
 
+// Setiap pembacaan jalan di thread sendiri dan paralel, dengan batas waktu bersama.
+// Kalau satu API (radio, audio, registry) lambat atau macet, hanya tombolnya yang redup;
+// tombol lain tetap hidup. Sebelumnya satu pembacaan yang macet membuat SEMUA tombol redup,
+// karena frontend baru mengaktifkan tombol setelah command ini mengembalikan jawaban.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(3000);
+
 fn state() -> Quick {
-    Quick {
-        mic: imp::mic(),
-        wifi: imp::wifi(),
-        bt: imp::bt(),
-        awake: imp::awake(),
-        dark: imp::dark(),
+    type Probe = fn() -> Option<bool>;
+    let probes: [(&str, Probe); 5] = [
+        ("mic", imp::mic),
+        ("wifi", imp::wifi),
+        ("bt", imp::bt),
+        ("awake", imp::awake),
+        ("dark", imp::dark),
+    ];
+
+    let receivers: Vec<mpsc::Receiver<Option<bool>>> = probes
+        .iter()
+        .map(|(_, f)| {
+            let f = *f;
+            let (tx, rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(f());
+            });
+            rx
+        })
+        .collect();
+
+    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let mut out: [Option<bool>; 5] = [None; 5];
+    for (i, rx) in receivers.iter().enumerate() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(left) {
+            Ok(v) => out[i] = v,
+            Err(_) => eprintln!("quick: pembacaan \"{}\" tidak selesai dalam 3 detik, dilewati", probes[i].0),
+        }
     }
+
+    Quick { mic: out[0], wifi: out[1], bt: out[2], awake: out[3], dark: out[4] }
 }
 
 #[tauri::command]
 pub async fn quick_state() -> Quick {
-    state()
+    println!("quick_state: dipanggil");
+    let q = state();
+    println!(
+        "quick_state: mic={:?} wifi={:?} bt={:?} awake={:?} dark={:?}",
+        q.mic, q.wifi, q.bt, q.awake, q.dark
+    );
+    q
 }
-
 #[tauri::command]
 pub async fn quick_toggle(kind: String) -> Quick {
-    imp::toggle(&kind);
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    // aksi juga diberi batas waktu supaya satu aksi yang macet tidak membekukan tombol
+    let (tx, rx) = mpsc::channel();
+    let k = kind.clone();
+    std::thread::spawn(move || {
+        imp::toggle(&k);
+        let _ = tx.send(());
+    });
+    if rx.recv_timeout(Duration::from_secs(4)).is_err() {
+        eprintln!("quick: aksi \"{kind}\" tidak selesai dalam 4 detik");
+    }
+    std::thread::sleep(Duration::from_millis(200));
     state()
 }

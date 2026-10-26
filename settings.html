@@ -157,6 +157,7 @@
     <div class="feat" id="features">
       <h3>Halaman</h3>
       <label><input type="checkbox" id="f-media" data-feature="media" /> Musik</label>
+      <label><input type="checkbox" id="f-clock" data-feature="clock" /> Jam &amp; tanggal</label>
       <label><input type="checkbox" id="f-weather" data-feature="weather" /> Cuaca</label>
       <label><input type="checkbox" id="f-battery" data-feature="battery" /> Baterai</label>
       <label><input type="checkbox" id="f-timer" data-feature="timer" /> Timer Pomodoro</label>
@@ -260,7 +261,7 @@ const invoke = (cmd, args) => Promise.race([
   new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
 ]);
 // daftar fitur disimpan di config.pages (urutan halaman = urutan di daftar itu)
-const PAGE_IDS = ["media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf"];
+const PAGE_IDS = ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf"];
 const EXTRA_IDS = ["lyrics", "privacy"];
 const FEATURE_IDS = [...PAGE_IDS, ...EXTRA_IDS];
 const FALLBACK = {
@@ -363,12 +364,17 @@ function collectNudge() {
     only_silent: inp("n-silent").checked
   };
 }
-// pertahankan urutan & nama kustom di config; hanya tambah/buang fitur yang dikenal
+// pertahankan urutan & nama kustom di config; hanya tambah/buang fitur yang dikenal.
+// Jam yang baru dicentang diletakkan tepat setelah musik, fitur lain di akhir daftar.
 function collectPages() {
   const on = new Set(FEATURE_IDS.filter((id) => inp("f-" + id).checked));
   const base = Array.isArray(cfg.pages) ? cfg.pages : FALLBACK.pages;
   const out = base.filter((n) => !FEATURE_IDS.includes(n) || on.has(n));
-  for (const id of FEATURE_IDS) if (on.has(id) && !out.includes(id)) out.push(id);
+  for (const id of FEATURE_IDS) {
+    if (!on.has(id) || out.includes(id)) continue;
+    if (id === "clock" && out.includes("media")) out.splice(out.indexOf("media") + 1, 0, id);
+    else out.push(id);
+  }
   return out;
 }
 const weatherValid = () => {

@@ -125,17 +125,29 @@ impl Nudge {
 }
 
 // Naikkan angka ini setiap kali ada fitur baru yang perlu dinyalakan untuk config lama.
-const PAGES_VERSION: u32 = 2;
-// Fitur yang ditambahkan setelah config.toml lama dibuat.
-const NEW_FEATURES: &[&str] = &["shelf", "lyrics", "privacy"];
+const PAGES_VERSION: u32 = 3;
+// (nama fitur, versi PAGES_VERSION saat fitur itu ditambahkan).
+// Dengan begitu fitur lama yang sengaja dimatikan pengguna tidak ikut menyala lagi
+// ketika versi dinaikkan untuk fitur baru.
+const NEW_FEATURES: &[(&str, u32)] =
+    &[("shelf", 2), ("lyrics", 2), ("privacy", 2), ("clock", 3)];
 
-// Config lama (pages_version = 0) mendapat fitur baru satu kali. Setelah disimpan dari UI,
-// angka versinya ikut tersimpan, jadi pilihan pengguna tidak ditimpa lagi.
+// Config lama mendapat fitur baru satu kali. Setelah disimpan dari UI, angka versinya
+// ikut tersimpan, jadi pilihan pengguna tidak ditimpa lagi.
 fn migrate(cfg: &mut Config) {
     if cfg.pages_version < PAGES_VERSION {
-        for f in NEW_FEATURES {
-            if !cfg.pages.iter().any(|p| p == f) {
-                cfg.pages.push((*f).to_string());
+        for (f, since) in NEW_FEATURES {
+            if *since > cfg.pages_version && !cfg.pages.iter().any(|p| p == f) {
+                // jam diletakkan tepat setelah musik, fitur lain di akhir daftar
+                let at = if *f == "clock" {
+                    cfg.pages.iter().position(|p| p == "media").map(|i| i + 1)
+                } else {
+                    None
+                };
+                match at {
+                    Some(i) => cfg.pages.insert(i, (*f).to_string()),
+                    None => cfg.pages.push((*f).to_string()),
+                }
             }
         }
         cfg.pages_version = PAGES_VERSION;
@@ -166,8 +178,8 @@ impl Default for Config {
             scale: 1.0,
             hide_fullscreen: true,
             pages: [
-                "media", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard",
-                "shelf", "lyrics", "privacy",
+                "media", "clock", "weather", "battery", "timer", "quick", "tools", "stats",
+                "clipboard", "shelf", "lyrics", "privacy",
             ]
             .iter()
             .map(|s| s.to_string())
