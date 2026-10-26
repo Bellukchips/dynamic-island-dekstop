@@ -30,9 +30,9 @@ function put(id: string, text: string) {
 
 export function paintClock(now = new Date()) {
     const hm = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
-    put("cl-time", hm);                         // idle: jam (kiri)
+    put("cl-time", `${hm}:${p2(now.getSeconds())}`); // idle: jam + detik (kiri)
     put("cl-date", fShort.format(now));         // idle: tanggal (kanan)
-    put("cl-time", `${hm}:${p2(now.getSeconds())}`);                      // halaman hub: jam besar (kiri)
+    put("ck-time", hm);                                                   // halaman hub: jam besar (kiri)
     put("ck-sec", p2(now.getSeconds()));
     put("ck-day", fDay.format(now));            // halaman hub: tanggal (kanan)
     put("ck-full", fFull.format(now));

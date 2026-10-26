@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
 import { loadFace, saveFace, startClock, type Face } from "./clock";
+import { initCalendar, goToday, shiftMonth } from "./calendar";
 // ---------- konfigurasi (dari config.toml lewat Rust) ----------
 type Appearance = {
   theme: string;      // "auto" | "dark" | "light" | "custom"
@@ -54,7 +55,7 @@ const eyeEls = document.querySelectorAll<HTMLElement>(".eye");
 const isWin = navigator.userAgent.includes("Windows");
 
 // ---------- state bersama ----------
-type View = "bt" | "dev" | "hub" | "hud" | "lyr";
+type View = "bt" | "dev" | "hub" | "hud" | "lyr" | "cal";
 let override: View | null = null;
 let playing = false;
 let hideTimer: number | undefined;
@@ -83,6 +84,7 @@ const BASE_SIZES: Record<string, [number, number]> = {
   hud: [320, 60],
   lyr: [420, 230],
   clock: [240, 28],
+  cal: [420, 336],
 };
 const BASE_HIT: Record<string, [number, number]> = {
   idle: [130, 24],
@@ -93,6 +95,7 @@ const BASE_HIT: Record<string, [number, number]> = {
   hud: [300, 52],
   lyr: [400, 222],
   clock: [220, 24],
+  cal: [400, 328],
 };
 const scaleMap = (m: Record<string, [number, number]>) =>
   Object.fromEntries(
@@ -239,7 +242,7 @@ function collapse() {
   // hub yang dibuka/ditahan pengguna (hover atau klik) lalu dilepas: ingat halaman terakhir.
   // Di halaman jam -> notch berganti dari mata ke jam + tanggal; di halaman lain -> kembali ke mata.
   // Hub otomatis (lagu baru, cuaca, timer) tidak mengubah apa-apa.
-  const byUser = override === "hub" && hubByHover;
+  const byUser = (override === "hub" || override === "cal") && hubByHover;
   clearTimeout(hideTimer);
   override = null;
   hubByHover = false;
@@ -401,7 +404,7 @@ setInterval(() => {
   const now = Date.now();
   if (dragging || now < settleUntil) return;
 
-  if (override === "hub" || override === "lyr") {
+  if (override === "hub" || override === "lyr" || override === "cal") {
     if (inside) {
       if (!hubByHover) { clearTimeout(hideTimer); hubByHover = true; }
       closeAt = 0;
@@ -827,7 +830,7 @@ const HUD_ICONS = {
 };
 
 function showHud(kind: string, value: number, muted: boolean) {
-  if ((override === "hub" || override === "lyr") && inside) return;
+  if ((override === "hub" || override === "lyr" || override === "cal") && inside) return;
 
   const v = Math.max(0, Math.min(100, Math.round(value)));
   const icon =
@@ -1210,6 +1213,25 @@ document.getElementById("m-lyrics")?.addEventListener("click", (e) => { e.stopPr
 $("ly-back").addEventListener("click", (e) => { e.stopPropagation(); openHub(pageOf("media")); });
 renderLyrics(); // pesan awal "Putar musik..."
 
+// ---------- kalender (diperluas dari halaman jam) ----------
+// Klik tanggal di halaman jam -> kalender bulanan penuh dengan hari libur & peringatan Indonesia.
+// Menutup: tombol panah atas (kembali ke halaman jam) atau lepas hover, seperti hub.
+function openCalendar() {
+  goToday(); // selalu mulai dari bulan ini
+  hubByHover = true;
+  closeAt = 0;
+  expand("cal", 0);
+}
+if (clockOn) {
+  initCalendar();
+  document
+    .querySelector<HTMLElement>(".p-clock .ck-date")
+    ?.addEventListener("click", (e) => { e.stopPropagation(); openCalendar(); });
+  $("cal-back").addEventListener("click", (e) => { e.stopPropagation(); openHub(pageOf("clock")); });
+} else {
+  document.querySelector(".l-cal")?.remove(); // tanpa halaman jam tidak ada jalan masuk ke kalender
+}
+
 // ---------- shelf file ----------
 type ShelfItem = { path: string; name: string; dir: boolean };
 const EXT_ICON: Record<string, string> = {
@@ -1345,6 +1367,12 @@ document.addEventListener("keydown", (e) => {
   if (k === "p") { remaining = 3; running = true; endAt = Date.now() + 3000; openHub(pageOf("timer"), 6000); }
   if (e.key === "ArrowRight" && override === "hub") setPage(page + 1);
   if (e.key === "ArrowLeft" && override === "hub") setPage(page - 1);
+  if (k === "k" && clockOn) openCalendar();
+  if (override === "cal") {
+    if (e.key === "ArrowRight") shiftMonth(1);
+    if (e.key === "ArrowLeft") shiftMonth(-1);
+    if (e.key === "Escape") openHub(pageOf("clock"));
+  }
 });
 initNudge({
   lastMove: () => lastCursorMove,   // gerakan pointer terakhir, dari event "cursor" Rust

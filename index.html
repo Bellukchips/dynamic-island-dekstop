@@ -7,6 +7,7 @@
   <title>notch</title>
   <link rel="stylesheet" href="/src/styles.css" />
   <link rel="stylesheet" href="/src/nudge.css" />
+  <link rel="stylesheet" href="/src/calendar.css" />
   <link rel="stylesheet" href="/src/clock.css" />
   <script type="module" src="/src/main.ts" defer></script>
 </head>
@@ -36,10 +37,13 @@
             <div class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></div>
           </div>
         </div>
+
+        <!-- idle: jam + tanggal (menggantikan mata) -->
         <div class="layer l-clock">
           <span id="cl-time">00:00</span>
           <span id="cl-date"></span>
         </div>
+
         <!-- compact: musik mini -->
         <div class="layer l-compact">
           <img id="c-art" alt="" />
@@ -90,11 +94,19 @@
                   </div>
                 </div>
               </div>
-              
+
+              <!-- halaman jam: jam besar di kiri, tanggal (klik = kalender) di kanan -->
               <div class="page p-clock" data-page="clock">
-                <div class="ck-time"><strong id="ck-time">00:00</strong><small id="ck-sec">00</small></div>
-                <div class="ck-date"><strong id="ck-day"></strong><small id="ck-full"></small></div>
+                <div class="ck-time">
+                  <strong id="ck-time">--:--</strong>
+                  <small id="ck-sec">00</small>
+                </div>
+                <button class="ck-date" id="ck-date" aria-label="Buka kalender">
+                  <strong id="ck-day">-</strong>
+                  <small id="ck-full">-</small>
+                </button>
               </div>
+
               <!-- halaman 2: cuaca -->
               <div class="page p-wx" data-page="weather">
                 <div class="wx-icon" id="wx-icon" data-kind="clear"><span id="wx-emoji"></span><i class="drops"></i></div>
@@ -264,6 +276,36 @@
           </div>
           <div class="ly-scroll" id="ly-scroll">
             <div id="ly-lines"></div>
+          </div>
+        </div>
+
+        <!-- kalender: tampilan diperluas dari halaman jam.
+             HARUS anak langsung #notch (sejajar .l-lyr), BUKAN di dalam #track / .l-hub:
+             .l-hub transparan saat tampilan "cal", sehingga apa pun di dalamnya ikut tak terlihat. -->
+        <div class="layer l-cal">
+          <div class="cal-top">
+            <span id="cal-today">-</span>
+            <button id="cal-back" aria-label="Kembali ke jam"><svg viewBox="0 0 24 24">
+                <path d="M6 15l6-6 6 6" />
+              </svg></button>
+          </div>
+          <div class="cal-month">
+            <button id="cal-title" aria-label="Kembali ke bulan ini">-</button>
+            <button id="cal-prev" aria-label="Bulan sebelumnya"><svg viewBox="0 0 24 24">
+                <path d="M12 7l7 10H5z" />
+              </svg></button>
+            <button id="cal-next" aria-label="Bulan berikutnya"><svg viewBox="0 0 24 24">
+                <path d="M12 17L5 7h14z" />
+              </svg></button>
+          </div>
+          <div class="cal-wd" id="cal-wd"></div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="cal-foot">
+            <i id="cal-dot" data-kind="none"></i>
+            <div class="cal-ev">
+              <div id="cal-ev-date">-</div>
+              <div id="cal-ev-name">-</div>
+            </div>
           </div>
         </div>
 
