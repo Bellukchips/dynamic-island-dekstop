@@ -78,7 +78,8 @@ let idleFace: Face = clockOn ? loadFace() : "eyes";
 const BASE_SIZES: Record<string, [number, number]> = {
   idle: [150, 28],
   compact: [250, 40],
-  hub: [420, 140],
+  compactLyrics: [410, 40],
+  hub: [420, 148],
   bt: [360, 80],
   dev: [360, 80],
   hud: [320, 60],
@@ -89,7 +90,8 @@ const BASE_SIZES: Record<string, [number, number]> = {
 const BASE_HIT: Record<string, [number, number]> = {
   idle: [130, 24],
   compact: [230, 34],
-  hub: [400, 132],
+  compactLyrics: [370, 34],
+  hub: [400, 140],
   bt: [340, 74],
   dev: [340, 74],
   hud: [300, 52],
@@ -196,7 +198,11 @@ function applySize(view: string) {
 }
 
 function render() {
-  const view = override ?? (playing ? "compact" : idleFace === "clock" ? "clock" : "idle");
+  const hasCompactLyrics = playing && lyState === "ok" && !!ly?.lines.length;
+  const view = override ?? (
+    playing ? (hasCompactLyrics ? "compactLyrics" : "compact")
+      : idleFace === "clock" ? "clock" : "idle"
+  );
   notch.dataset.view = view;
   notch.dataset.playing = String(playing);
 
@@ -402,7 +408,7 @@ if (!isWin) {
 // watchdog: buka/tutup hub dengan hysteresis
 setInterval(() => {
   const now = Date.now();
-  if (dragging || now < settleUntil) return;
+  if (dragging || isDraggingWindow || now < settleUntil) return;
 
   if (override === "hub" || override === "lyr" || override === "cal") {
     if (inside) {
@@ -422,10 +428,144 @@ setInterval(() => {
 // fase capture: menu bawaan diblokir di mana pun; handler lain (mis. klik kanan item shelf) tetap jalan
 window.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 
+// ---------- geser (drag) notch sesuka hati & reset ke tengah ----------
+let isDraggingWindow = false;
+let startScreenX = 0;
+let startScreenY = 0;
+let startCx = 0;
+let startTy = 0;
+let windowDragMoved = false;
+let suppressClickUntil = 0;
+
+async function startWindowDrag(e: PointerEvent, targetEl: HTMLElement) {
+  if (e.button !== 0) return; // hanya klik kiri
+  try {
+    const pos = await invoke<[number, number]>("notch_start_move");
+    startCx = pos[0];
+    startTy = pos[1];
+    startScreenX = e.screenX;
+    startScreenY = e.screenY;
+    isDraggingWindow = true;
+    windowDragMoved = false;
+    notch.classList.add("is-dragging");
+    targetEl.setPointerCapture(e.pointerId);
+  } catch (err) {
+    console.error("Gagal memulai drag window:", err);
+  }
+}
+
+function onWindowPointerMove(e: PointerEvent) {
+  if (!isDraggingWindow) return;
+  const dx = e.screenX - startScreenX;
+  const dy = e.screenY - startScreenY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    windowDragMoved = true;
+  }
+  if (windowDragMoved) {
+    invoke("notch_move_to", { cx: startCx + dx, ty: startTy + dy });
+    updatePositionUI(true, startTy + dy);
+  }
+}
+
+function onWindowPointerUp(e: PointerEvent, targetEl: HTMLElement) {
+  if (!isDraggingWindow) return;
+  isDraggingWindow = false;
+  notch.classList.remove("is-dragging");
+  try {
+    targetEl.releasePointerCapture(e.pointerId);
+  } catch {}
+  if (windowDragMoved) {
+    suppressClickUntil = Date.now() + 350;
+    insideSince = Date.now();
+    invoke("notch_end_move", { save: true });
+  } else {
+    invoke("notch_end_move", { save: false });
+  }
+}
+
+function updatePositionUI(custom: boolean, topY: number) {
+  const isFloating = custom && topY > 8;
+  notch.classList.toggle("is-custom-pos", custom);
+  notch.classList.toggle("is-floating", isFloating);
+  const shell = $("shell");
+  if (shell) shell.classList.toggle("is-floating", isFloating);
+}
+
+async function resetPosition() {
+  try {
+    await invoke("notch_reset_position");
+    updatePositionUI(false, 0);
+    flash("happy", 1200);
+  } catch (err) {
+    console.error("Gagal reset posisi notch:", err);
+  }
+}
+
+// Pegangan drag pada hub
+const posBar = $("notch-pos-bar");
+const dragHandle = $("drag-handle");
+
+const onDragStart = (e: PointerEvent) => {
+  if ((e.target as HTMLElement).closest("#notch-reset-btn")) return;
+  e.stopPropagation();
+  startWindowDrag(e, dragHandle);
+};
+
+dragHandle.addEventListener("pointerdown", onDragStart);
+dragHandle.addEventListener("pointermove", onWindowPointerMove);
+dragHandle.addEventListener("pointerup", (e) => onWindowPointerUp(e, dragHandle));
+dragHandle.addEventListener("pointercancel", (e) => onWindowPointerUp(e, dragHandle));
+
+if (posBar) {
+  posBar.addEventListener("pointerdown", onDragStart);
+}
+
+// Drag pada notch saat idle / compact atau dengan menahan Alt
+notch.addEventListener("pointerdown", (e) => {
+  const view = notch.dataset.view;
+  const isIdleOrCompact = view === "idle" || view === "compact" || view === "clock";
+  const isButton = !!(e.target as HTMLElement).closest("button");
+  if (isButton) return;
+
+  if (isIdleOrCompact || e.altKey) {
+    startWindowDrag(e, notch);
+  }
+});
+notch.addEventListener("pointermove", onWindowPointerMove);
+notch.addEventListener("pointerup", (e) => onWindowPointerUp(e, notch));
+notch.addEventListener("pointercancel", (e) => onWindowPointerUp(e, notch));
+
+// Tombol reset posisi
+$("notch-reset-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  resetPosition();
+});
+$("q-reset-pos").addEventListener("click", (e) => {
+  e.stopPropagation();
+  resetPosition();
+});
+
+// Dengarkan perubahan posisi dari tray atau jendela pengaturan
+listen<{ custom: boolean; x?: number; y?: number }>("position-changed", (e) => {
+  const p = e.payload;
+  updatePositionUI(p?.custom ?? false, p?.y ?? 0);
+});
+
+// Inisialisasi status posisi saat startup
+invoke<{ custom: boolean; x: number; y: number }>("notch_get_position")
+  .then((p) => {
+    updatePositionUI(p.custom, p.y);
+  })
+  .catch(() => {});
+
 // ---------- klik notch ----------
 let clicks: number[] = [];
 
-notch.addEventListener("click", () => {
+notch.addEventListener("click", (e) => {
+  if (Date.now() < suppressClickUntil) {
+    e.stopPropagation();
+    return;
+  }
   const now = Date.now();
   clicks = clicks.filter((t) => now - t < 2000).concat(now);
 
@@ -508,6 +648,17 @@ const artEl = $("art") as HTMLImageElement;
 const cArtEl = $("c-art") as HTMLImageElement;
 const lyArtEl = $("ly-art") as HTMLImageElement;
 let lastTitle = "";
+
+// Satu baris lirik di compact view, ditempatkan di antara cover album dan equalizer.
+const compactLyrics = document.createElement("div");
+compactLyrics.id = "c-lyric";
+compactLyrics.className = "c-lyric";
+compactLyrics.setAttribute("aria-live", "polite");
+const compactLayer = document.querySelector<HTMLElement>(".l-compact");
+const compactBars = compactLayer?.querySelector<HTMLElement>(".bars");
+if (compactLayer && compactBars) {
+  compactLayer.insertBefore(compactLyrics, compactBars);
+}
 
 // gambar bawaan saat tidak ada media / tidak ada artwork
 const DEFAULT_ART =
@@ -1102,15 +1253,20 @@ function onMediaForLyrics(m: Media) {
   clockLen = m.length;
   clockAt = performance.now();
   clockPlaying = m.active && m.playing;
-  if (!featureOn("lyrics")) return; // fitur lirik dimatikan di pengaturan
-
+  // Pencarian lirik untuk compact view tetap aktif meskipun halaman Lyrics
+  // tidak dimasukkan ke daftar halaman konfigurasi.
   const key = m.active && m.title ? `${m.artist}|${m.title}` : "";
   if (key === lyKey) return;
 
   lyKey = key;
   ly = null;
   const token = ++lyToken;
-  if (!key) { lyState = "idle"; renderLyrics(); return; }
+  if (!key) {
+    lyState = "idle";
+    updateCompactLyric();
+    renderLyrics();
+    return;
+  }
 
   lyState = "loading";
   renderLyrics();
@@ -1134,6 +1290,8 @@ function renderLyrics() {
   lyLines.classList.toggle("plain", !!ly && !ly.synced);
   lyLines.replaceChildren();
   lyIdx = -2;
+
+  updateCompactLyric();
 
   if (lyState !== "ok" || !ly) {
     const d = document.createElement("div");
@@ -1163,12 +1321,41 @@ function renderLyrics() {
 function lyIndex(): number {
   if (!ly) return -1;
   const p = nowPos() + LY_LEAD;
-  let lo = 0, hi = ly.lines.length - 1, r = -1; // baris terakhir dengan t <= p
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (ly.lines[mid].t <= p) { r = mid; lo = mid + 1; } else hi = mid - 1;
+
+  // Lirik tersinkronisasi menggunakan timestamp LRC.
+  if (ly.synced) {
+    let lo = 0, hi = ly.lines.length - 1, r = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (ly.lines[mid].t <= p) { r = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return r;
   }
-  return r;
+
+  // Lirik tanpa timestamp tidak bisa benar-benar sinkron; estimasikan dari progres lagu.
+  if (clockLen <= 0 || !ly.lines.length) return 0;
+  return Math.min(ly.lines.length - 1, Math.floor(Math.max(0, Math.min(0.999, p / clockLen)) * ly.lines.length));
+}
+
+function updateCompactLyric() {
+  const visible = playing && lyState === "ok" && !!ly?.lines.length;
+  compactLyrics.classList.toggle("visible", visible);
+  if (!visible || !ly) {
+    compactLyrics.textContent = "";
+    compactLyrics.removeAttribute("title");
+    return;
+  }
+
+  const i = lyIndex();
+  const line = i >= 0 ? (ly.lines[i]?.text || "♪") : "♪";
+  if (compactLyrics.textContent !== line) {
+    compactLyrics.textContent = line;
+    compactLyrics.title = line;
+    compactLyrics.classList.remove("lyric-change");
+    // Paksa animasi transisi berjalan kembali setiap pergantian baris.
+    void compactLyrics.offsetWidth;
+    compactLyrics.classList.add("lyric-change");
+  }
 }
 
 function centerLyric(instant: boolean) {
@@ -1182,6 +1369,7 @@ function centerLyric(instant: boolean) {
 
 // sorot baris yang sedang dinyanyikan. Lirik tanpa waktu: gulir kira-kira sesuai persentase lagu.
 function tickLyrics(force = false) {
+  updateCompactLyric();
   if (lyState !== "ok" || !ly) return;
   const manual = Date.now() - lyManualAt < 4000; // pengguna baru menggulir: jangan ditarik balik
 
@@ -1200,7 +1388,11 @@ function tickLyrics(force = false) {
   el?.classList.add("cur");
   if (!manual || force) centerLyric(force);
 }
-setInterval(() => { if (notch.dataset.view === "lyr") tickLyrics(); }, 200);
+// Perbarui lirik ringkas juga ketika notch berada di compact view.
+setInterval(() => {
+  if (notch.dataset.view === "lyr") tickLyrics();
+  else updateCompactLyric();
+}, 200);
 
 function openLyrics() {
   hubByHover = true; // menutup otomatis saat kursor keluar, seperti hub

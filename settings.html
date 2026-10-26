@@ -244,6 +244,18 @@
     </div>
   </section>
 
+  <section>
+    <h2>Posisi</h2>
+    <p class="hint" style="margin:6px 0">Notch bisa langsung digeser sesuka hati dengan mouse (klik dan seret notch saat diam, atau seret pegangan di bawah hub).</p>
+    <div class="row">
+      <label>Posisi saat ini</label>
+      <span id="pos-status" style="font-size:13px; color:var(--muted)">Tengah atas (bawaan)</span>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button type="button" id="pos-reset">Pusatkan ke tengah lagi</button>
+    </div>
+  </section>
+
   <div class="actions">
     <button class="primary" id="save">Simpan</button>
     <button id="restart">Simpan &amp; restart</button>
@@ -581,6 +593,37 @@ async function save(restart) {
 }
 $("save").addEventListener("click", () => void save(false));
 $("restart").addEventListener("click", () => void save(true));
+
+async function refreshPositionStatus() {
+  try {
+    const pos = await invoke("notch_get_position");
+    const status = $("pos-status");
+    if (status) {
+      status.textContent = pos.custom
+        ? `Kustom (x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)})`
+        : "Tengah atas (bawaan)";
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+$("pos-reset")?.addEventListener("click", async () => {
+  try {
+    await invoke("notch_reset_position");
+    say("Posisi notch berhasil dikembalikan ke tengah atas \u2713", "ok");
+    void refreshPositionStatus();
+  } catch (e) {
+    say(`Gagal reset posisi: ${e}`, "err");
+  }
+});
+
+if (T.event && T.event.listen) {
+  T.event.listen("position-changed", () => {
+    void refreshPositionStatus();
+  });
+}
+
 fill(cfg);
 (async () => {
   try {
@@ -589,6 +632,7 @@ fill(cfg);
     fill(cfg);
     say("Siap.");
     void refreshAutostart();
+    void refreshPositionStatus();
   } catch (e) {
     say(`Gagal membaca pengaturan: ${e}`, "err");
   }

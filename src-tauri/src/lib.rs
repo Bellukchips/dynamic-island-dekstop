@@ -22,26 +22,54 @@ mod winps;
 #[cfg(target_os = "windows")]
 static HIT: std::sync::Mutex<(i32, i32, i32)> = std::sync::Mutex::new((5, 130, 24));
 
-// Pusatkan jendela di tengah atas berdasarkan ukuran ASLI jendela saat ini
-fn center_top(window: &tauri::WebviewWindow) {
+// Posisi kustom notch (center_x, top_y) dalam piksel fisik.
+// Jika None, notch dipusatkan di tengah atas monitor.
+static NOTCH_POS: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
+// Menandakan apakah notch sedang digeser oleh user
+static IS_DRAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+// Terapkan posisi notch (di tengah atas atau di posisi kustom) berdasarkan ukuran jendela saat ini
+fn apply_notch_position(window: &tauri::WebviewWindow) {
     let monitor = window
         .current_monitor()
         .ok()
         .flatten()
         .or_else(|| window.primary_monitor().ok().flatten());
     if let (Some(m), Ok(size)) = (monitor, window.outer_size()) {
-        let x = m.position().x + (m.size().width as i32 - size.width as i32) / 2;
-        let _ = window.set_position(PhysicalPosition::new(x, m.position().y));
+        let cur = *NOTCH_POS.lock().unwrap();
+        let (x, y) = match cur {
+            Some((cx, ty)) => {
+                let mon_pos = m.position();
+                let mon_size = m.size();
+                let half_w = size.width as i32 / 2;
+
+                // Batasi posisi agar notch tidak terlempar keluar layar
+                let min_x = mon_pos.x + 30;
+                let max_x = mon_pos.x + mon_size.width as i32 - 30;
+                let min_y = mon_pos.y;
+                let max_y = mon_pos.y + mon_size.height as i32 - 30;
+
+                let clamped_cx = cx.clamp(min_x, max_x);
+                let clamped_y = ty.clamp(min_y, max_y);
+
+                (clamped_cx - half_w, clamped_y)
+            }
+            None => {
+                let x = m.position().x + (m.size().width as i32 - size.width as i32) / 2;
+                (x, m.position().y)
+            }
+        };
+        let _ = window.set_position(PhysicalPosition::new(x, y));
     }
 }
 
-// pusatkan beberapa kali karena compositor menerapkan ukuran dengan jeda
-fn center_later(window: &tauri::WebviewWindow) {
+// reposisikan beberapa kali karena compositor menerapkan ukuran dengan jeda
+fn reposition_later(window: &tauri::WebviewWindow) {
     let win = window.clone();
     std::thread::spawn(move || {
         for ms in [60u64, 150, 300] {
             std::thread::sleep(std::time::Duration::from_millis(ms));
-            center_top(&win);
+            apply_notch_position(&win);
         }
     });
 }
@@ -67,8 +95,93 @@ fn open_settings(app: &tauri::AppHandle) {
 #[tauri::command]
 fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
     let _ = window.set_size(tauri::LogicalSize::new(w, h));
-    center_top(&window);
-    center_later(&window);
+    apply_notch_position(&window);
+    reposition_later(&window);
+}
+
+#[tauri::command]
+fn notch_start_move(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
+    IS_DRAGGING.store(true, std::sync::atomic::Ordering::SeqCst);
+    #[cfg(target_os = "windows")]
+    let _ = window.set_ignore_cursor_events(false);
+
+    let pos = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    let scale = window.scale_factor().unwrap_or(1.0);
+
+    let cx = (pos.x as f64 + size.width as f64 / 2.0) / scale;
+    let ty = pos.y as f64 / scale;
+    Ok((cx, ty))
+}
+
+#[tauri::command]
+fn notch_move_to(window: tauri::WebviewWindow, cx: f64, ty: f64) -> Result<(), String> {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let phys_cx = (cx * scale).round() as i32;
+    let phys_ty = (ty * scale).round() as i32;
+
+    *NOTCH_POS.lock().unwrap() = Some((phys_cx, phys_ty));
+    apply_notch_position(&window);
+    Ok(())
+}
+
+#[tauri::command]
+fn notch_end_move(window: tauri::WebviewWindow, save: bool) -> Result<(), String> {
+    IS_DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    if save {
+        let cur = *NOTCH_POS.lock().unwrap();
+        if let Some((cx, ty)) = cur {
+            let app = window.app_handle().clone();
+            std::thread::spawn(move || {
+                let mut cfg = config::cfg_get();
+                cfg.position.custom = true;
+                cfg.position.x = cx;
+                cfg.position.y = ty;
+                let _ = config::cfg_save(app.clone(), cfg);
+                let _ = app.emit("position-changed", serde_json::json!({
+                    "custom": true,
+                    "x": cx,
+                    "y": ty
+                }));
+            });
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn notch_reset_position(app: tauri::AppHandle) -> Result<(), String> {
+    *NOTCH_POS.lock().unwrap() = None;
+    if let Some(win) = app.get_webview_window("main") {
+        apply_notch_position(&win);
+        reposition_later(&win);
+    }
+    let a = app.clone();
+    std::thread::spawn(move || {
+        let mut cfg = config::cfg_get();
+        cfg.position.custom = false;
+        let _ = config::cfg_save(a.clone(), cfg);
+        let _ = a.emit("position-changed", serde_json::json!({
+            "custom": false
+        }));
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn notch_get_position(window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
+    let cur = *NOTCH_POS.lock().unwrap();
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (custom, cx, ty) = match cur {
+        Some((x, y)) => (true, x as f64 / scale, y as f64 / scale),
+        None => (false, 0.0, 0.0),
+    };
+    Ok(serde_json::json!({
+        "custom": custom,
+        "x": cx,
+        "y": ty,
+    }))
 }
 
 // Hanya area (x, 0, w, h) yang menerima klik. Sisanya tembus ke aplikasi di bawahnya.
@@ -200,15 +313,17 @@ pub fn run() {
 
                     #[cfg(target_os = "windows")]
                     {
-                        let (hx, hw, hh) = *HIT.lock().unwrap();
-                        let left = pos.x as f64 + hx as f64 * scale;
-                        let inside = cur.x >= left
-                            && cur.x <= left + hw as f64 * scale
-                            && cur.y >= pos.y as f64
-                            && cur.y <= pos.y as f64 + hh as f64 * scale;
-                        if inside != last_inside {
-                            last_inside = inside;
-                            let _ = w.set_ignore_cursor_events(!inside);
+                        if !IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                            let (hx, hw, hh) = *HIT.lock().unwrap();
+                            let left = pos.x as f64 + hx as f64 * scale;
+                            let inside = cur.x >= left
+                                && cur.x <= left + hw as f64 * scale
+                                && cur.y >= pos.y as f64
+                                && cur.y <= pos.y as f64 + hh as f64 * scale;
+                            if inside != last_inside {
+                                last_inside = inside;
+                                let _ = w.set_ignore_cursor_events(!inside);
+                            }
                         }
                     }
                 }
@@ -216,22 +331,29 @@ pub fn run() {
               }
             });
 
+            // Inisialisasi posisi kustom jika ada di konfigurasi
+            let initial_cfg = config::get();
+            if initial_cfg.position.custom {
+                *NOTCH_POS.lock().unwrap() = Some((initial_cfg.position.x, initial_cfg.position.y));
+            }
+
             // Fallback X11/XWayland dan Windows: posisikan manual
             if !layer_ok {
                 let _ = win.set_size(tauri::LogicalSize::new(160.0, 40.0));
-                center_top(&win);
-                center_later(&win);
+                apply_notch_position(&win);
+                reposition_later(&win);
             }
 
-            // ikon tray: Pengaturan + Keluar (notch tidak punya taskbar).
+            // ikon tray: Pengaturan + Pusatkan + Keluar (notch tidak punya taskbar).
             // Tidak fatal: saat dijalankan otomatis ketika login, tray kadang belum siap
             // (mis. GNOME tanpa AppIndicator); aplikasi tetap harus jalan.
             let tray_result: Result<(), Box<dyn std::error::Error>> = (|| {
                 use tauri::menu::{Menu, MenuItem};
                 use tauri::tray::TrayIconBuilder;
                 let mi_set = MenuItem::with_id(app, "settings", "Pengaturan", true, None::<&str>)?;
+                let mi_center = MenuItem::with_id(app, "center", "Pusatkan Notch", true, None::<&str>)?;
                 let mi_quit = MenuItem::with_id(app, "quit", "Keluar", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&mi_set, &mi_quit])?;
+                let menu = Menu::with_items(app, &[&mi_set, &mi_center, &mi_quit])?;
                 let mut tray = TrayIconBuilder::new()
                     .menu(&menu)
                     .tooltip("Notch")
@@ -240,6 +362,10 @@ pub fn run() {
                             // thread terpisah: membuat window di event handler bisa deadlock di Windows
                             let a = app.clone();
                             std::thread::spawn(move || open_settings(&a));
+                        }
+                        "center" => {
+                            let a = app.clone();
+                            let _ = notch_reset_position(a);
                         }
                         "quit" => app.exit(0),
                         _ => {}
@@ -301,7 +427,12 @@ pub fn run() {
             config::nudge_test,
             bluetooth::bt_list,
             autostart::autostart_get,
-            autostart::autostart_set
+            autostart::autostart_set,
+            notch_start_move,
+            notch_move_to,
+            notch_end_move,
+            notch_reset_position,
+            notch_get_position
         ])
         .run(tauri::generate_context!())
         .expect("gagal menjalankan aplikasi");

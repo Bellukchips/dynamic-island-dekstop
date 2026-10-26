@@ -181,7 +181,7 @@
                 </button>
               </div>
 
-              <!-- halaman 6: alat (keep awake, tema, kunci) -->
+              <!-- halaman 6: alat (keep awake, tema, kunci, pusatkan) -->
               <div class="page p-quick" data-page="tools">
                 <button class="q-btn na" id="q-awake">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -201,6 +201,13 @@
                     <path d="M8 11V8a4 4 0 0 1 8 0v3" />
                   </svg>
                   <span>Kunci</span>
+                </button>
+                <button class="q-btn" id="q-reset-pos" title="Pusatkan notch ke tengah layar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 3v3m0 12v3M3 12h3m12 0h3" />
+                  </svg>
+                  <span>Pusatkan</span>
                 </button>
               </div>
 
@@ -343,6 +350,24 @@
             <div id="hud-fill"></div>
           </div>
           <span id="hud-val">0</span>
+        </div>
+
+        <!-- bilah posisi kompak: drag move & pusatkan -->
+        <div id="notch-pos-bar" class="pos-bar" title="Kontrol Posisi Notch">
+          <div id="drag-handle" class="pos-btn pos-drag" title="Tahan dan geser untuk memindahkan notch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 9l-3 3 3 3M9 5l3-3 3 5M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
+            </svg>
+            <span>Geser</span>
+          </div>
+          <div class="pos-divider"></div>
+          <button id="notch-reset-btn" class="pos-btn pos-reset" aria-label="Pusatkan kembali ke tengah" title="Pusatkan kembali ke tengah">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+            </svg>
+            <span>Pusatkan</span>
+          </button>
         </div>
       </div>
     </div>

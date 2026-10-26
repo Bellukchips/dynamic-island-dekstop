@@ -29,3 +29,8 @@ text = ""               # kosong = otomatis kontras
 dark_bg = "#000000"
 light_bg = "#f5f5f7"
 accent = ""             # kosong = otomatis dari cover album, contoh: "#ff6b6b"
+
+[position]
+custom = false          # false = posisi tengah atas bawaan, true = posisi kustom
+x = 0
+y = 0

@@ -154,8 +154,26 @@ fn migrate(cfg: &mut Config) {
     }
 }
 
+// Posisi notch di layar: jika custom = false, notch berada di posisi default (tengah atas).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct Position {
+    pub custom: bool, // true jika posisi kustom (pernah digeser), false jika default (tengah atas)
+    pub x: i32,       // koordinat tengah horizontal (center_x)
+    pub y: i32,       // koordinat atas (top_y)
+}
+impl Default for Position {
+    fn default() -> Self {
+        Self {
+            custom: false,
+            x: 0,
+            y: 0,
+        }
+    }
+}
+
 // Catatan: di TOML, nilai biasa (scale, hide_fullscreen, pages, pages_version) harus berada
-// SEBELUM tabel (weather, timing, pomodoro, appearance, nudge), jadi urutan field di sini penting.
+// SEBELUM tabel (weather, timing, pomodoro, appearance, nudge, position), jadi urutan field di sini penting.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
@@ -171,6 +189,7 @@ pub struct Config {
     pub pomodoro: Pomodoro,
     pub appearance: Appearance,
     pub nudge: Nudge,
+    pub position: Position,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -190,6 +209,7 @@ impl Default for Config {
             pomodoro: Pomodoro::default(),
             appearance: Appearance::default(),
             nudge: Nudge::default(),
+            position: Position::default(),
         }
     }
 }
