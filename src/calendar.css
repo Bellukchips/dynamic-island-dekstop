@@ -253,6 +253,7 @@
   flex: none;
   width: 8px;
   height: 8px;
+  margin-bottom: 20px;
   border-radius: 50%;
   background: rgba(var(--fg-rgb), 0.28);
   transition:

@@ -27,6 +27,8 @@ static HIT: std::sync::Mutex<(i32, i32, i32)> = std::sync::Mutex::new((5, 130, 2
 static NOTCH_POS: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
 // Menandakan apakah notch sedang digeser oleh user
 static IS_DRAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// Nomor generasi membatalkan animasi resize sebelumnya saat target mode berubah lagi.
+static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 // Terapkan posisi notch (di tengah atas atau di posisi kustom) berdasarkan ukuran jendela saat ini
 fn apply_notch_position(window: &tauri::WebviewWindow) {
@@ -43,11 +45,11 @@ fn apply_notch_position(window: &tauri::WebviewWindow) {
                 let mon_size = m.size();
                 let half_w = size.width as i32 / 2;
 
-                // Batasi posisi agar notch tidak terlempar keluar layar
-                let min_x = mon_pos.x + 30;
-                let max_x = mon_pos.x + mon_size.width as i32 - 30;
+                // Batasi posisi agar notch menempel pas di tepi tanpa terpotong
+                let min_x = mon_pos.x + half_w;
+                let max_x = mon_pos.x + mon_size.width as i32 - half_w;
                 let min_y = mon_pos.y;
-                let max_y = mon_pos.y + mon_size.height as i32 - 30;
+                let max_y = mon_pos.y + mon_size.height as i32 - size.height as i32;
 
                 let clamped_cx = cx.clamp(min_x, max_x);
                 let clamped_y = ty.clamp(min_y, max_y);
@@ -93,12 +95,43 @@ fn open_settings(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
-    let _ = window.set_size(tauri::LogicalSize::new(w, h));
-    apply_notch_position(&window);
-    reposition_later(&window);
-}
+async fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
+    use std::sync::atomic::Ordering;
+    let animation_id = SIZE_ANIMATION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
+    // Jalankan animasi native pada blocking pool. Fungsi command tetap async sehingga
+    // renderer bisa menyelesaikan animasi CSS sambil ukuran jendela berubah.
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
+        let (start_w, start_h) = window
+            .inner_size()
+            .map(|s| (s.width as f64 / scale, s.height as f64 / scale))
+            .unwrap_or((w, h));
+
+        // 20 titik x 16ms ~= 300ms, cocok dengan transition CSS.
+        const STEPS: u32 = 20;
+        for step in 1..=STEPS {
+            if SIZE_ANIMATION_ID.load(Ordering::SeqCst) != animation_id {
+                return;
+            }
+            let t = step as f64 / STEPS as f64;
+            let eased = t * t * (3.0 - 2.0 * t); // smoothstep tanpa overshoot
+            let cur_w = start_w + (w - start_w) * eased;
+            let cur_h = start_h + (h - start_h) * eased;
+            let _ = window.set_size(tauri::LogicalSize::new(cur_w.max(1.0), cur_h.max(1.0)));
+            apply_notch_position(&window);
+            if step < STEPS {
+                std::thread::sleep(std::time::Duration::from_millis(16));
+            }
+        }
+
+        if SIZE_ANIMATION_ID.load(Ordering::SeqCst) == animation_id {
+            let _ = window.set_size(tauri::LogicalSize::new(w, h));
+            apply_notch_position(&window);
+        }
+    })
+    .await;
+}
 #[tauri::command]
 fn notch_start_move(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
     IS_DRAGGING.store(true, std::sync::atomic::Ordering::SeqCst);

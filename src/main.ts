@@ -78,7 +78,9 @@ let idleFace: Face = clockOn ? loadFace() : "eyes";
 const BASE_SIZES: Record<string, [number, number]> = {
   idle: [150, 28],
   compact: [250, 40],
-  compactLyrics: [410, 40],
+  compactLyrics: [360, 40],
+  edgeIdle: [80, 80],
+  edgeMedia: [80, 120],
   hub: [420, 148],
   bt: [360, 80],
   dev: [360, 80],
@@ -90,7 +92,9 @@ const BASE_SIZES: Record<string, [number, number]> = {
 const BASE_HIT: Record<string, [number, number]> = {
   idle: [130, 24],
   compact: [230, 34],
-  compactLyrics: [370, 34],
+  compactLyrics: [340, 34],
+  edgeIdle: [60, 80],
+  edgeMedia: [60, 120],
   hub: [400, 140],
   bt: [340, 74],
   dev: [340, 74],
@@ -170,65 +174,118 @@ listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-ch
 
 function setHit(view: string, winW: number) {
   const [hw, hh] = HIT[view];
-  const x = Math.max(0, Math.round((winW - hw) / 2));
+  // Ketika menempel di tepi, konten bergeser 10px ke arah tepi.
+  // Area interaksi harus ikut rata kiri/kanan, bukan selalu di tengah jendela.
+  const x = notch.classList.contains("is-edge-left")
+    ? 0
+    : notch.classList.contains("is-edge-right")
+      ? Math.max(0, Math.round(winW - hw))
+      : Math.max(0, Math.round((winW - hw) / 2));
   invoke("set_hit_area", { x, w: hw, h: hh });
 }
 
 // ---------- view: idle / compact / hub / bt / dev / hud ----------
 let lastView = "";
-let sizeTimers: number[] = [];
-let appliedView = ""; // view yang ukurannya sudah benar-benar diterapkan ke jendela
+let appliedView = ""; // view yang ukuran native-nya sudah selesai diterapkan
+let sizeRequestId = 0;
+let lastSizeRequestAt = 0;
 
-const later = (fn: () => void, ms: number) => {
-  const id = window.setTimeout(() => {
-    sizeTimers = sizeTimers.filter((t) => t !== id);
-    fn();
-  }, ms);
-  sizeTimers.push(id);
-};
-const cancelSizeTimers = () => {
-  sizeTimers.forEach(clearTimeout);
-  sizeTimers = [];
-};
-
-function applySize(view: string) {
+function applySize(view: string, previousView = appliedView || view) {
+  const requestId = ++sizeRequestId;
+  lastSizeRequestAt = Date.now();
   const [w, h] = SIZES[view];
-  invoke("set_size", { w, h });
-  later(() => { setHit(view, w); appliedView = view; }, 120);
-}
+  const [oldW, oldH] = SIZES[previousView] ?? [w, h];
+  const isExpanding = w >= oldW && h >= oldH;
 
+  // Ketika membuka, pasang hitbox besar lebih awal agar hover tetap stabil.
+  // Ketika menutup, pertahankan hitbox lama sampai native resize selesai agar
+  // click-through tidak berubah di tengah animasi.
+  if (isExpanding) setHit(view, w);
+
+  const stillCurrent = () => requestId === sizeRequestId && lastView === view;
+  const doResize = () => {
+    if (!stillCurrent()) return;
+    invoke("set_size", { w, h })
+      .then(() => {
+        if (!stillCurrent()) return;
+        if (!isExpanding) setHit(view, w);
+        appliedView = view;
+        updatePositionUI(notch.classList.contains("is-custom-pos"), currentTy, currentCx);
+      })
+      .catch((e) => console.error("Gagal mengubah ukuran notch:", e));
+  };
+
+  // Membuka: jendela dibesarkan sekarang supaya notch yang melebar tidak terpotong.
+  // Menutup: tunggu animasi CSS notch selesai dulu. Kalau jendela mengecil lebih awal, tepi jendela
+  // memotong notch yang masih besar, jadi tampak persegi tanpa sudut membulat sampai animasinya selesai.
+  const resize = () => {
+    if (isExpanding) { doResize(); return; }
+    let fired = false;
+    const go = () => {
+      if (fired) return;
+      fired = true;
+      notch.removeEventListener("transitionend", onEnd);
+      clearTimeout(fallback);
+      doResize();
+    };
+    const onEnd = (e: TransitionEvent) => {
+      if (e.target === notch && (e.propertyName === "height" || e.propertyName === "width")) go();
+    };
+    notch.addEventListener("transitionend", onEnd);
+    const fallback = window.setTimeout(go, 450); // pengaman kalau tidak ada transisi (ukuran CSS sudah sama)
+  };
+
+  if (view === "edgeMedia" || view === "edgeIdle") {
+    const sw = window.screen.availWidth || window.screen.width;
+    const edgeCx = notch.classList.contains("is-edge-left")
+      ? 40
+      : notch.classList.contains("is-edge-right") ? sw - 40 : currentCx;
+    if (edgeCx !== -1) {
+      currentCx = edgeCx;
+      invoke("notch_move_to", { cx: edgeCx, ty: currentTy })
+        .then(() => { if (stillCurrent()) resize(); })
+        .catch((e) => console.error("Gagal mengunci posisi notch di tepi:", e));
+    } else {
+      resize();
+    }
+  } else {
+    resize();
+  }
+}
 function render() {
   const hasCompactLyrics = playing && lyState === "ok" && !!ly?.lines.length;
+  const atScreenSide = notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
+  // Saat pointer baru masuk, tahan state mini sampai hover delay terpenuhi.
+  // Dengan begitu expand langsung ke hub, bukan lewat tampilan horizontal perantara.
+  const hoverPending = inside && Date.now() - insideSince < T.hover_open_ms;
+  const edgeCollapsed = atScreenSide && !override && !isDraggingWindow && (!inside || hoverPending);
   const view = override ?? (
-    playing ? (hasCompactLyrics ? "compactLyrics" : "compact")
+    edgeCollapsed ? (playing ? "edgeMedia" : "edgeIdle")
+      : playing ? (hasCompactLyrics ? "compactLyrics" : "compact")
       : idleFace === "clock" ? "clock" : "idle"
   );
   notch.dataset.view = view;
   notch.dataset.playing = String(playing);
 
   if (view !== lastView) {
-    // batalkan transisi lama supaya tidak menimpa ukuran yang baru
-    cancelSizeTimers();
-    settleUntil = Date.now() + 900;
-    const prev = lastView;
-    const prevW = SIZES[prev]?.[0] ?? SIZES[view][0];
-    // jendela membesar dulu hanya kalau TIDAK ada sisi yang mengecil (idle <-> jam sama tinggi tapi beda lebar)
-    const grow = SIZES[view][1] >= (SIZES[prev]?.[1] ?? 0) && SIZES[view][0] >= (SIZES[prev]?.[0] ?? 0);
+    // Catat view asal agar saat collapse hitbox lama bisa dipertahankan hingga akhir.
+    const previousView = appliedView || lastView || view;
+    settleUntil = Date.now() + 80;
     lastView = view;
     appliedView = "";
 
-    if (grow) {
-      applySize(view);
-    } else {
-      setHit(view, prevW);
-      later(() => applySize(view), 600);
-    }
+    // CSS dan native resize berjalan dengan durasi/kurva selaras; request lama dibatalkan.
+    applySize(view, previousView);
   }
 }
 
 // pengaman: kalau ukuran jendela tidak cocok dengan view saat ini, terapkan ulang
 setInterval(() => {
-  if (sizeTimers.length === 0 && lastView && appliedView !== lastView) applySize(lastView);
+  // Perintah set_size bisa berlangsung selama animasi native. Jangan memulai
+  // animasi kedua ketika perintah pertama belum sempat selesai.
+  if (lastView && appliedView !== lastView && Date.now() - lastSizeRequestAt > 2500) {
+    applySize(lastView);
+  }
 }, 1500);
 
 function expand(view: View, ms = 3000) {
@@ -391,6 +448,7 @@ function setInside(v: boolean) {
   inside = v;
   insideSince = v ? Date.now() : 0;
   if (v) flash("surprised", 900);
+  render();
 }
 
 const rectHas = (x: number, y: number) => {
@@ -437,6 +495,57 @@ let startTy = 0;
 let windowDragMoved = false;
 let suppressClickUntil = 0;
 
+let currentCx = -1;
+let currentTy = 0;
+
+function updatePositionUI(custom: boolean, topY: number, cx?: number) {
+  if (cx !== undefined) currentCx = cx;
+  currentTy = topY;
+
+  // Floating mengatur bentuk untuk posisi di bawah tepi atas; deteksi sisi layar
+  // harus tetap aktif walaupun topY = 0 (mis. notch di pojok kiri/kanan atas).
+  const isFloating = custom && topY > 8;
+  notch.classList.toggle("is-custom-pos", custom);
+  notch.classList.toggle("is-floating", isFloating);
+  const shell = $("shell");
+  if (shell) shell.classList.toggle("is-floating", isFloating);
+
+  if (custom && currentCx !== -1) {
+    const sw = window.screen.availWidth || window.screen.width;
+    // currentCx adalah titik tengah jendela yang dipindahkan. Pakai setengah
+    // lebar jendela terluas (hub/calendar), bukan compactLyrics, agar deteksi
+    // tetap benar ketika posisi disimpan saat hub sedang terbuka.
+    const maxWindowWidth = Math.max(...Object.values(SIZES).map(([w]) => w));
+    const edgeHalfW = maxWindowWidth / 2;
+    const leftDistance = currentCx - edgeHalfW;
+    const rightDistance = sw - (currentCx + edgeHalfW);
+    const wasLeft = notch.classList.contains("is-edge-left");
+    const wasRight = notch.classList.contains("is-edge-right");
+
+    // Hysteresis: masuk sisi pada 10px, tetapi pertahankan status sampai
+    // jarak melewati 28px agar ukuran/posisi yang berubah tidak memicu flicker.
+    const isLeft = wasLeft ? leftDistance <= 28 : leftDistance <= 10;
+    const isRight = wasRight ? rightDistance <= 28 : rightDistance <= 10;
+    const wasEdge = wasLeft || wasRight;
+
+    notch.classList.toggle("is-edge-left", isLeft && !isRight);
+    notch.classList.toggle("is-edge-right", isRight && !isLeft);
+    if (shell) {
+      shell.classList.toggle("is-edge-left", isLeft && !isRight);
+      shell.classList.toggle("is-edge-right", isRight && !isLeft);
+    }
+    const isEdge = (isLeft && !isRight) || (isRight && !isLeft);
+    if (wasEdge !== isEdge || wasLeft !== notch.classList.contains("is-edge-left") || wasRight !== notch.classList.contains("is-edge-right")) {
+      render();
+    }
+  } else {
+    const wasEdge = notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
+    notch.classList.remove("is-edge-left", "is-edge-right");
+    if (shell) shell.classList.remove("is-edge-left", "is-edge-right");
+    if (wasEdge) render();
+  }
+}
+
 async function startWindowDrag(e: PointerEvent, targetEl: HTMLElement) {
   if (e.button !== 0) return; // hanya klik kiri
   try {
@@ -462,8 +571,10 @@ function onWindowPointerMove(e: PointerEvent) {
     windowDragMoved = true;
   }
   if (windowDragMoved) {
-    invoke("notch_move_to", { cx: startCx + dx, ty: startTy + dy });
-    updatePositionUI(true, startTy + dy);
+    const newCx = startCx + dx;
+    const newTy = startTy + dy;
+    invoke("notch_move_to", { cx: newCx, ty: newTy });
+    updatePositionUI(true, newTy, newCx);
   }
 }
 
@@ -481,20 +592,16 @@ function onWindowPointerUp(e: PointerEvent, targetEl: HTMLElement) {
   } else {
     invoke("notch_end_move", { save: false });
   }
-}
 
-function updatePositionUI(custom: boolean, topY: number) {
-  const isFloating = custom && topY > 8;
-  notch.classList.toggle("is-custom-pos", custom);
-  notch.classList.toggle("is-floating", isFloating);
-  const shell = $("shell");
-  if (shell) shell.classList.toggle("is-floating", isFloating);
+  // Drag state baru saja berakhir: hitung target sekali lagi agar notch langsung
+  // masuk mode tepi yang benar, tanpa menunggu event pointer lain.
+  render();
 }
 
 async function resetPosition() {
   try {
     await invoke("notch_reset_position");
-    updatePositionUI(false, 0);
+    updatePositionUI(false, 0, -1);
     flash("happy", 1200);
   } catch (err) {
     console.error("Gagal reset posisi notch:", err);
@@ -548,13 +655,13 @@ $("q-reset-pos").addEventListener("click", (e) => {
 // Dengarkan perubahan posisi dari tray atau jendela pengaturan
 listen<{ custom: boolean; x?: number; y?: number }>("position-changed", (e) => {
   const p = e.payload;
-  updatePositionUI(p?.custom ?? false, p?.y ?? 0);
+  updatePositionUI(p?.custom ?? false, p?.y ?? 0, p?.x);
 });
 
 // Inisialisasi status posisi saat startup
 invoke<{ custom: boolean; x: number; y: number }>("notch_get_position")
   .then((p) => {
-    updatePositionUI(p.custom, p.y);
+    updatePositionUI(p.custom, p.y, p.x);
   })
   .catch(() => {});
 
@@ -610,7 +717,10 @@ listen<{ dx: number; dy: number }>("cursor", (e) => {
   // Windows: hover dihitung dari posisi global (jendela click-through tidak menerima event mouse)
   if (isWin) {
     const [hw, hh] = HIT[notch.dataset.view ?? "idle"];
-    setInside(Math.abs(dx) <= hw / 2 && dy >= -12 && dy <= hh - 12);
+    const edgeOffset = notch.classList.contains("is-edge-left") ? -10
+      : notch.classList.contains("is-edge-right") ? 10 : 0;
+    const notchDx = dx - edgeOffset;
+    setInside(Math.abs(notchDx) <= hw / 2 && dy >= -12 && dy <= hh - 12);
   }
 });
 setInterval(() => {
@@ -660,6 +770,15 @@ if (compactLayer && compactBars) {
   compactLayer.insertBefore(compactLyrics, compactBars);
 }
 
+// Tampilan ringkas di sisi layar: hanya cover album berbentuk disc berputar.
+const edgeDisc = document.createElement("div");
+edgeDisc.className = "edge-disc";
+edgeDisc.setAttribute("aria-hidden", "true");
+const edgeDiscImg = document.createElement("img");
+edgeDiscImg.alt = "";
+edgeDisc.appendChild(edgeDiscImg);
+notch.appendChild(edgeDisc);
+
 // gambar bawaan saat tidak ada media / tidak ada artwork
 const DEFAULT_ART =
   "data:image/svg+xml;utf8," +
@@ -678,6 +797,7 @@ function showDefaultArt() {
   artEl.src = DEFAULT_ART;
   cArtEl.src = DEFAULT_ART;
   lyArtEl.src = DEFAULT_ART;
+  edgeDiscImg.src = DEFAULT_ART;
   artEl.style.visibility = cArtEl.style.visibility = "visible";
   if (!fixedAccent()) document.documentElement.style.removeProperty("--accent"); // kembali ke warna bawaan
 }
@@ -776,6 +896,7 @@ function showArt(src: string) {
     artEl.src = small;
     cArtEl.src = small;
     lyArtEl.src = small;
+    edgeDiscImg.src = small;
     artEl.style.visibility = cArtEl.style.visibility = "visible";
   };
   img.src = src;
@@ -913,7 +1034,7 @@ function showDevice(kind: string, name: string, connected: boolean, sub?: string
   $("dev-chip").classList.toggle("off", !connected);
   $("dev-chip").innerHTML = connected
     ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l18 18M18 6 6 18"/></svg>`;
   $("dev-name").textContent = name;
   $("dev-sub").textContent = sub ?? `${LABELS[kind] ?? "Perangkat"} · ${connected ? "Terhubung" : "Dilepas"}`;
 
@@ -1107,9 +1228,8 @@ function paintQuick(q: Quick) {
   if (keepAwake !== wasAwake) updateBase();
 }
 function refreshQuick() {
-  console.log("refreshQuick dipanggil");
   invoke<Quick>("quick_state")
-    .then((q) => { console.log("quick_state:", q); paintQuick(q); })
+    .then((q) => { paintQuick(q); })
     .catch((e) => console.error("quick_state gagal:", e));
 }
 // klik tombol: Rust mengubah pengaturannya lalu mengembalikan keadaan terbaru
