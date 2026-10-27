@@ -60,6 +60,8 @@ pub struct Appearance {
     pub dark_bg: String,    // warna notch saat tema gelap
     pub light_bg: String,   // warna notch saat tema terang
     pub accent: String,     // kosong = otomatis dari cover album
+    pub default_mood: String, // ekspresi mata bawaan saat idle (tidak tidur/tidak memutar lagu)
+    pub eye_theme: String, // aurora | neon | pastel | pixel | holo | ember | ocean | sakura | cyber | monochrome
 }
 impl Default for Appearance {
     fn default() -> Self {
@@ -70,6 +72,24 @@ impl Default for Appearance {
             dark_bg: "#000000".into(),
             light_bg: "#f5f5f7".into(),
             accent: String::new(),
+            default_mood: "normal".into(),
+            eye_theme: "aurora".into(),
+        }
+    }
+}
+
+// dipakai bersama oleh Appearance::sanitize dan Nudge::sanitize
+const MOODS: &[&str] =
+    &["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious", "sad"];
+const EYE_THEMES: &[&str] = &["aurora", "neon", "pastel", "pixel", "holo", "ember", "ocean", "sakura", "cyber", "monochrome"];
+
+impl Appearance {
+    fn sanitize(&mut self) {
+        if !MOODS.contains(&self.default_mood.as_str()) {
+            self.default_mood = Appearance::default().default_mood;
+        }
+        if !EYE_THEMES.contains(&self.eye_theme.as_str()) {
+            self.eye_theme = Appearance::default().eye_theme;
         }
     }
 }
@@ -101,9 +121,6 @@ impl Default for Nudge {
     }
 }
 
-const NUDGE_MOODS: &[&str] =
-    &["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious", "sad"];
-
 impl Nudge {
     // nilai dari file / UI bisa kosong atau di luar batas: rapikan ke yang aman
     fn sanitize(&mut self) {
@@ -118,19 +135,48 @@ impl Nudge {
         if self.emoji.is_empty() {
             self.emoji = d.emoji;
         }
-        if !NUDGE_MOODS.contains(&self.mood.as_str()) {
+        if !MOODS.contains(&self.mood.as_str()) {
             self.mood = d.mood;
         }
     }
 }
 
+/// Preferensi jadwal shalat dan pengingat waktu shalat.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct Prayer {
+    pub provinsi: String,
+    pub kabkota: String,
+    pub mode: String,          // "adzan" | "tone" | "silent"
+    pub remind_before: bool,
+    pub remind_min: u32,
+}
+impl Default for Prayer {
+    fn default() -> Self {
+        Self {
+            provinsi: "Jawa Barat".into(),
+            kabkota: "Kota Bandung".into(),
+            mode: "tone".into(),
+            remind_before: false,
+            remind_min: 10,
+        }
+    }
+}
+
 // Naikkan angka ini setiap kali ada fitur baru yang perlu dinyalakan untuk config lama.
-const PAGES_VERSION: u32 = 3;
+const PAGES_VERSION: u32 = 6;
 // (nama fitur, versi PAGES_VERSION saat fitur itu ditambahkan).
 // Dengan begitu fitur lama yang sengaja dimatikan pengguna tidak ikut menyala lagi
 // ketika versi dinaikkan untuk fitur baru.
-const NEW_FEATURES: &[(&str, u32)] =
-    &[("shelf", 2), ("lyrics", 2), ("privacy", 2), ("clock", 3)];
+const NEW_FEATURES: &[(&str, u32)] = &[
+    ("shelf", 2),
+    ("lyrics", 2),
+    ("privacy", 2),
+    ("clock", 3),
+    ("reminder", 4),
+    ("notes", 4),
+    ("prayer", 5),
+];
 
 // Config lama mendapat fitur baru satu kali. Setelah disimpan dari UI, angka versinya
 // ikut tersimpan, jadi pilihan pengguna tidak ditimpa lagi.
@@ -141,6 +187,8 @@ fn migrate(cfg: &mut Config) {
                 // jam diletakkan tepat setelah musik, fitur lain di akhir daftar
                 let at = if *f == "clock" {
                     cfg.pages.iter().position(|p| p == "media").map(|i| i + 1)
+                } else if *f == "prayer" {
+                    cfg.pages.iter().position(|p| p == "clock").map(|i| i + 1)
                 } else {
                     None
                 };
@@ -149,6 +197,15 @@ fn migrate(cfg: &mut Config) {
                     None => cfg.pages.push((*f).to_string()),
                 }
             }
+        }
+        // Prayer sebelumnya ditambahkan di akhir daftar pada versi awal patch.
+        // Pindahkan satu kali setelah Jam agar ikon lebih mudah terlihat di navbar.
+        if let Some(old_index) = cfg.pages.iter().position(|p| p == "prayer") {
+            let prayer = cfg.pages.remove(old_index);
+            let at = cfg.pages.iter().position(|p| p == "clock")
+                .map(|i| i + 1)
+                .unwrap_or(cfg.pages.len());
+            cfg.pages.insert(at, prayer);
         }
         cfg.pages_version = PAGES_VERSION;
     }
@@ -190,6 +247,7 @@ pub struct Config {
     pub appearance: Appearance,
     pub nudge: Nudge,
     pub position: Position,
+    pub prayer: Prayer,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -198,7 +256,7 @@ impl Default for Config {
             hide_fullscreen: true,
             pages: [
                 "media", "clock", "weather", "battery", "timer", "quick", "tools", "stats",
-                "clipboard", "shelf", "lyrics", "privacy",
+                "reminder", "notes", "clipboard", "shelf", "lyrics", "privacy", "prayer",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -210,6 +268,7 @@ impl Default for Config {
             appearance: Appearance::default(),
             nudge: Nudge::default(),
             position: Position::default(),
+            prayer: Prayer::default(),
         }
     }
 }
@@ -240,6 +299,17 @@ text = ""               # kosong = otomatis kontras
 dark_bg = "#000000"
 light_bg = "#f5f5f7"
 accent = ""             # kosong = otomatis dari cover album, contoh: "#ff6b6b"
+eye_theme = "aurora"  # aurora | neon | pastel | pixel | holo | ember | ocean | sakura | cyber | monochrome
+"##;
+
+// ditambahkan ke config.toml lama maupun template bawaan yang belum punya section [prayer]
+const PRAYER_BLOCK: &str = r##"
+[prayer]
+provinsi = "Jawa Barat"
+kabkota = "Kota Bandung"
+mode = "tone"            # adzan | tone | silent
+remind_before = false
+remind_min = 10
 "##;
 
 // ditambahkan ke config.toml (lama maupun template bawaan) yang belum punya section [nudge]
@@ -266,6 +336,9 @@ pub fn init() {
             if !s.contains("[nudge]") {
                 extra.push_str(NUDGE_BLOCK);
             }
+            if !s.contains("[prayer]") {
+                extra.push_str(PRAYER_BLOCK);
+            }
             if !extra.is_empty() {
                 use std::io::Write;
                 let _ = std::fs::OpenOptions::new()
@@ -290,6 +363,9 @@ pub fn init() {
             if !text.contains("[nudge]") {
                 text.push_str(NUDGE_BLOCK);
             }
+            if !text.contains("[prayer]") {
+                text.push_str(PRAYER_BLOCK);
+            }
             let _ = std::fs::write(&p, &text);
             toml::from_str::<Config>(&text).unwrap_or_default()
         }
@@ -299,6 +375,7 @@ pub fn init() {
         cfg.pages = Config::default().pages;
     }
     cfg.nudge.sanitize();
+    cfg.appearance.sanitize();
     migrate(&mut cfg);
     println!("config: {}", p.display());
     let _ = CFG.set(cfg);
@@ -318,6 +395,7 @@ pub fn cfg_get() -> Config {
         .and_then(|s| toml::from_str(&s).ok())
         .unwrap_or_default();
     cfg.nudge.sanitize();
+    cfg.appearance.sanitize();
     migrate(&mut cfg); // UI menampilkan keadaan yang sama dengan yang sedang berjalan
     cfg
 }
@@ -327,6 +405,7 @@ pub fn cfg_get() -> Config {
 pub fn cfg_preview(app: tauri::AppHandle, mut cfg: Config) {
     use tauri::Emitter;
     cfg.nudge.sanitize();
+    cfg.appearance.sanitize();
     let _ = app.emit("config-changed", &cfg);
 }
 
@@ -345,6 +424,7 @@ pub fn cfg_save(app: tauri::AppHandle, mut cfg: Config) -> Result<String, String
         cfg.weather.city = "Lokasi saya".into();
     }
     cfg.nudge.sanitize();
+    cfg.appearance.sanitize();
     let p = path();
     let text = toml::to_string_pretty(&cfg).map_err(|e| format!("gagal membuat TOML: {e}"))?;
     if let Some(dir) = p.parent() {

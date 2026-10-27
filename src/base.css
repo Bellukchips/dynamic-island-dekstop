@@ -1,0 +1,230 @@
+:root {
+  --accent: 120, 140, 255;
+  --bg: #000;
+  --fg: #fff;
+  --fg-rgb: 255, 255, 255;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: "Inter", system-ui, sans-serif;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* ---------- pulau utama (ujung atas rata) ---------- */
+#notch {
+  position: relative;
+  overflow: hidden;
+  width: 150px;
+  height: 20px;
+  border-radius: 0 0 17px 17px;
+  background:
+    radial-gradient(
+      130% 160% at 50% -30%,
+      rgba(var(--accent), 0.25),
+      transparent 60%
+    ),
+    var(--bg);
+  /* box-shadow: 0 12px 32px -8px rgba(var(--accent), .5); */
+  transition:
+    width 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    height 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    border-radius 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    transform 0.3s cubic-bezier(0.42, 0, 0.58, 1);
+}
+#notch[data-view="idle"] {
+  width: 130px;
+  height: 24px;
+  border-radius: 0 0 12px 12px;
+}
+/* SESUDAH */
+.l-idle {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-sizing: border-box;
+}
+#notch[data-view="compact"] {
+  width: 230px;
+  height: 34px;
+  border-radius: 0 0 17px 17px;
+}
+#notch[data-view="compactLyrics"] {
+  width: 340px;
+  height: 34px;
+  border-radius: 0 0 17px 17px;
+}
+#notch[data-view="edgeIdle"] {
+  width: 60px;
+  height: 80px;
+  border-radius: 60px;
+}
+#notch[data-view="edgeIdle"] .l-idle {
+  width: 60px;
+  height: 80px;
+}
+#notch[data-view="edgeMedia"] {
+  width: 60px;
+  height: 120px;
+  border-radius: 60px;
+}
+#notch[data-view="hub"] {
+  width: 400px;
+  height: 140px;
+  border-radius: 0 0 32px 32px;
+}
+#notch[data-view="bt"] {
+  width: 340px;
+  height: 74px;
+  border-radius: 0 0 37px 37px;
+}
+#notch[data-view="dev"] {
+  width: 340px;
+  height: 74px;
+  border-radius: 0 0 37px 37px;
+}
+#notch[data-view="hud"] {
+  width: 300px;
+  height: 52px;
+  border-radius: 0 0 26px 26px;
+}
+/* ---------- layer konten ---------- */
+.layer {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) scale(0.94);
+  transition:
+    opacity 0.18s ease,
+    transform 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    visibility 0s 0.18s;
+}
+#notch[data-view="idle"] .l-idle,
+#notch[data-view="edgeIdle"] .l-idle,
+#notch[data-view="compact"] .l-compact,
+#notch[data-view="compactLyrics"] .l-compact,
+#notch[data-view="hub"] .l-hub,
+#notch[data-view="bt"] .l-bt,
+#notch[data-view="dev"] .l-dev,
+#notch[data-view="hud"] .l-hud {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+  transition:
+    opacity 0.18s ease,
+    transform 0.3s cubic-bezier(0.42, 0, 0.58, 1),
+    visibility 0s;
+}
+
+.l-idle {
+  width: 150px;
+  height: 34px;
+  justify-content: center;
+}
+.l-compact {
+  width: 230px;
+  height: 34px;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+#notch[data-view="compactLyrics"] .l-compact {
+  width: 320px;
+}
+.l-hub {
+  width: 400px;
+  height: 132px;
+}
+.l-bt {
+  width: 340px;
+  height: 74px;
+  padding: 0 16px;
+  gap: 14px;
+}
+.l-dev {
+  width: 340px;
+  height: 74px;
+  padding: 0 16px;
+  gap: 14px;
+}
+
+/* ---------- hub: halaman geser ---------- */
+.pages {
+  position: relative;
+  width: 400px;
+  height: 132px;
+  overflow: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.pages:active {
+  cursor: grabbing;
+}
+.track {
+  display: flex;
+  height: 100%;
+  transform: translateX(calc(var(--page, 0) * -400px + var(--drag, 0px)));
+  transition: transform 0.4s cubic-bezier(0.3, 1.2, 0.5, 1);
+}
+.track.dragging {
+  transition: none;
+}
+.page {
+  flex: 0 0 400px;
+  width: 400px;
+  height: 132px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.dots {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(var(--fg-rgb), 0.25);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    height 0.3s,
+    border-radius 0.3s;
+}
+.dot.active {
+  background: rgb(var(--accent));
+  height: 14px;
+  border-radius: 3px;
+}

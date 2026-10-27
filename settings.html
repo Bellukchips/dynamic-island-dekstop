@@ -1,113 +1,417 @@
 <!doctype html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Notch — Pengaturan</title>
+  <link rel="stylesheet" href="/src/eye-themes.css" />
   <style>
     :root {
       color-scheme: light dark;
-      --line: color-mix(in srgb, currentColor 14%, transparent);
-      --muted: color-mix(in srgb, currentColor 60%, transparent);
-      --focus: #4c8dff;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      font-size: 14px;
+      --page: #f4f6fb;
+      --surface: #ffffff;
+      --surface-alt: #f8f9fd;
+      --line: #e4e7f0;
+      --text: #1c2334;
+      --muted: #737c90;
+      --accent: #536dfe;
+      --accent-hover: #4359e4;
+      --accent-soft: #edf0ff;
+      --good: #17844b;
+      --bad: #c93737;
+      --shadow: 0 10px 30px rgba(29, 41, 72, .045);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
     }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #101218;
+        --surface: #191c25;
+        --surface-alt: #20242f;
+        --line: #2e3342;
+        --text: #f1f3fa;
+        --muted: #9aa3b6;
+        --accent: #8494ff;
+        --accent-hover: #9ba7ff;
+        --accent-soft: #292f50;
+        --good: #55d692;
+        --bad: #ff8888;
+        --shadow: 0 10px 32px rgba(0, 0, 0, .16);
+      }
+    }
+
     * { box-sizing: border-box; }
-    body { margin: 0; padding: 20px 24px 24px; }
+    html { scroll-behavior: smooth; scroll-padding-top: 86px; }
+    body {
+      margin: 0 auto;
+      padding: 26px 28px 24px;
+      width: 100%;
+      max-width: 920px;
+      color: var(--text);
+      background: var(--page);
+    }
 
-    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-    h1 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
-    #status { font-size: 12px; color: var(--muted); text-align: right; min-height: 16px;
-              overflow-wrap: anywhere; }
-    #status[data-kind="ok"] { color: #1f9d55; }
-    #status[data-kind="err"] { color: #d64545; }
+    header.topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 19px;
+    }
+    .brand-mark {
+      position: relative;
+      display: grid;
+      place-items: center;
+      flex: 0 0 44px;
+      width: 44px;
+      height: 44px;
+      border-radius: 15px;
+      background: var(--text);
+      box-shadow: var(--shadow);
+    }
+    .brand-mark::before {
+      content: "";
+      width: 22px;
+      height: 12px;
+      border-radius: 0 0 8px 8px;
+      background: var(--page);
+      box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 78%, transparent);
+    }
+    .head-copy { flex: 1; min-width: 0; }
+    .eyebrow {
+      margin: 0 0 2px;
+      color: var(--accent);
+      font-size: 10px;
+      line-height: 1.3;
+      font-weight: 750;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.25;
+      font-weight: 740;
+      letter-spacing: -.045em;
+    }
+    .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 12px; }
+    #status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 1 auto;
+      max-width: 44%;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 11px;
+      text-align: right;
+      overflow-wrap: anywhere;
+      box-shadow: 0 2px 8px rgba(10, 20, 40, .025);
+    }
+    #status[data-kind="ok"] { color: var(--good); border-color: color-mix(in srgb, var(--good) 28%, var(--line)); }
+    #status[data-kind="err"] { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 28%, var(--line)); }
 
-    /* pratinjau */
-    .stage { margin: 16px 0 6px; height: 92px; border-radius: 12px;
-             background: linear-gradient(160deg, #6f7a8c, #a9b2c0);
-             display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
-    #pill { --p-bg: #000; --p-fg: #fff; --p-fg-rgb: 255,255,255; --p-accent: 120,140,255; --p-scale: 1;
-            width: calc(210px * var(--p-scale)); height: calc(44px * var(--p-scale));
-            background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
-            color: var(--p-fg); border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
-            display: flex; align-items: center; justify-content: center; gap: calc(10px * var(--p-scale));
-            font-size: calc(12px * var(--p-scale)); position: relative; overflow: hidden;
-            transition: background .15s, color .15s; }
+    .preview-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .preview-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 12px;
+    }
+    .preview-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .01em; }
+    .live-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--surface-alt);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .live-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #35bd7a; }
+    .stage {
+      margin: 0;
+      height: 100px;
+      border-radius: 13px;
+      background: linear-gradient(145deg, #768195 0%, #bac4d2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    #pill {
+      --p-bg: #000;
+      --p-fg: #fff;
+      --p-fg-rgb: 255, 255, 255;
+      --p-accent: 120, 140, 255;
+      --p-scale: 1;
+      width: calc(210px * var(--p-scale));
+      height: calc(44px * var(--p-scale));
+      background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
+      color: var(--p-fg);
+      border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(10px * var(--p-scale));
+      font-size: calc(12px * var(--p-scale));
+      position: relative;
+      overflow: hidden;
+      transition: background .15s, color .15s;
+    }
     #pill i { width: calc(7px * var(--p-scale)); height: calc(7px * var(--p-scale)); border-radius: 50%; background: var(--p-fg); }
     #pill span { opacity: .85; }
-    #pill::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: calc(5px * var(--p-scale));
-                   height: 2px; border-radius: 2px; background: rgb(var(--p-accent)); opacity: .9; }
-    .hint { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+    #pill::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: calc(5px * var(--p-scale)); height: 2px; border-radius: 2px; background: rgb(var(--p-accent)); opacity: .9; }
+    /* Pemilih skin mata: warna utama ada pada eye-themes.css */
+    .eye-theme-picker { margin-top: 14px; }
+    .eye-theme-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
+    .eye-theme-option { display:flex; flex-direction:column; align-items:stretch; gap:7px; min-width:0; padding:8px; border:1px solid var(--line); border-radius:13px; background:var(--surface); color:var(--text); text-align:left; cursor:pointer; transition:border-color .15s,background .15s,box-shadow .15s; }
+    .eye-theme-option:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); }
+    .eye-theme-option[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .eye-theme-swatch { display:grid; place-items:center; min-height:62px; border-radius:9px; background:#0b0d14; overflow:hidden; }
+    .eye-theme-swatch .eyes { display:flex !important; align-items:center; justify-content:center; gap:10px; position:relative; width:100%; height:58px; margin:0; padding:0; transform:none !important; }
+    .eye-theme-swatch .eye { display:block; flex:0 0 13px; width:13px; height:21px; margin:0; padding:0; position:relative; overflow:hidden; border-radius:8px; transform:none; animation:none; }
+    .eye-theme-swatch .shine { display:block; position:absolute; top:4px; left:3px; width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.96); }
+    .eye-theme-swatch .lid-t, .eye-theme-swatch .lid-b { display:none; }
+    .eye-theme-swatch .eyes[data-mood="happy"] .eye { height:15px; margin-top:5px; border-radius:50%; }
+    .eye-theme-swatch .eyes[data-mood="sleepy"] .eye { height:12px; margin-top:6px; border-radius:7px 7px 4px 4px; }
+    .eye-theme-swatch .eyes[data-mood="surprised"] .eye { height:25px; border-radius:50%; }
+    .eye-theme-swatch .eyes[data-mood="angry"] .eye { transform:skewY(-10deg); }
+    .eye-theme-swatch .eyes[data-mood="love"] .eye { border-radius:50% 50% 40% 40%; }
+    .eye-theme-swatch .eyes[data-mood="suspicious"] .eye:first-child { height:13px; margin-top:7px; }
+    .eye-theme-swatch .eyes[data-mood="sad"] .eye { height:17px; margin-top:4px; border-radius:7px 7px 10px 10px; }
+    .eye-theme-name { display:flex; align-items:center; justify-content:space-between; gap:4px; font-size:11px; font-weight:720; }
+    .eye-theme-name small { color:var(--muted); font-size:9px; font-weight:600; }
+    .eye-theme-option[aria-pressed="true"] .eye-theme-name::after { content:"✓"; color:var(--accent); font-size:13px; }
+    @media (max-width:620px) { .eye-theme-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width:390px) { .eye-theme-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 
-    section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
-    h2 { font-size: 13px; font-weight: 650; margin: 10px 0 4px; }
+    .hint { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 8px 0 0; }
+    .preview-card > .hint { margin-top: 9px; }
 
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-           padding: 8px 0; min-height: 40px; }
-    .row.off { opacity: .4; }
-    .row > label:first-child, .row > span:first-child { flex: 1; }
-    .ctl { display: flex; align-items: center; gap: 10px; }
-    code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px;
-           color: var(--muted); min-width: 62px; text-align: right; }
+    .section-nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      overflow-x: auto;
+      padding: 13px 0 12px;
+      margin: 0 0 2px;
+      background: color-mix(in srgb, var(--page) 92%, transparent);
+      backdrop-filter: blur(16px);
+      scrollbar-width: none;
+    }
+    .section-nav::-webkit-scrollbar { display: none; }
+    .section-nav a {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 6px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 650;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .section-nav a:hover, .section-nav a:focus-visible { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); outline: none; }
 
-    /* segmented */
-    .seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line);
-           border-radius: 9px; padding: 3px; gap: 3px; margin: 8px 0 4px; }
-    .seg label { position: relative; }
+    section {
+      margin: 11px 0;
+      padding: 17px 19px 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      scroll-margin-top: 76px;
+    }
+    section h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 7px; font-size: 14px; line-height: 1.4; font-weight: 730; letter-spacing: -.015em; }
+    section h2::before { content: ""; flex: 0 0 4px; width: 4px; height: 16px; border-radius: 3px; background: var(--accent); }
+    section > .hint { margin: 0 0 10px; }
+    h3 { margin: 11px 0 3px; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0;
+      min-height: 43px;
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+    }
+    section .row:last-child { border-bottom: 0; }
+    .row.off { opacity: .42; }
+    .row > label:first-child, .row > span:first-child { flex: 1; min-width: 0; font-size: 12px; font-weight: 560; }
+    .ctl { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 0; }
+    code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11px; color: var(--muted); min-width: 60px; text-align: right; }
+
+    .seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px; gap: 4px; margin: 10px 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-alt); }
+    .seg label { position: relative; min-width: 0; }
     .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
-    .seg span { display: block; text-align: center; padding: 6px 0; border-radius: 6px; cursor: pointer; }
-    .seg input:checked + span { background: color-mix(in srgb, currentColor 14%, transparent); font-weight: 600; }
-    .seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 1px; }
+    .seg span { display: block; padding: 8px 4px; border-radius: 8px; cursor: pointer; text-align: center; color: var(--muted); font-size: 11px; font-weight: 620; transition: background .15s, color .15s, box-shadow .15s; }
+    .seg input:checked + span { color: var(--accent); background: var(--surface); box-shadow: 0 1px 4px rgba(16, 24, 48, .1); font-weight: 750; }
+    .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-    input[type="color"] { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; padding: 0;
-                          border: 1px solid var(--line); border-radius: 50%; background: none; cursor: pointer; }
+    input[type="color"] { -webkit-appearance: none; appearance: none; width: 32px; height: 32px; padding: 3px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-alt); cursor: pointer; }
     input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
     input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
     input[type="color"]:disabled { cursor: not-allowed; }
-    input[type="range"] { width: 180px; accent-color: var(--focus); }
-    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--focus); }
-    .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-    input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-
+    input[type="range"] { width: 178px; max-width: 46vw; accent-color: var(--accent); cursor: pointer; }
+    input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     input[type="text"], input[type="search"], input[type="number"], select {
-      font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
-      background: transparent; color: inherit; min-width: 0; }
-    input[type="number"] { width: 130px; text-align: right; }
-    .row input[type="text"] { width: 200px; }
-    .row input.wide { width: 250px; }
+      font: inherit;
+      min-width: 0;
+      max-width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface-alt);
+      color: var(--text);
+      transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    input[type="text"]:focus, input[type="search"]:focus, input[type="number"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
+    input[type="number"] { width: 120px; text-align: right; }
+    .row input[type="text"] { width: min(250px, 55%); }
+    .row input.wide { width: min(310px, 60%); }
     .row input.emoji { width: 64px; text-align: center; font-size: 18px; }
-    .emojis { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
-    .emo-btn { padding: 4px 8px; font-size: 18px; line-height: 1; border-radius: 8px; }
-    .search { display: flex; gap: 8px; margin: 6px 0; }
-    .search input { flex: 1; }
-    .results { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 4px; }
-    .results button { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left;
-                      padding: 8px 10px; }
-    .results small { color: var(--muted); white-space: nowrap; }
-    .feat { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; margin: 6px 0 2px; }
-    .feat label { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
-    .feat h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 11px; font-weight: 600; color: var(--muted);
-               text-transform: uppercase; letter-spacing: .04em; }
-    .actions { display: flex; gap: 8px; margin-top: 22px; }
-    button { font: inherit; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line);
-             background: transparent; color: inherit; cursor: pointer; }
-    button.primary { background: var(--focus); border-color: transparent; color: #fff; font-weight: 600; }
-    button:disabled { opacity: .5; cursor: progress; }
-    button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .row select { width: min(230px, 58%); }
+    .emojis { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0 8px; }
+    .emo-btn { padding: 6px 9px; font-size: 17px; line-height: 1.1; border-radius: 9px; background: var(--surface-alt); }
+    .search { display: flex; gap: 8px; margin: 8px 0; }
+    .search input { flex: 1; width: 0; }
+    .results { list-style: none; margin: 6px 0 8px; padding: 0; display: grid; gap: 5px; }
+    .results button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 9px 11px; background: var(--surface-alt); }
+    .results small { color: var(--muted); white-space: nowrap; font-size: 10px; }
+
+    .feat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 10px 0 2px; }
+    .feat label { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); cursor: pointer; font-size: 12px; transition: border-color .15s, background .15s; }
+    .feat label:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: var(--accent-soft); }
+    .feat h3 { grid-column: 1 / -1; margin: 8px 0 0; color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
+
+    .actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+    button { font: inherit; padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 650; transition: transform .12s, border-color .15s, background .15s; }
+    button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 750; }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+    button:disabled { opacity: .48; cursor: progress; }
+    .action-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 15;
+      justify-content: flex-end;
+      margin: 20px -28px -24px;
+      padding: 13px 28px 18px;
+      border-top: 1px solid var(--line);
+      background: color-mix(in srgb, var(--page) 92%, transparent);
+      backdrop-filter: blur(16px);
+    }
+    .action-bar button { min-width: 135px; }
+
+    @media (max-width: 620px) {
+      body { padding: 18px 15px 18px; }
+      header.topbar { align-items: flex-start; gap: 10px; }
+      .brand-mark { width: 38px; height: 38px; flex-basis: 38px; border-radius: 12px; }
+      h1 { font-size: 20px; }
+      .subtitle { max-width: 270px; }
+      #status { max-width: 38%; font-size: 10px; padding: 5px 7px; }
+      .preview-card { padding: 12px; }
+      section { padding: 15px 13px 13px; border-radius: 14px; }
+      .row { gap: 10px; }
+      .row > label:first-child, .row > span:first-child { font-size: 11px; }
+      .ctl { gap: 6px; }
+      code { min-width: 46px; font-size: 10px; }
+      .seg span { font-size: 10px; }
+      .feat { gap: 6px; }
+      .feat label { padding: 9px 8px; gap: 6px; font-size: 11px; }
+      .row input.wide { width: 58%; }
+      .row input[type="text"] { width: 52%; }
+      .row select { width: 56%; }
+      .action-bar { margin: 20px -15px -18px; padding: 12px 15px 15px; }
+    }
+    @media (max-width: 430px) {
+      .brand-mark { display: none; }
+      .topbar { flex-wrap: wrap; }
+      #status { max-width: 100%; text-align: left; }
+      .row { flex-wrap: wrap; }
+      .row > label:first-child, .row > span:first-child { flex-basis: 100%; }
+      .row .ctl { width: 100%; justify-content: flex-start; }
+      .row input[type="text"], .row input.wide, .row select { width: 100%; }
+      .row input[type="number"] { width: 100%; }
+      .row .ctl input[type="range"] { max-width: none; flex: 1; }
+      .feat { grid-template-columns: 1fr; }
+      .actions.action-bar { justify-content: stretch; }
+      .action-bar button { flex: 1; min-width: 0; }
+      .results button { align-items: flex-start; flex-direction: column; gap: 3px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
+
 <body>
-  <header>
-    <h1>Pengaturan Notch</h1>
-    <div id="status" role="status" aria-live="polite">Memuat… (kalau tulisan ini tidak berubah, script tidak berjalan)</div>
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div class="head-copy">
+      <p class="eyebrow">NOTCH DESKTOP</p>
+      <h1>Pengaturan</h1>
+      <p class="subtitle">Atur tampilan dan perilaku notch sesuai kebutuhanmu.</p>
+    </div>
+    <div id="status" role="status" aria-live="polite">Memuat pengaturan…</div>
   </header>
 
-  <div class="stage"><div id="pill"><i></i><i></i><span>Notch</span></div></div>
-  <p class="hint">Pratinjau. Perubahan langsung terlihat di notch asli.</p>
+  <div class="preview-card">
+    <div class="preview-heading">
+      <p class="preview-title">Pratinjau tampilan</p>
+      <span class="live-chip">Live preview</span>
+    </div>
+    <div class="stage">
+      <div id="pill"><i></i><i></i><span>Notch</span></div>
+    </div>
+    <p class="hint">Perubahan tampilan langsung terlihat pada notch asli sebelum disimpan.</p>
+  </div>
 
-  <section>
-    <h2>Warna</h2>
+  <nav class="section-nav" aria-label="Navigasi pengaturan">
+    <a href="#appearance">Tampilan</a>
+    <a href="#scale-section">Ukuran</a>
+    <a href="#mood-section">Mood default</a>
+    <a href="#features-section">Fitur</a>
+    <a href="#nudge-section">Pesan diam</a>
+    <a href="#weather-section">Cuaca</a>
+    <a href="#behavior-section">Perilaku</a>
+    <a href="#position-section">Posisi</a>
+  </nav>
+
+  <section id="appearance">
+    <h2>Warna & tema</h2>
     <div class="seg" role="radiogroup" aria-label="Mode warna">
       <label><input type="radio" name="theme" value="auto" /><span>Ikuti OS</span></label>
       <label><input type="radio" name="theme" value="dark" /><span>Gelap</span></label>
@@ -143,7 +447,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="scale-section">
     <h2>Ukuran</h2>
     <div class="row">
       <label for="scale">Skala notch</label>
@@ -151,9 +455,75 @@
     </div>
   </section>
 
-  <section>
+  <section id="mood-section">
+    <h2>Mood default</h2>
+    <p class="hint" style="margin:6px 0">Ekspresi mata saat notch sedang diam. Pengaturan ini berbeda dari ekspresi ketika pesan pointer diam muncul.</p>
+    <div class="row">
+      <label for="default-mood">Ekspresi mata bawaan</label>
+      <select id="default-mood">
+        <option value="normal">Normal</option>
+        <option value="happy">Senang</option>
+        <option value="sleepy">Mengantuk</option>
+        <option value="surprised">Kaget</option>
+        <option value="angry">Marah</option>
+        <option value="love">Jatuh cinta</option>
+        <option value="suspicious">Curiga</option>
+        <option value="sad">Sedih</option>
+      </select>
+    </div>
+      <div class="eye-theme-picker">
+        <div class="row" style="padding-bottom:2px">
+          <span><b>Tema visual mata</b><br><small class="hint">Pilih satu dari 10 skin yang digunakan oleh semua mood. Setiap mood punya palet warna khusus.</small></span>
+        </div>
+        <input type="hidden" id="eye-theme" value="aurora" />
+        <div class="eye-theme-grid" id="eye-theme-grid" aria-label="Pilihan tema visual mata">
+        <button type="button" class="eye-theme-option" data-eye-theme-option="aurora" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="aurora"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Aurora <small>Soft glow</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="neon" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="neon"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Neon <small>Bright</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="pastel" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="pastel"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Pastel <small>Gentle</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="pixel" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="pixel"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Pixel <small>Retro</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="holo" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="holo"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Holographic <small>Future</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="ember" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="ember"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Ember <small>Warm flame</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="ocean" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="ocean"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Ocean <small>Deep aquatic</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="sakura" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="sakura"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Sakura <small>Cherry blossom</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="cyber" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="cyber"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Cyber <small>Cyber pulse</small></span>
+        </button>
+        <button type="button" class="eye-theme-option" data-eye-theme-option="monochrome" aria-pressed="false">
+          <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="monochrome"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
+          <span class="eye-theme-name">Monochrome <small>Silver minimal</small></span>
+        </button>
+        </div>
+      </div>
+  </section>
+
+  <section id="features-section">
     <h2>Fitur</h2>
-    <p class="hint" style="margin:6px 0">Centang fitur yang ingin dipakai. Indikator mic/kamera langsung berlaku; fitur lain <b>butuh restart</b> (pakai Simpan &amp; restart).</p>
+    <p class="hint" style="margin:6px 0">Centang halaman yang ingin ditampilkan. Perubahan daftar halaman langsung dipratinjau di Hub; tekan <b>Simpan</b> agar pilihan tersimpan permanen. Fitur tambahan tertentu mungkin memerlukan restart.</p>
     <div class="feat" id="features">
       <h3>Halaman</h3>
       <label><input type="checkbox" id="f-media" data-feature="media" /> Musik</label>
@@ -166,13 +536,16 @@
       <label><input type="checkbox" id="f-stats" data-feature="stats" /> Status sistem</label>
       <label><input type="checkbox" id="f-clipboard" data-feature="clipboard" /> Riwayat clipboard</label>
       <label><input type="checkbox" id="f-shelf" data-feature="shelf" /> Shelf file</label>
+      <label><input type="checkbox" id="f-reminder" data-feature="reminder" /> Pengingat</label>
+      <label><input type="checkbox" id="f-notes" data-feature="notes" /> Catatan</label>
+      <label><input type="checkbox" id="f-prayer" data-feature="prayer" /> Jadwal shalat</label>
       <h3>Tambahan</h3>
       <label><input type="checkbox" id="f-lyrics" data-feature="lyrics" /> Lirik lagu</label>
       <label><input type="checkbox" id="f-privacy" data-feature="privacy" /> Indikator mic/kamera</label>
     </div>
   </section>
 
-  <section>
+  <section id="nudge-section">
     <h2>Pesan saat pointer diam</h2>
     <p class="hint" style="margin:6px 0">Kalau pointer tidak bergerak cukup lama, notch menyapa dengan pesan imut. Muncul sekali untuk tiap periode diam. Perubahan di sini langsung berlaku.</p>
     <div class="row">
@@ -218,7 +591,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="weather-section">
     <h2>Cuaca</h2>
     <p class="hint" style="margin:6px 0">Lokasi saat ini: <b id="w-current">…</b></p>
     <div class="search">
@@ -232,7 +605,7 @@
     <p class="hint">Berlaku langsung setelah Simpan, tanpa restart.</p>
   </section>
 
-  <section>
+  <section id="behavior-section">
     <h2>Perilaku</h2>
     <div class="row">
       <label for="hide_fullscreen">Sembunyikan notch saat layar penuh <small style="color:var(--muted)">(butuh restart)</small></label>
@@ -244,7 +617,7 @@
     </div>
   </section>
 
-  <section>
+  <section id="position-section">
     <h2>Posisi</h2>
     <p class="hint" style="margin:6px 0">Notch bisa langsung digeser sesuka hati dengan mouse (klik dan seret notch saat diam, atau seret pegangan di bawah hub).</p>
     <div class="row">
@@ -256,388 +629,500 @@
     </div>
   </section>
 
-  <div class="actions">
-    <button class="primary" id="save">Simpan</button>
-    <button id="restart">Simpan &amp; restart</button>
+  <div class="actions action-bar">
+    <button class="primary" id="save">Simpan perubahan</button>
+    <button id="restart">Simpan &amp; mulai ulang</button>
   </div>
 
   <script>
-const T = window.__TAURI__;
-if (!T || !T.core) {
-  document.getElementById("status").textContent = "Error: window.__TAURI__ tidak ada (cek withGlobalTauri: true di tauri.conf.json)";
-  document.getElementById("status").dataset.kind = "err";
-  throw new Error("__TAURI__ tidak tersedia");
-}
-const invoke = (cmd, args) => Promise.race([
-  T.core.invoke(cmd, args),
-  new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
-]);
-// daftar fitur disimpan di config.pages (urutan halaman = urutan di daftar itu)
-const PAGE_IDS = ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf"];
-const EXTRA_IDS = ["lyrics", "privacy"];
-const FEATURE_IDS = [...PAGE_IDS, ...EXTRA_IDS];
-const FALLBACK = {
-  scale: 1,
-  pages: [...FEATURE_IDS],
-  weather: { lat: -6.9175, lon: 107.6191, city: "Bandung" },
-  hide_fullscreen: true,
-  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
-  nudge: { enabled: true, idle_min: 2, message: "Kamu kemana, kok diam saja?", emoji: "🥺", mood: "sad", show_ms: 6000, only_silent: true }
-};
-const EMOJIS = ["🥺", "😴", "👀", "😢", "🥹", "🐱", "🐣", "💤", "😼", "🤔"];
-const $ = (id) => document.getElementById(id);
-const inp = (id) => $(id);
-const statusEl = $("status");
-const pill = $("pill");
-function say(text, kind = "") {
-  statusEl.textContent = text;
-  statusEl.dataset.kind = kind;
-}
-window.addEventListener("error", (e) => say(`Error: ${e.message}`, "err"));
-window.addEventListener("unhandledrejection", (e) => say(`Error: ${String(e.reason)}`, "err"));
-let cfg = structuredClone(FALLBACK);
-let loaded = false;
-const norm = (h, fallback) => {
-  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h ?? "").trim());
-  if (!m) return fallback;
-  let v = m[1].toLowerCase();
-  if (v.length === 3) v = v.split("").map((c) => c + c).join("");
-  return "#" + v;
-};
-const rgb = (h) => {
-  const n = parseInt(h.slice(1), 16);
-  return [n >> 16 & 255, n >> 8 & 255, n & 255];
-};
-const luma = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
-const radios = () => [...document.querySelectorAll('input[name="theme"]')];
-const theme = () => radios().find((r) => r.checked)?.value ?? "auto";
-const COLORS = ["background", "dark_bg", "light_bg", "text", "accent"];
-function fill(c) {
-  const a = c.appearance;
-  radios().forEach((r) => r.checked = r.value === a.theme);
-  inp("background").value = norm(a.background, "#000000");
-  inp("dark_bg").value = norm(a.dark_bg, "#000000");
-  inp("light_bg").value = norm(a.light_bg, "#f5f5f7");
-  inp("text_auto").checked = !a.text;
-  inp("text").value = norm(a.text, "#ffffff");
-  inp("accent_auto").checked = !a.accent;
-  inp("accent").value = norm(a.accent, "#788cff");
-  inp("scale").value = String(c.scale);
-  inp("hide_fullscreen").checked = c.hide_fullscreen;
-  const pages = Array.isArray(c.pages) ? c.pages : FALLBACK.pages;
-  FEATURE_IDS.forEach((id) => inp("f-" + id).checked = pages.includes(id));
-  const w = c.weather ?? FALLBACK.weather;
-  inp("w-lat").value = String(w.lat);
-  inp("w-lon").value = String(w.lon);
-  inp("w-city").value = w.city;
-  const n = c.nudge ?? FALLBACK.nudge;
-  inp("n-enabled").checked = !!n.enabled;
-  inp("n-min").value = String(n.idle_min);
-  inp("n-msg").value = n.message;
-  inp("n-emoji").value = n.emoji;
-  inp("n-mood").value = n.mood;
-  inp("n-sec").value = String(Math.round(n.show_ms / 1e3));
-  inp("n-silent").checked = !!n.only_silent;
-  sync();
-}
-function collect() {
-  const c = structuredClone(cfg);
-  c.appearance = {
-    theme: theme(),
-    background: inp("background").value,
-    dark_bg: inp("dark_bg").value,
-    light_bg: inp("light_bg").value,
-    text: inp("text_auto").checked ? "" : inp("text").value,
-    accent: inp("accent_auto").checked ? "" : inp("accent").value
-  };
-  c.scale = parseFloat(inp("scale").value);
-  c.hide_fullscreen = inp("hide_fullscreen").checked;
-  c.pages = collectPages();
-  const lat = parseFloat(inp("w-lat").value);
-  const lon = parseFloat(inp("w-lon").value);
-  if (isFinite(lat) && isFinite(lon)) {
-    c.weather = { lat, lon, city: inp("w-city").value.trim() || "Lokasi saya" };
-  }
-  c.nudge = collectNudge();
-  return c;
-}
-// bilangan bulat (u32 di Rust) dengan batas; nilai kosong/aneh memakai nilai sebelumnya
-function collectNudge() {
-  const base = cfg.nudge ?? FALLBACK.nudge;
-  const mins = parseInt(inp("n-min").value, 10);
-  const secs = parseFloat(inp("n-sec").value);
-  return {
-    enabled: inp("n-enabled").checked,
-    idle_min: Number.isFinite(mins) ? Math.min(240, Math.max(1, mins)) : base.idle_min,
-    message: inp("n-msg").value.trim() || base.message,
-    emoji: inp("n-emoji").value.trim() || base.emoji,
-    mood: inp("n-mood").value || base.mood,
-    show_ms: Number.isFinite(secs) ? Math.round(Math.min(30, Math.max(2, secs)) * 1e3) : base.show_ms,
-    only_silent: inp("n-silent").checked
-  };
-}
-// pertahankan urutan & nama kustom di config; hanya tambah/buang fitur yang dikenal.
-// Jam yang baru dicentang diletakkan tepat setelah musik, fitur lain di akhir daftar.
-function collectPages() {
-  const on = new Set(FEATURE_IDS.filter((id) => inp("f-" + id).checked));
-  const base = Array.isArray(cfg.pages) ? cfg.pages : FALLBACK.pages;
-  const out = base.filter((n) => !FEATURE_IDS.includes(n) || on.has(n));
-  for (const id of FEATURE_IDS) {
-    if (!on.has(id) || out.includes(id)) continue;
-    if (id === "clock" && out.includes("media")) out.splice(out.indexOf("media") + 1, 0, id);
-    else out.push(id);
-  }
-  return out;
-}
-const weatherValid = () => {
-  const lat = parseFloat(inp("w-lat").value);
-  const lon = parseFloat(inp("w-lon").value);
-  return isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
-};
-function sync() {
-  const t = theme();
-  const on = {
-    background: t === "custom",
-    dark_bg: t === "auto" || t === "dark",
-    light_bg: t === "auto" || t === "light",
-    text: !inp("text_auto").checked,
-    accent: !inp("accent_auto").checked
-  };
-  for (const k of COLORS) {
-    $(`row-${k}`).classList.toggle("off", !on[k] && (k === "background" || k === "dark_bg" || k === "light_bg"));
-    inp(k).disabled = !on[k];
-    $(`hex-${k}`).textContent = on[k] ? inp(k).value : k === "text" || k === "accent" ? "otomatis" : "\u2014";
-  }
-  $("scale_val").textContent = `${Number(inp("scale").value).toFixed(2)}\xD7`;
-  const city = inp("w-city").value.trim() || "\u2014";
-  $("w-current").textContent = weatherValid() ? `${city} (${inp("w-lat").value}, ${inp("w-lon").value})` : "koordinat tidak valid";
-  updatePill();
-}
-function updatePill() {
-  const c = collect();
-  const a = c.appearance;
-  const light = a.theme === "light" || a.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches;
-  const bgHex = a.theme === "custom" ? a.background : light ? a.light_bg : a.dark_bg;
-  const bg = rgb(norm(bgHex, "#000000"));
-  const fg = a.text ? rgb(norm(a.text, "#ffffff")) : luma(bg) > 0.55 ? [17, 17, 17] : [255, 255, 255];
-  pill.style.setProperty("--p-bg", `rgb(${bg.join(",")})`);
-  pill.style.setProperty("--p-fg", `rgb(${fg.join(",")})`);
-  pill.style.setProperty("--p-fg-rgb", fg.join(","));
-  pill.style.setProperty("--p-accent", a.accent ? rgb(norm(a.accent, "#788cff")).join(",") : "120,140,255");
-  pill.style.setProperty("--p-scale", String(c.scale));
-}
-let previewTimer = 0;
-function preview() {
-  if (!loaded) return;
-  clearTimeout(previewTimer);
-  previewTimer = window.setTimeout(() => {
-    invoke("cfg_preview", { cfg: collect() }).catch((e) => say(`Pratinjau gagal: ${e}`, "err"));
-  }, 60);
-}
-document.querySelectorAll("input:not([data-weather]):not([data-os])").forEach((el) => {
-  const isScale = el.id === "scale";
-  el.addEventListener("input", () => {
-    sync();
-    if (!isScale) preview();
-  });
-  el.addEventListener("change", () => {
-    sync();
-    preview();
-  });
-});
-inp("n-mood").addEventListener("change", () => {
-  sync();
-  preview();
-});
-
-// ---------- pesan saat pointer diam ----------
-for (const e of EMOJIS) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "emo-btn";
-  b.textContent = e;
-  b.title = `Pakai ${e}`;
-  b.addEventListener("click", () => {
-    inp("n-emoji").value = e;
-    inp("n-emoji").dispatchEvent(new Event("input"));
-  });
-  $("n-presets").append(b);
-}
-// tampilkan contoh di notch dengan isi form saat ini (belum perlu disimpan)
-$("n-test").addEventListener("click", async () => {
-  try {
-    await invoke("nudge_test", { nudge: collectNudge() });
-    say("Contoh pesan ditampilkan di notch.", "ok");
-  } catch (e) {
-    say(`Gagal menampilkan contoh: ${e}`, "err");
-  }
-});
-
-// ---------- lokasi cuaca ----------
-function pickPlace(h) {
-  inp("w-lat").value = h.latitude.toFixed(4);
-  inp("w-lon").value = h.longitude.toFixed(4);
-  inp("w-city").value = h.name;
-  $("w-results").replaceChildren();
-  sync();
-  say(`Lokasi dipilih: ${h.name}. Klik Simpan untuk menerapkan.`, "ok");
-}
-function showResults(hits) {
-  const ul = $("w-results");
-  ul.replaceChildren();
-  for (const h of hits) {
-    const li = document.createElement("li");
-    const b = document.createElement("button");
-    b.type = "button";
-    const place = [h.name, h.admin1, h.country].filter(Boolean).join(", ");
-    const main = document.createElement("span");
-    main.textContent = place;
-    const sub = document.createElement("small");
-    sub.textContent = `${h.latitude.toFixed(2)}, ${h.longitude.toFixed(2)}`;
-    b.append(main, sub);
-    b.addEventListener("click", () => pickPlace(h));
-    li.append(b);
-    ul.append(li);
-  }
-}
-async function searchPlace() {
-  const q = inp("w-q").value.trim();
-  if (q.length < 2) {
-    say("Ketik minimal 2 huruf nama kota.", "err");
-    return;
-  }
-  say("Mencari\u2026");
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 8e3);
-  try {
-    const r = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=id&format=json`,
-      { signal: ctl.signal }
-    );
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
-    const hits = d.results ?? [];
-    showResults(hits);
-    say(hits.length ? "Pilih salah satu hasil." : "Kota tidak ditemukan. Coba ejaan lain atau isi koordinat manual.", hits.length ? "" : "err");
-  } catch (e) {
-    say(`Pencarian gagal: ${e}`, "err");
-  } finally {
-    clearTimeout(timer);
-  }
-}
-$("w-search").addEventListener("click", () => void searchPlace());
-inp("w-q").addEventListener("keydown", (ev) => {
-  if (ev.key === "Enter") void searchPlace();
-});
-["w-lat", "w-lon", "w-city"].forEach((id) => inp(id).addEventListener("input", sync));
-
-// ---------- jalan otomatis saat OS menyala ----------
-async function refreshAutostart() {
-  try {
-    inp("autostart").checked = Boolean(await invoke("autostart_get"));
-  } catch {
-  }
-}
-inp("autostart").addEventListener("change", async () => {
-  const want = inp("autostart").checked;
-  inp("autostart").disabled = true;
-  try {
-    const now = Boolean(await invoke("autostart_set", { on: want }));
-    inp("autostart").checked = now;
-    say(now ? "Notch akan berjalan otomatis saat komputer menyala." : "Jalan otomatis dimatikan.", "ok");
-  } catch (e) {
-    inp("autostart").checked = !want;
-    say(`Gagal mengubah jalan otomatis: ${e}`, "err");
-  } finally {
-    inp("autostart").disabled = false;
-  }
-});
-
-// ---------- simpan ----------
-const buttons = [$("save"), $("restart")];
-const busy = (b) => buttons.forEach((x) => x.disabled = b);
-async function save(restart) {
-  if (!loaded) {
-    say("Pengaturan belum berhasil dimuat, penyimpanan dibatalkan agar file lama tidak tertimpa.", "err");
-    return;
-  }
-  if (!weatherValid()) {
-    say("Koordinat cuaca tidak valid (lintang -90..90, bujur -180..180).", "err");
-    return;
-  }
-  if (!collectPages().some((n) => PAGE_IDS.includes(n))) {
-    say("Pilih minimal satu halaman di bagian Fitur.", "err");
-    return;
-  }
-  busy(true);
-  say("Menyimpan\u2026");
-  let path = "";
-  try {
-    path = await invoke("cfg_save", { cfg: collect() });
-    cfg = collect();
-    say(`Tersimpan \u2713  ${path}`, "ok");
-  } catch (e) {
-    say(`Gagal menyimpan: ${e}`, "err");
-    busy(false);
-    return;
-  }
-  if (restart) {
-    say("Tersimpan \u2713  memulai ulang\u2026", "ok");
-    try {
-      await invoke("cfg_restart");
-    } catch (e) {
-      say(`Tersimpan \u2713  tapi restart gagal: ${e}`, "err");
+    const T = window.__TAURI__;
+    if (!T || !T.core) {
+      document.getElementById("status").textContent = "Error: window.__TAURI__ tidak ada (cek withGlobalTauri: true di tauri.conf.json)";
+      document.getElementById("status").dataset.kind = "err";
+      throw new Error("__TAURI__ tidak tersedia");
     }
-  }
-  busy(false);
-}
-$("save").addEventListener("click", () => void save(false));
-$("restart").addEventListener("click", () => void save(true));
 
-async function refreshPositionStatus() {
-  try {
-    const pos = await invoke("notch_get_position");
-    const status = $("pos-status");
-    if (status) {
-      status.textContent = pos.custom
-        ? `Kustom (x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)})`
-        : "Tengah atas (bawaan)";
+    const invoke = (cmd, args) => Promise.race([
+      T.core.invoke(cmd, args),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`tidak ada respons dari command "${cmd}" (belum terdaftar di lib.rs?)`)), 8e3))
+    ]);
+
+    // Daftar fitur disimpan di config.pages (urutan halaman = urutan di daftar itu)
+    const PAGE_IDS = ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "reminder", "notes", "clipboard", "shelf", "prayer"];
+    const EXTRA_IDS = ["lyrics", "privacy"];
+    const FEATURE_IDS = [...PAGE_IDS, ...EXTRA_IDS];
+
+    const FALLBACK = {
+      scale: 1,
+      pages: [...FEATURE_IDS],
+      weather: {
+        lat: -6.9175,
+        lon: 107.6191,
+        city: "Bandung"
+      },
+      hide_fullscreen: true,
+      appearance: {
+        theme: "auto",
+        background: "#000000",
+        text: "",
+        dark_bg: "#000000",
+        light_bg: "#f5f5f7",
+        accent: "",
+        default_mood: "normal",
+        eye_theme: "aurora"
+      },
+      nudge: {
+        enabled: true,
+        idle_min: 2,
+        message: "Kamu kemana, kok diam saja?",
+        emoji: "🥺",
+        mood: "sad",
+        show_ms: 6000,
+        only_silent: true
+      }
+    };
+
+    const EMOJIS = ["🥺", "😴", "👀", "😢", "🥹", "🐱", "🐣", "💤", "😼", "🤔"];
+    const $ = (id) => document.getElementById(id);
+    const inp = (id) => $(id);
+    const statusEl = $("status");
+    const pill = $("pill");
+
+    function say(text, kind = "") {
+      statusEl.textContent = text;
+      statusEl.dataset.kind = kind;
     }
-  } catch (e) {
-    console.error(e);
-  }
-}
 
-$("pos-reset")?.addEventListener("click", async () => {
-  try {
-    await invoke("notch_reset_position");
-    say("Posisi notch berhasil dikembalikan ke tengah atas \u2713", "ok");
-    void refreshPositionStatus();
-  } catch (e) {
-    say(`Gagal reset posisi: ${e}`, "err");
-  }
-});
+    window.addEventListener("error", (e) => say(`Error: ${e.message}`, "err"));
+    window.addEventListener("unhandledrejection", (e) => say(`Error: ${String(e.reason)}`, "err"));
 
-if (T.event && T.event.listen) {
-  T.event.listen("position-changed", () => {
-    void refreshPositionStatus();
-  });
-}
+    let cfg = structuredClone(FALLBACK);
+    let loaded = false;
 
-fill(cfg);
-(async () => {
-  try {
-    cfg = await invoke("cfg_get");
-    loaded = true;
+    const norm = (h, fallback) => {
+      const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec((h ?? "").trim());
+      if (!m) return fallback;
+      let v = m[1].toLowerCase();
+      if (v.length === 3) v = v.split("").map((c) => c + c).join("");
+      return "#" + v;
+    };
+
+    const rgb = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      return [n >> 16 & 255, n >> 8 & 255, n & 255];
+    };
+
+    const luma = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+    const radios = () => [...document.querySelectorAll('input[name="theme"]')];
+    const theme = () => radios().find((r) => r.checked)?.value ?? "auto";
+    const COLORS = ["background", "dark_bg", "light_bg", "text", "accent"];
+
+    function fill(c) {
+      const a = c.appearance;
+      radios().forEach((r) => r.checked = r.value === a.theme);
+      inp("background").value = norm(a.background, "#000000");
+      inp("dark_bg").value = norm(a.dark_bg, "#000000");
+      inp("light_bg").value = norm(a.light_bg, "#f5f5f7");
+      inp("text_auto").checked = !a.text;
+      inp("text").value = norm(a.text, "#ffffff");
+      inp("accent_auto").checked = !a.accent;
+      inp("accent").value = norm(a.accent, "#788cff");
+      inp("default-mood").value = a.default_mood || "normal";
+      inp("eye-theme").value = a.eye_theme || "aurora";
+      inp("scale").value = String(c.scale);
+      inp("hide_fullscreen").checked = c.hide_fullscreen;
+
+      const pages = Array.isArray(c.pages) ? c.pages : FALLBACK.pages;
+      FEATURE_IDS.forEach((id) => inp("f-" + id).checked = pages.includes(id));
+
+      const w = c.weather ?? FALLBACK.weather;
+      inp("w-lat").value = String(w.lat);
+      inp("w-lon").value = String(w.lon);
+      inp("w-city").value = w.city;
+
+      const n = c.nudge ?? FALLBACK.nudge;
+      inp("n-enabled").checked = !!n.enabled;
+      inp("n-min").value = String(n.idle_min);
+      inp("n-msg").value = n.message;
+      inp("n-emoji").value = n.emoji;
+      inp("n-mood").value = n.mood;
+      inp("n-sec").value = String(Math.round(n.show_ms / 1e3));
+      inp("n-silent").checked = !!n.only_silent;
+
+      sync();
+    }
+
+    function collect() {
+      const c = structuredClone(cfg);
+      c.appearance = {
+        theme: theme(),
+        background: inp("background").value,
+        dark_bg: inp("dark_bg").value,
+        light_bg: inp("light_bg").value,
+        text: inp("text_auto").checked ? "" : inp("text").value,
+        accent: inp("accent_auto").checked ? "" : inp("accent").value,
+        default_mood: inp("default-mood").value || "normal",
+        eye_theme: inp("eye-theme").value || "aurora"
+      };
+      c.scale = parseFloat(inp("scale").value);
+      c.hide_fullscreen = inp("hide_fullscreen").checked;
+      c.pages = collectPages();
+
+      const lat = parseFloat(inp("w-lat").value);
+      const lon = parseFloat(inp("w-lon").value);
+      if (isFinite(lat) && isFinite(lon)) {
+        c.weather = {
+          lat,
+          lon,
+          city: inp("w-city").value.trim() || "Lokasi saya"
+        };
+      }
+
+      c.nudge = collectNudge();
+      return c;
+    }
+
+    function collectNudge() {
+      const base = cfg.nudge ?? FALLBACK.nudge;
+      const mins = parseInt(inp("n-min").value, 10);
+      const secs = parseFloat(inp("n-sec").value);
+
+      return {
+        enabled: inp("n-enabled").checked,
+        idle_min: Number.isFinite(mins) ? Math.min(240, Math.max(1, mins)) : base.idle_min,
+        message: inp("n-msg").value.trim() || base.message,
+        emoji: inp("n-emoji").value.trim() || base.emoji,
+        mood: inp("n-mood").value || base.mood,
+        show_ms: Number.isFinite(secs) ? Math.round(Math.min(30, Math.max(2, secs)) * 1e3) : base.show_ms,
+        only_silent: inp("n-silent").checked
+      };
+    }
+
+    function collectPages() {
+      const on = new Set(FEATURE_IDS.filter((id) => inp("f-" + id).checked));
+      const base = Array.isArray(cfg.pages) ? cfg.pages : FALLBACK.pages;
+      const out = base.filter((n) => !FEATURE_IDS.includes(n) || on.has(n));
+
+      for (const id of FEATURE_IDS) {
+        if (!on.has(id) || out.includes(id)) continue;
+        if (id === "clock" && out.includes("media")) {
+          out.splice(out.indexOf("media") + 1, 0, id);
+        } else {
+          out.push(id);
+        }
+      }
+      return out;
+    }
+
+    const weatherValid = () => {
+      const lat = parseFloat(inp("w-lat").value);
+      const lon = parseFloat(inp("w-lon").value);
+      return isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+    };
+
+    function syncEyeThemePicker() {
+      const selectedTheme = inp("eye-theme").value || "aurora";
+      const selectedMood = inp("default-mood").value || "normal";
+      document.querySelectorAll("[data-eye-theme-option]").forEach((el) => {
+        const btn = el;
+        const name = btn.dataset.eyeThemeOption;
+        btn.setAttribute("aria-pressed", String(name === selectedTheme));
+        const sample = btn.querySelector(".eyes");
+        if (sample) {
+          sample.dataset.eyeTheme = name || "aurora";
+          sample.dataset.mood = selectedMood;
+        }
+      });
+    }
+
+    function sync() {
+      const t = theme();
+      const on = {
+        background: t === "custom",
+        dark_bg: t === "auto" || t === "dark",
+        light_bg: t === "auto" || t === "light",
+        text: !inp("text_auto").checked,
+        accent: !inp("accent_auto").checked
+      };
+
+      for (const k of COLORS) {
+        $(`row-${k}`).classList.toggle("off", !on[k] && (k === "background" || k === "dark_bg" || k === "light_bg"));
+        inp(k).disabled = !on[k];
+        $(`hex-${k}`).textContent = on[k] ? inp(k).value : (k === "text" || k === "accent" ? "otomatis" : "—");
+      }
+
+      $("scale_val").textContent = `${Number(inp("scale").value).toFixed(2)}×`;
+      const city = inp("w-city").value.trim() || "—";
+      $("w-current").textContent = weatherValid() ? `${city} (${inp("w-lat").value}, ${inp("w-lon").value})` : "koordinat tidak valid";
+      syncEyeThemePicker();
+      updatePill();
+    }
+
+    function updatePill() {
+      const c = collect();
+      const a = c.appearance;
+      const light = a.theme === "light" || (a.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
+      const bgHex = a.theme === "custom" ? a.background : (light ? a.light_bg : a.dark_bg);
+      const bg = rgb(norm(bgHex, "#000000"));
+      const fg = a.text ? rgb(norm(a.text, "#ffffff")) : (luma(bg) > 0.55 ? [17, 17, 17] : [255, 255, 255]);
+
+      pill.style.setProperty("--p-bg", `rgb(${bg.join(",")})`);
+      pill.style.setProperty("--p-fg", `rgb(${fg.join(",")})`);
+      pill.style.setProperty("--p-fg-rgb", fg.join(","));
+      pill.style.setProperty("--p-accent", a.accent ? rgb(norm(a.accent, "#788cff")).join(",") : "120,140,255");
+      pill.style.setProperty("--p-scale", String(c.scale));
+    }
+
+    let previewTimer = 0;
+
+    function preview() {
+      if (!loaded) return;
+      clearTimeout(previewTimer);
+      previewTimer = window.setTimeout(() => {
+        invoke("cfg_preview", {
+          cfg: collect()
+        }).catch((e) => say(`Pratinjau gagal: ${e}`, "err"));
+      }, 60);
+    }
+
+    document.querySelectorAll("[data-eye-theme-option]").forEach((el) => {
+      el.addEventListener("click", () => {
+        inp("eye-theme").value = el.dataset.eyeThemeOption || "aurora";
+        sync();
+        preview();
+      });
+    });
+
+    document.querySelectorAll("input:not([data-weather]):not([data-os])").forEach((el) => {
+      const isScale = el.id === "scale";
+      el.addEventListener("input", () => {
+        sync();
+        if (!isScale) preview();
+      });
+      el.addEventListener("change", () => {
+        sync();
+        preview();
+      });
+    });
+
+    inp("n-mood").addEventListener("change", () => {
+      sync();
+      preview();
+    });
+
+    inp("default-mood").addEventListener("change", () => {
+      sync();
+      preview();
+    });
+
+    // ---------- Pesan saat pointer diam ----------
+    for (const e of EMOJIS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "emo-btn";
+      b.textContent = e;
+      b.title = `Pakai ${e}`;
+      b.addEventListener("click", () => {
+        inp("n-emoji").value = e;
+        inp("n-emoji").dispatchEvent(new Event("input"));
+      });
+      $("n-presets").append(b);
+    }
+
+    $("n-test").addEventListener("click", async () => {
+      try {
+        await invoke("nudge_test", {
+          nudge: collectNudge()
+        });
+        say("Contoh pesan ditampilkan di notch.", "ok");
+      } catch (e) {
+        say(`Gagal menampilkan contoh: ${e}`, "err");
+      }
+    });
+
+    // ---------- Lokasi cuaca ----------
+    function pickPlace(h) {
+      inp("w-lat").value = h.latitude.toFixed(4);
+      inp("w-lon").value = h.longitude.toFixed(4);
+      inp("w-city").value = h.name;
+      $("w-results").replaceChildren();
+      sync();
+      say(`Lokasi dipilih: ${h.name}. Klik Simpan untuk menerapkan.`, "ok");
+    }
+
+    function showResults(hits) {
+      const ul = $("w-results");
+      ul.replaceChildren();
+
+      for (const h of hits) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        const place = [h.name, h.admin1, h.country].filter(Boolean).join(", ");
+
+        const main = document.createElement("span");
+        main.textContent = place;
+
+        const sub = document.createElement("small");
+        sub.textContent = `${h.latitude.toFixed(2)}, ${h.longitude.toFixed(2)}`;
+
+        b.append(main, sub);
+        b.addEventListener("click", () => pickPlace(h));
+        li.append(b);
+        ul.append(li);
+      }
+    }
+
+    async function searchPlace() {
+      const q = inp("w-q").value.trim();
+      if (q.length < 2) {
+        say("Ketik minimal 2 huruf nama kota.", "err");
+        return;
+      }
+      say("Mencari…");
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8e3);
+
+      try {
+        const r = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=id&format=json`, {
+            signal: ctl.signal
+          }
+        );
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        const hits = d.results ?? [];
+        showResults(hits);
+        say(hits.length ? "Pilih salah satu hasil." : "Kota tidak ditemukan. Coba ejaan lain atau isi koordinat manual.", hits.length ? "" : "err");
+      } catch (e) {
+        say(`Pencarian gagal: ${e}`, "err");
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    $("w-search").addEventListener("click", () => void searchPlace());
+    inp("w-q").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") void searchPlace();
+    });
+    ["w-lat", "w-lon", "w-city"].forEach((id) => inp(id).addEventListener("input", sync));
+
+    // ---------- Jalan otomatis saat OS menyala ----------
+    async function refreshAutostart() {
+      try {
+        inp("autostart").checked = Boolean(await invoke("autostart_get"));
+      } catch {}
+    }
+
+    inp("autostart").addEventListener("change", async () => {
+      const want = inp("autostart").checked;
+      inp("autostart").disabled = true;
+      try {
+        const now = Boolean(await invoke("autostart_set", {
+          on: want
+        }));
+        inp("autostart").checked = now;
+        say(now ? "Notch akan berjalan otomatis saat komputer menyala." : "Jalan otomatis dimatikan.", "ok");
+      } catch (e) {
+        inp("autostart").checked = !want;
+        say(`Gagal mengubah jalan otomatis: ${e}`, "err");
+      } finally {
+        inp("autostart").disabled = false;
+      }
+    });
+
+    // ---------- Simpan ----------
+    const buttons = [$("save"), $("restart")];
+    const busy = (b) => buttons.forEach((x) => x.disabled = b);
+
+    async function save(restart) {
+      if (!loaded) {
+        say("Pengaturan belum berhasil dimuat, penyimpanan dibatalkan agar file lama tidak tertimpa.", "err");
+        return;
+      }
+      if (!weatherValid()) {
+        say("Koordinat cuaca tidak valid (lintang -90..90, bujur -180..180).", "err");
+        return;
+      }
+      if (!collectPages().some((n) => PAGE_IDS.includes(n))) {
+        say("Pilih minimal satu halaman di bagian Fitur.", "err");
+        return;
+      }
+
+      busy(true);
+      say("Menyimpan…");
+
+      try {
+        const path = await invoke("cfg_save", {
+          cfg: collect()
+        });
+        cfg = collect();
+        say(`Tersimpan ✓ ${path}`, "ok");
+      } catch (e) {
+        say(`Gagal menyimpan: ${e}`, "err");
+        busy(false);
+        return;
+      }
+
+      if (restart) {
+        say("Tersimpan ✓ memulai ulang…", "ok");
+        try {
+          await invoke("cfg_restart");
+        } catch (e) {
+          say(`Tersimpan ✓ tapi restart gagal: ${e}`, "err");
+        }
+      }
+      busy(false);
+    }
+
+    $("save").addEventListener("click", () => void save(false));
+    $("restart").addEventListener("click", () => void save(true));
+
+    async function refreshPositionStatus() {
+      try {
+        const pos = await invoke("notch_get_position");
+        const status = $("pos-status");
+        if (status) {
+          status.textContent = pos.custom ?
+            `Kustom (x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)})` :
+            "Tengah atas (bawaan)";
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    $("pos-reset")?.addEventListener("click", async () => {
+      try {
+        await invoke("notch_reset_position");
+        say("Posisi notch berhasil dikembalikan ke tengah atas ✓", "ok");
+        void refreshPositionStatus();
+      } catch (e) {
+        say(`Gagal reset posisi: ${e}`, "err");
+      }
+    });
+
+    if (T.event && T.event.listen) {
+      T.event.listen("position-changed", () => {
+        void refreshPositionStatus();
+      });
+    }
+
+    // Inisialisasi awal
     fill(cfg);
-    say("Siap.");
-    void refreshAutostart();
-    void refreshPositionStatus();
-  } catch (e) {
-    say(`Gagal membaca pengaturan: ${e}`, "err");
-  }
-})();
-
-</script>
+    (async () => {
+      try {
+        cfg = await invoke("cfg_get");
+        loaded = true;
+        fill(cfg);
+        say("Siap.");
+        void refreshAutostart();
+        void refreshPositionStatus();
+      } catch (e) {
+        say(`Gagal membaca pengaturan: ${e}`, "err");
+      }
+    })();
+  </script>
 </body>
+
 </html>

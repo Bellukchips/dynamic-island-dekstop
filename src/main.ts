@@ -4,6 +4,15 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
 import { loadFace, saveFace, startClock, type Face } from "./clock";
 import { initCalendar, goToday, shiftMonth } from "./calendar";
+import { initHubNav } from "./hub-nav";
+import { initPrayer } from "./prayer";
+import { getVersion } from "@tauri-apps/api/app";
+import { loadRemoteUpdateConfig, type RemoteUpdateConfig } from "./firebase";
+declare global {
+  interface Window {
+    __NOTCH_UPDATE_CONFIG__?: RemoteUpdateConfig;
+  }
+}
 // ---------- konfigurasi (dari config.toml lewat Rust) ----------
 type Appearance = {
   theme: string;      // "auto" | "dark" | "light" | "custom"
@@ -12,6 +21,8 @@ type Appearance = {
   dark_bg: string;
   light_bg: string;
   accent: string;     // kosong = otomatis dari cover album
+  default_mood: string; // ekspresi mata bawaan saat idle
+  eye_theme: string; // skin visual mata: 10 pilihan, dari aurora hingga monochrome
 };
 type Cfg = {
   scale: number;
@@ -25,17 +36,30 @@ type Cfg = {
 };
 const FALLBACK: Cfg = {
   scale: 1,
-  pages: ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "clipboard", "shelf", "lyrics", "privacy"],
+  pages: ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "reminder", "notes", "clipboard", "shelf", "lyrics", "privacy", "prayer"],
   timing: { hub_auto_ms: 4000, card_ms: 3500, hud_ms: 1500, hover_open_ms: 150, hover_close_ms: 450, sleep_after_s: 60 },
   pomodoro: { focus_min: 25, break_min: 5, long_break_min: 15, rounds: 4 },
-  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
+  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal", eye_theme: "aurora" },
 };
-const CFG: Cfg = { ...FALLBACK, ...((window as any).__CFG__ ?? {}) };
+const rawCfg = (window as any).__CFG__ ?? {};
+const CFG: Cfg = {
+  ...FALLBACK,
+  ...rawCfg,
+  appearance: { ...FALLBACK.appearance, ...(rawCfg.appearance ?? {}) },
+};
 const T = CFG.timing;
 // fitur tambahan (bukan halaman) juga diatur lewat daftar pages di config
 const featureOn = (name: string) => CFG.pages.includes(name);
 // indikator mic/kamera bisa dinyalakan/dimatikan langsung dari jendela pengaturan (tanpa restart)
 let privacyOn = featureOn("privacy");
+
+// Diisi setelah elemen hub tersedia. Memungkinkan perubahan daftar halaman dari Settings
+// tanpa harus menghapus/membuat ulang jendela aplikasi.
+let names: string[] = [];
+let pageCount = 0;
+let page = 0;
+let setNavActive: (page: number) => void = () => {};
+let rebuildHubPagesFn: ((pages: string[]) => void) | undefined;
 
 // Elemen dari halaman yang dimatikan di config tidak ada di DOM (dibuang saat startup).
 // Kembalikan elemen cadangan yang terlepas dari dokumen: operasi padanya tidak berefek, tapi kode di
@@ -50,12 +74,15 @@ const $ = (id: string): HTMLElement => {
   return stub;
 };
 const notch = $("notch");
+// Pengaman: #notch overflow:hidden tidak boleh tergulir (mis. oleh scrollIntoView / fokus input),
+// karena isi pil akan bergeser keluar dan terlihat kosong.
+notch.addEventListener("scroll", () => { notch.scrollTop = 0; notch.scrollLeft = 0; });
 const eyes = document.querySelector<HTMLElement>(".eyes")!;
 const eyeEls = document.querySelectorAll<HTMLElement>(".eye");
 const isWin = navigator.userAgent.includes("Windows");
 
 // ---------- state bersama ----------
-type View = "bt" | "dev" | "hub" | "hud" | "lyr" | "cal";
+type View = "bt" | "dev" | "hub" | "hud" | "lyr" | "cal" | "rem" | "prayerAlert" | "update";
 let override: View | null = null;
 let playing = false;
 let hideTimer: number | undefined;
@@ -67,24 +94,36 @@ let insideSince = 0;
 let hubByHover = false;
 let closeAt = 0;
 let settleUntil = 0;
+let holdHover = false; // setelah drop, jangan langsung buka hub selama kursor masih di atas notch
+
+// posisi notch (piksel logis, titik tengah x & sisi atas y). Dideklarasikan di sini supaya
+// semua fungsi di bawah bisa memakainya tanpa soal urutan.
+let currentCx = -1;
+let currentTy = 0;
 
 // Wajah notch saat tidak ada kartu/musik: mata ("eyes") atau jam + tanggal ("clock").
 // Berganti ketika hover dilepas (hub menutup) dan halaman yang terakhir dilihat adalah halaman jam.
-const clockOn = featureOn("clock");
+let clockOn = featureOn("clock");
 let idleFace: Face = clockOn ? loadFace() : "eyes";
 
 // ---------- ukuran (dikalikan skala dari config) ----------
-// lebar jendela = lebar pil + 20 (10 di tiap sisi untuk lengkung "telinga" notch)
+// Ukuran view = ukuran pil notch. Jendela native sendiri berukuran TETAP (lihat WIN_BASE).
 const BASE_SIZES: Record<string, [number, number]> = {
   idle: [150, 28],
   compact: [250, 40],
   compactLyrics: [360, 40],
   edgeIdle: [80, 80],
   edgeMedia: [80, 120],
-  hub: [420, 148],
+  bottomIdle: [100, 44],
+  bottomMedia: [140, 60],
+  hub: [580, 202],
   bt: [360, 80],
   dev: [360, 80],
+  rem: [360, 80],
+  prayerAlert: [360, 80],
   hud: [320, 60],
+  update: [460, 104],
+
   lyr: [420, 230],
   clock: [240, 28],
   cal: [420, 336],
@@ -95,20 +134,26 @@ const BASE_HIT: Record<string, [number, number]> = {
   compactLyrics: [340, 34],
   edgeIdle: [60, 80],
   edgeMedia: [60, 120],
-  hub: [400, 140],
+  bottomIdle: [80, 44],
+  update: [460, 104],
+
+  bottomMedia: [120, 60],
+  hub: [560, 242], // mencakup tombol pusatkan yang mengambang di bawah hub
   bt: [340, 74],
   dev: [340, 74],
+  rem: [340, 74],
+  prayerAlert: [340, 74],
   hud: [300, 52],
-  lyr: [400, 222],
+  lyr: [400, 268], // mencakup tombol pusatkan di bawah
   clock: [220, 24],
-  cal: [400, 328],
+  cal: [400, 360],
 };
 const scaleMap = (m: Record<string, [number, number]>) =>
   Object.fromEntries(
     Object.entries(m).map(([k, [w, h]]) => [k, [Math.round(w * CFG.scale), Math.round(h * CFG.scale)]])
   ) as Record<string, [number, number]>;
 
-const SIZES = scaleMap(BASE_SIZES); // ukuran JENDELA
+const SIZES = scaleMap(BASE_SIZES); // ukuran view (jendela + 10px telinga tiap sisi)
 const HIT = scaleMap(BASE_HIT);     // ukuran PIL (area klik)
 document.documentElement.style.setProperty("--s", String(CFG.scale));
 
@@ -125,6 +170,12 @@ const luma = (c: number[]) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255
 const fixedAccent = () => hexRgb(CFG.appearance.accent) !== null;
 
 const osLight = matchMedia("(prefers-color-scheme: light)");
+const EYE_THEMES = ["aurora", "neon", "pastel", "pixel", "holo", "ember", "ocean", "sakura", "cyber", "monochrome"] as const;
+function applyEyeTheme() {
+  const requested = (CFG.appearance.eye_theme || "aurora").toLowerCase();
+  eyes.dataset.eyeTheme = (EYE_THEMES as readonly string[]).includes(requested) ? requested : "aurora";
+}
+
 function applyTheme() {
   const a = CFG.appearance;
   const light = a.theme === "light" || (a.theme === "auto" && osLight.matches);
@@ -141,6 +192,7 @@ function applyTheme() {
   else st.removeProperty("--accent");
 }
 applyTheme();
+applyEyeTheme();
 osLight.addEventListener("change", applyTheme); // ikut berubah saat tema OS diganti
 
 // ukuran langsung berubah tanpa restart
@@ -148,8 +200,10 @@ function applyScale(v: number) {
   CFG.scale = Math.min(1.5, Math.max(0.5, v));
   Object.assign(SIZES, scaleMap(BASE_SIZES));
   Object.assign(HIT, scaleMap(BASE_HIT));
+  syncHubDynamicHeight();
   document.documentElement.style.setProperty("--s", String(CFG.scale));
   lastView = ""; // paksa ukuran jendela & area klik dihitung ulang
+  void syncWindow();
   render();
 }
 
@@ -158,13 +212,34 @@ listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-ch
   const p = e.payload;
   if (!p) return;
   if (p.appearance) {
-    CFG.appearance = p.appearance;
+    const moodChanged = p.appearance.default_mood !== undefined &&
+      p.appearance.default_mood !== CFG.appearance.default_mood;
+    // Gabungkan supaya event pengaturan parsial tidak menghapus properti appearance lain.
+    CFG.appearance = { ...CFG.appearance, ...p.appearance };
     applyTheme();
+    applyEyeTheme();
+    if (moodChanged) updateBase();
   }
   if (typeof p.scale === "number" && p.scale !== CFG.scale) applyScale(p.scale);
-  // indikator mic/kamera langsung menyala/mati sesuai centang di pengaturan
+  // Perubahan halaman dipratinjau langsung dari Settings. Jangan membuang elemen DOM:
+  // simpan semua halaman lalu tampilkan/urutkan yang aktif agar halaman bisa diaktifkan lagi.
   if (Array.isArray(p.pages)) {
-    const on = p.pages.includes("privacy");
+    const nextPages = p.pages.filter((name): name is string => typeof name === "string");
+    const pagesChanged = nextPages.length !== CFG.pages.length ||
+      nextPages.some((name, i) => name !== CFG.pages[i]);
+    if (pagesChanged) {
+      const clockWasOn = clockOn;
+      CFG.pages = [...nextPages];
+      clockOn = featureOn("clock");
+      if (!clockOn && idleFace === "clock") {
+        idleFace = "eyes";
+      } else if (!clockWasOn && clockOn) {
+        idleFace = loadFace();
+      }
+      rebuildHubPagesFn?.(CFG.pages);
+    }
+
+    const on = CFG.pages.includes("privacy");
     if (on !== privacyOn) {
       privacyOn = on;
       paintPrivacy();
@@ -172,21 +247,96 @@ listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-ch
   }
 });
 
-function setHit(view: string, winW: number) {
-  const [hw, hh] = HIT[view];
-  // Ketika menempel di tepi, konten bergeser 10px ke arah tepi.
-  // Area interaksi harus ikut rata kiri/kanan, bukan selalu di tengah jendela.
-  const x = notch.classList.contains("is-edge-left")
-    ? 0
-    : notch.classList.contains("is-edge-right")
-      ? Math.max(0, Math.round(winW - hw))
-      : Math.max(0, Math.round((winW - hw) / 2));
-  invoke("set_hit_area", { x, w: hw, h: hh });
+// ---------- jendela berukuran tetap + penempatan notch di dalamnya ----------
+const BOTTOM_TY = 100000; // ty sangat besar = menempel di dasar layar (di-clamp oleh Rust)
+const isBottomTy = (ty: number) => ty >= BOTTOM_TY / 2;
+const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
+
+// Jendela native berukuran TETAP (tidak pernah di-resize) -> tidak ada getaran dari resize native.
+const WIN_BASE: [number, number] = [600, 336];
+const winLogical = (): [number, number] => [
+  Math.round(WIN_BASE[0] * CFG.scale),
+  Math.round(WIN_BASE[1] * CFG.scale),
+];
+let MON = { x: 0, y: 0, w: window.screen.width, h: window.screen.height };
+let shellOx = 0, shellOy = 0;
+
+// geser notch di dalam jendela (hanya perlu saat posisi bebas dekat tepi, supaya view lebar tidak keluar layar)
+function placeShell(view?: string) {
+  const [W, H] = winLogical();
+  const v = view ?? notch.dataset.view ?? "idle";
+  const [vw, vh] = SIZES[v] ?? SIZES.idle;
+  const left = notch.classList.contains("is-edge-left");
+  const right = notch.classList.contains("is-edge-right");
+  const bottom = notch.classList.contains("is-bottom");
+  let ox = 0, oy = 0;
+  if (currentCx !== -1) {
+    if (!left && !right) {
+      const winCx = clamp(currentCx, MON.x + W / 2, MON.x + MON.w - W / 2);
+      const want = clamp(currentCx, MON.x + vw / 2, MON.x + MON.w - vw / 2);
+      ox = want - winCx;
+    }
+    if (!bottom) {
+      const winTy = clamp(currentTy, MON.y, MON.y + MON.h - H);
+      const wantTy = Math.min(currentTy, MON.y + MON.h - vh);
+      oy = wantTy - winTy;
+    }
+  }
+  // Posisi melayang (termasuk SAAT drag): beri jarak dari tepi atas supaya hub tidak menempel.
+  // Jarak dibatasi sisa ruang jendela agar view tinggi (kalender) tidak terpotong.
+  if (notch.classList.contains("is-floating")) {
+    const gap = Math.round(14 * CFG.scale);
+    oy += Math.max(0, Math.min(gap, H - (oy + vh)));
+  }
+
+  shellOx = ox;
+  shellOy = oy;
+  const shell = $("shell");
+  shell.style.setProperty("--ox", `${ox}px`);
+  shell.style.setProperty("--oy", `${oy}px`);
 }
 
-// ---------- view: idle / compact / hub / bt / dev / hud ----------
+// area klik pil dalam koordinat jendela
+function hitRect(view: string) {
+  const [W, H] = winLogical();
+  const [hw, hh] = HIT[view] ?? HIT.idle;
+  const left = notch.classList.contains("is-edge-left");
+  const right = notch.classList.contains("is-edge-right");
+  const bottom = notch.classList.contains("is-bottom");
+  const x = left ? 0 : right ? W - hw : (W - hw) / 2 + shellOx;
+  const y = bottom ? H - hh : shellOy;
+  return { x: Math.round(x), y: Math.round(y), w: hw, h: hh };
+}
+function setHit(view: string) {
+  const r = hitRect(view);
+  invoke("set_hit_area", { x: r.x, y: r.y, w: r.w, h: r.h });
+}
+
+async function syncWindow() {
+  // Ambil geometri monitor dari sisi Rust (jika tersedia)
+  try {
+    MON = await invoke<typeof MON>("notch_monitor");
+  } catch {
+    // Fallback: pakai ukuran layar bawaan
+  }
+
+  // Jika posisi notch belum diatur (-1), default ke tengah atas monitor
+  if (currentCx === -1) {
+    currentCx = MON.x + Math.round(MON.w / 2);
+  }
+
+  const [w, h] = winLogical();
+  try {
+    await invoke("set_size", { w, h });
+  } catch (e) {
+    console.error(e);
+  }
+  updatePositionUI(notch.classList.contains("is-custom-pos"), currentTy, currentCx);
+}
+
+// ---------- view: idle / compact / hub / bt / dev / hud / rem ----------
 let lastView = "";
-let appliedView = ""; // view yang ukuran native-nya sudah selesai diterapkan
+let appliedView = ""; // view yang area kliknya sudah selesai diterapkan
 let sizeRequestId = 0;
 let lastSizeRequestAt = 0;
 
@@ -196,73 +346,47 @@ function applySize(view: string, previousView = appliedView || view) {
   const [w, h] = SIZES[view];
   const [oldW, oldH] = SIZES[previousView] ?? [w, h];
   const isExpanding = w >= oldW && h >= oldH;
-
-  // Ketika membuka, pasang hitbox besar lebih awal agar hover tetap stabil.
-  // Ketika menutup, pertahankan hitbox lama sampai native resize selesai agar
-  // click-through tidak berubah di tengah animasi.
-  if (isExpanding) setHit(view, w);
-
   const stillCurrent = () => requestId === sizeRequestId && lastView === view;
-  const doResize = () => {
+
+  placeShell(view);
+  const finish = () => {
     if (!stillCurrent()) return;
-    invoke("set_size", { w, h })
-      .then(() => {
-        if (!stillCurrent()) return;
-        if (!isExpanding) setHit(view, w);
-        appliedView = view;
-        updatePositionUI(notch.classList.contains("is-custom-pos"), currentTy, currentCx);
-      })
-      .catch((e) => console.error("Gagal mengubah ukuran notch:", e));
+    setHit(view);
+    appliedView = view;
   };
 
-  // Membuka: jendela dibesarkan sekarang supaya notch yang melebar tidak terpotong.
-  // Menutup: tunggu animasi CSS notch selesai dulu. Kalau jendela mengecil lebih awal, tepi jendela
-  // memotong notch yang masih besar, jadi tampak persegi tanpa sudut membulat sampai animasinya selesai.
-  const resize = () => {
-    if (isExpanding) { doResize(); return; }
-    let fired = false;
-    const go = () => {
-      if (fired) return;
-      fired = true;
-      notch.removeEventListener("transitionend", onEnd);
-      clearTimeout(fallback);
-      doResize();
-    };
-    const onEnd = (e: TransitionEvent) => {
-      if (e.target === notch && (e.propertyName === "height" || e.propertyName === "width")) go();
-    };
-    notch.addEventListener("transitionend", onEnd);
-    const fallback = window.setTimeout(go, 450); // pengaman kalau tidak ada transisi (ukuran CSS sudah sama)
-  };
+  // Membuka: hitbox besar langsung dipasang. Menutup: tunggu animasi CSS selesai.
+  if (isExpanding) { finish(); return; }
 
-  if (view === "edgeMedia" || view === "edgeIdle") {
-    const sw = window.screen.availWidth || window.screen.width;
-    const edgeCx = notch.classList.contains("is-edge-left")
-      ? 40
-      : notch.classList.contains("is-edge-right") ? sw - 40 : currentCx;
-    if (edgeCx !== -1) {
-      currentCx = edgeCx;
-      invoke("notch_move_to", { cx: edgeCx, ty: currentTy })
-        .then(() => { if (stillCurrent()) resize(); })
-        .catch((e) => console.error("Gagal mengunci posisi notch di tepi:", e));
-    } else {
-      resize();
-    }
-  } else {
-    resize();
-  }
+  let fired = false;
+  const go = () => {
+    if (fired) return;
+    fired = true;
+    notch.removeEventListener("transitionend", onEnd);
+    clearTimeout(fallback);
+    finish();
+  };
+  const onEnd = (e: TransitionEvent) => {
+    if (e.target === notch && (e.propertyName === "height" || e.propertyName === "width")) go();
+  };
+  notch.addEventListener("transitionend", onEnd);
+  const fallback = window.setTimeout(go, 450);
 }
+
 function render() {
   const hasCompactLyrics = playing && lyState === "ok" && !!ly?.lines.length;
-  const atScreenSide = notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
+  const atSide = notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
+  const atBottom = notch.classList.contains("is-bottom");
   // Saat pointer baru masuk, tahan state mini sampai hover delay terpenuhi.
   // Dengan begitu expand langsung ke hub, bukan lewat tampilan horizontal perantara.
   const hoverPending = inside && Date.now() - insideSince < T.hover_open_ms;
-  const edgeCollapsed = atScreenSide && !override && !isDraggingWindow && (!inside || hoverPending);
+  const bubble = (atSide || atBottom) && !override && !isDraggingWindow &&
+    (!inside || hoverPending || holdHover);
   const view = override ?? (
-    edgeCollapsed ? (playing ? "edgeMedia" : "edgeIdle")
+    bubble
+      ? (atSide ? (playing ? "edgeMedia" : "edgeIdle") : (playing ? "bottomMedia" : "bottomIdle"))
       : playing ? (hasCompactLyrics ? "compactLyrics" : "compact")
-      : idleFace === "clock" ? "clock" : "idle"
+        : idleFace === "clock" ? "clock" : "idle"
   );
   notch.dataset.view = view;
   notch.dataset.playing = String(playing);
@@ -270,31 +394,39 @@ function render() {
   if (view !== lastView) {
     // Catat view asal agar saat collapse hitbox lama bisa dipertahankan hingga akhir.
     const previousView = appliedView || lastView || view;
-    settleUntil = Date.now() + 80;
+    // Selama animasi berlangsung, tepi notch bisa menyapu di bawah kursor dan memicu
+    // mouseenter/mouseleave berkali-kali. settleUntil dipakai untuk mengabaikan perubahan
+    // hover itu (lihat setInside) sampai animasi selesai.
+    settleUntil = Date.now() + 400;
     lastView = view;
     appliedView = "";
 
-    // CSS dan native resize berjalan dengan durasi/kurva selaras; request lama dibatalkan.
     applySize(view, previousView);
   }
 }
 
-// pengaman: kalau ukuran jendela tidak cocok dengan view saat ini, terapkan ulang
+// pengaman: kalau area klik tidak cocok dengan view saat ini, terapkan ulang
 setInterval(() => {
-  // Perintah set_size bisa berlangsung selama animasi native. Jangan memulai
-  // animasi kedua ketika perintah pertama belum sempat selesai.
   if (lastView && appliedView !== lastView && Date.now() - lastSizeRequestAt > 2500) {
     applySize(lastView);
   }
 }, 1500);
 
+// true selama pengguna sedang mengetik di kolom teks dalam notch (jangan tutup walau kursor keluar)
+function typing(): boolean {
+  const a = document.activeElement;
+  return !!a && document.hasFocus() && notch.contains(a) &&
+    (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
+}
+
 function expand(view: View, ms = 3000) {
+  if (override === "rem" && view !== "rem") return; // pengingat aktif tidak boleh tertimpa
   override = view;
   render();
   clearTimeout(hideTimer);
   if (ms > 0) {
     hideTimer = window.setTimeout(() => {
-      if (view === "hub" && inside) return;
+      if (view === "hub" && (inside || typing())) return;
       override = null;
       hubByHover = false;
       render();
@@ -319,12 +451,20 @@ function collapse() {
 
 // ---------- mood: dasar + sementara ----------
 type Mood = "normal" | "happy" | "sleepy" | "surprised" | "angry" | "love" | "suspicious" | "sad";
-let baseMood: Mood = "normal";
+const MOODS: Mood[] = ["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious", "sad"];
+// ekspresi bawaan saat idle (tidak tidur, tidak memutar lagu), bisa diatur di pengaturan
+const defaultMood = (): Mood => {
+  const m = CFG.appearance.default_mood as Mood;
+  return MOODS.includes(m) ? m : "normal";
+};
+let baseMood: Mood = defaultMood();
 let tempTimer: number | undefined;
 let sleeping = false;
 let lastActivity = Date.now();
 
 const applyMood = (m: Mood) => { eyes.dataset.mood = m; };
+// Terapkan mood bawaan sejak awal, tanpa menunggu interval update pertama.
+applyMood(baseMood);
 
 export function setBase(m: Mood) {
   baseMood = m;
@@ -346,7 +486,7 @@ function updateBase() {
   if (sleeping && !shouldSleep) flash("surprised", 900);
   sleeping = shouldSleep;
 
-  setBase(shouldSleep || lowBattery ? "sleepy" : playing ? "happy" : "normal");
+  setBase(shouldSleep || lowBattery ? "sleepy" : playing ? "happy" : defaultMood());
 }
 setInterval(updateBase, 3000);
 
@@ -359,40 +499,78 @@ const pagesEl = $("pages");
 const track = $("track");
 const dotsEl = $("dots");
 
-// buang halaman yang tidak aktif di config, lalu urutkan sesuai config
-track.querySelectorAll<HTMLElement>(".page").forEach((p) => {
-  if (!CFG.pages.includes(p.dataset.page ?? "")) p.remove();
-});
-CFG.pages.forEach((name) => {
-  const el = track.querySelector(`[data-page="${name}"]`);
-  if (el) track.appendChild(el);
-});
-const names = [...track.querySelectorAll<HTMLElement>(".page")].map((p) => p.dataset.page!);
+// Simpan semua page di DOM dan hanya sembunyikan yang nonaktif. Dengan begitu Settings bisa
+// mengaktifkan halaman lagi saat preview tanpa mengharuskan aplikasi membangun DOM ulang.
+const allHubPages = [...track.querySelectorAll<HTMLElement>(".page")];
 const pageOf = (n: string) => Math.max(0, names.indexOf(n));
 // membuka hub dari wajah jam: mulai di halaman jam, supaya melepas hover tanpa menggeser tetap menjaga jam
 const homePage = () => (clockOn && idleFace === "clock" ? pageOf("clock") : page);
-const pageCount = names.length;
-let page = 0;
 
-for (let i = 0; i < pageCount; i++) {
-  const d = document.createElement("span");
-  d.className = "dot";
-  d.addEventListener("click", (e) => { e.stopPropagation(); setPage(i); });
-  dotsEl.appendChild(d);
+function rebuildHubPages(enabledPages: string[]) {
+  const previousName = names[page];
+  const validNames = [...new Set(enabledPages.filter((name) =>
+    allHubPages.some((el) => el.dataset.page === name)
+  ))];
+
+  // Jangan biarkan hub tanpa halaman ketika pengguna sedang mengubah checkbox di Settings.
+  if (validNames.length === 0) {
+    const fallback = allHubPages.find((el) => el.dataset.page === "media") ?? allHubPages[0];
+    if (fallback?.dataset.page) validNames.push(fallback.dataset.page);
+  }
+
+  const active = new Set(validNames);
+  for (const el of allHubPages) {
+    if (active.has(el.dataset.page ?? "")) el.style.removeProperty("display");
+    else el.style.display = "none";
+  }
+
+  // Urutan slide harus sama dengan daftar dari config.toml; halaman nonaktif ditempatkan di belakang.
+  for (const name of validNames) {
+    const el = allHubPages.find((candidate) => candidate.dataset.page === name);
+    if (el) track.appendChild(el);
+  }
+  for (const el of allHubPages) {
+    if (!active.has(el.dataset.page ?? "")) track.appendChild(el);
+  }
+
+  names = validNames;
+  pageCount = names.length;
+  dotsEl.replaceChildren();
+  for (let i = 0; i < pageCount; i++) {
+    const d = document.createElement("span");
+    d.className = "dot";
+    d.addEventListener("click", (e) => { e.stopPropagation(); setPage(i); });
+    dotsEl.appendChild(d);
+  }
+
+  // initHubNav mengganti item lama, jadi checkbox preview berulang tidak membuat ikon duplikat.
+  setNavActive = initHubNav(names, (i) => setPage(i));
+  const priorIndex = previousName ? names.indexOf(previousName) : -1;
+  page = priorIndex >= 0 ? priorIndex : Math.min(Math.max(page, 0), Math.max(0, pageCount - 1));
+  setPage(page);
 }
+
+rebuildHubPagesFn = rebuildHubPages;
+rebuildHubPages(CFG.pages);
 
 function setPage(i: number) {
   page = Math.max(0, Math.min(pageCount - 1, i));
   track.style.setProperty("--page", String(page));
   track.style.setProperty("--drag", "0px");
   dotsEl.querySelectorAll(".dot").forEach((d, n) => d.classList.toggle("active", n === page));
+  setNavActive(page);
+  if (names[page] !== "notes" && notch.classList.contains("notes-expanded")) {
+    setNotesExpanded(false);
+  }
   if (names[page] === "quick" || names[page] === "tools") refreshQuick();
   if (names[page] === "clipboard") refreshClip();
   if (names[page] === "shelf") refreshShelf();
+  if (names[page] === "reminder") refreshReminders();
+  if (names[page] === "notes") refreshNotes();
 }
-setPage(0);
 
 function openHub(p: number, ms = 0) {
+  if (override === "rem") return; // pengingat aktif tidak boleh tertimpa hub
   setPage(p);
   hubByHover = ms === 0;
   closeAt = 0;
@@ -402,11 +580,8 @@ function openHub(p: number, ms = 0) {
 // geser dengan drag mouse
 let startX = 0, dx = 0, dragging = false, moved = false;
 
-pagesEl.addEventListener("pointerdown", (e) => {
-  if ((e.target as HTMLElement).closest("button")) return;
-  dragging = true; moved = false; startX = e.clientX; dx = 0;
-  track.classList.add("dragging");
-});
+// Geser halaman dengan drag mouse dimatikan: drag body sekarang memindahkan notch.
+// Ganti halaman lewat scroll/touchpad, ikon di bar atas, atau tombol ← →.
 window.addEventListener("pointermove", (e) => {
   if (!dragging) return;
   dx = e.clientX - startX;
@@ -432,7 +607,8 @@ pagesEl.addEventListener("click", (e) => { if (moved) e.stopPropagation(); }, tr
 let wheelLock = false;
 notch.addEventListener("wheel", (e) => {
   if (notch.dataset.view !== "hub") return;
-  if ((e.target as HTMLElement).closest(".clip-list")) return; // biarkan daftar clipboard di-scroll
+  if ((e.target as HTMLElement).closest(".clip-list, .nt-pv-body, .nt-list")) return; // biarkan daftar/preview di-scroll
+  if ((e.target as HTMLElement).closest(".nv-list")) return; // nav ikon boleh di-scroll sendiri
   const sh = (e.target as HTMLElement).closest<HTMLElement>(".sh-list"); // shelf: scroll mendatar
   if (sh && sh.scrollWidth > sh.clientWidth) { sh.scrollLeft += e.deltaY || e.deltaX; return; }
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
@@ -443,25 +619,61 @@ notch.addEventListener("wheel", (e) => {
 }, { passive: true });
 
 // ---------- hover: dihitung dari posisi kursor ----------
+// Listener harus aktif di Windows juga. Sebelumnya dibungkus `if (!isWin)`,
+// sehingga pada Windows status `inside` tidak pernah diperbarui dan hub tidak terbuka.
+let pointerX = -1;
+let pointerY = -1;
+let hoverSyncTimer: number | undefined;
+
+const posBar = $("notch-pos-bar");
+const rectHas = (x: number, y: number) => {
+  const r = notch.getBoundingClientRect();
+  if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+  // tombol pusatkan mengambang di luar notch: kursor di atasnya (dan celah menuju ke sana) tetap dianggap "di dalam"
+  if (inside && !isDraggingWindow) {
+    const b = posBar.getBoundingClientRect();
+    const top = Math.min(b.top, r.bottom), bottom = Math.max(b.bottom, r.top);
+    return x >= b.left && x <= b.right && y >= top && y <= bottom;
+  }
+  return false;
+};
+// tombol pusatkan hanya muncul saat notch di-hover (di Windows :hover tidak andal karena jendela click-through)
+const syncPosBar = () => $("shell").classList.toggle("pos-visible", inside && !isDraggingWindow);
+
 function setInside(v: boolean) {
+  // Hindari hover bolak-balik ketika ukuran native window sedang beranimasi.
+  // Namun, jadwalkan sinkronisasi ulang agar status hover tidak tertinggal setelah animasi.
+  if (Date.now() < settleUntil) {
+    window.clearTimeout(hoverSyncTimer);
+    hoverSyncTimer = window.setTimeout(() => {
+      if (pointerX >= 0 && pointerY >= 0) {
+        setInside(rectHas(pointerX, pointerY));
+      }
+    }, Math.max(25, settleUntil - Date.now() + 25));
+    return;
+  }
   if (v === inside) return;
+  if (!v) holdHover = false;
   inside = v;
   insideSince = v ? Date.now() : 0;
+  syncPosBar();
   if (v) flash("surprised", 900);
   render();
 }
 
-const rectHas = (x: number, y: number) => {
-  const r = notch.getBoundingClientRect();
-  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-};
-if (!isWin) {
-  window.addEventListener("pointermove", (e) => setInside(rectHas(e.clientX, e.clientY)));
-  window.addEventListener("pointerup", (e) => setInside(rectHas(e.clientX, e.clientY)));
-  notch.addEventListener("mouseenter", () => setInside(true));
-  document.documentElement.addEventListener("mouseleave", () => setInside(false));
-  window.addEventListener("blur", () => setInside(false));
-}
+window.addEventListener("pointermove", (e) => {
+  pointerX = e.clientX;
+  pointerY = e.clientY;
+  setInside(rectHas(pointerX, pointerY));
+});
+window.addEventListener("pointerup", (e) => {
+  pointerX = e.clientX;
+  pointerY = e.clientY;
+  setInside(rectHas(pointerX, pointerY));
+});
+notch.addEventListener("mouseenter", () => setInside(true));
+document.documentElement.addEventListener("mouseleave", () => setInside(false));
+window.addEventListener("blur", () => setInside(false));
 
 // watchdog: buka/tutup hub dengan hysteresis
 setInterval(() => {
@@ -473,12 +685,13 @@ setInterval(() => {
       if (!hubByHover) { clearTimeout(hideTimer); hubByHover = true; }
       closeAt = 0;
     } else if (hubByHover) {
-      if (!closeAt) closeAt = now + T.hover_close_ms;
+      if (typing()) { closeAt = 0; } // sedang mengetik: jangan tutup
+      else if (!closeAt) closeAt = now + T.hover_close_ms;
       else if (now >= closeAt) { closeAt = 0; collapse(); }
     }
   } else {
     closeAt = 0;
-    if (!override && inside && now - insideSince > T.hover_open_ms) openHub(homePage());
+    if (!override && inside && !holdHover && now - insideSince > T.hover_open_ms) openHub(homePage());
   }
 }, 120);
 
@@ -495,67 +708,96 @@ let startTy = 0;
 let windowDragMoved = false;
 let suppressClickUntil = 0;
 
-let currentCx = -1;
-let currentTy = 0;
-
 function updatePositionUI(custom: boolean, topY: number, cx?: number) {
   if (cx !== undefined) currentCx = cx;
   currentTy = topY;
 
-  // Floating mengatur bentuk untuk posisi di bawah tepi atas; deteksi sisi layar
-  // harus tetap aktif walaupun topY = 0 (mis. notch di pojok kiri/kanan atas).
-  const isFloating = custom && topY > 8;
+  const shell = $("shell");
+  const bottom = custom && isBottomTy(topY);
+  const topOffset = topY - MON.y;
+
+  // sisi layar: cx sudah di-snap ke tepi monitor (zona snap 70px)
+  let side: "left" | "right" | null = null;
+  if (custom && !bottom && currentCx !== -1) {
+    if (currentCx - MON.x <= 70) side = "left";
+    else if (MON.x + MON.w - currentCx <= 70) side = "right";
+  }
+
+  // Saat sedang ditahan dan mendekati tepi atas, hentikan efek drag lebih awal.
+  // Kalau menunggu sampai koordinat benar-benar tersnap, animasi scale masih aktif
+  // selama beberapa frame dan telinga #shell tampak terpisah dari badan #notch.
+  const topApproach = isDraggingWindow && !bottom && side === null &&
+    topOffset > 8 && topOffset <= Math.round(96 * CFG.scale);
+  const isFloating = custom && !bottom && topOffset > 8;
+
   notch.classList.toggle("is-custom-pos", custom);
   notch.classList.toggle("is-floating", isFloating);
-  const shell = $("shell");
-  if (shell) shell.classList.toggle("is-floating", isFloating);
+  notch.classList.toggle("is-bottom", bottom);
+  notch.classList.toggle("is-top-approach", topApproach);
+  shell.classList.toggle("is-floating", isFloating);
+  shell.classList.toggle("is-bottom", bottom);
+  shell.classList.toggle("is-top-approach", topApproach);
+  const changed =
+    notch.classList.contains("is-edge-left") !== (side === "left") ||
+    notch.classList.contains("is-edge-right") !== (side === "right");
+  notch.classList.toggle("is-edge-left", side === "left");
+  notch.classList.toggle("is-edge-right", side === "right");
+  shell.classList.toggle("is-edge-left", side === "left");
+  shell.classList.toggle("is-edge-right", side === "right");
 
-  if (custom && currentCx !== -1) {
-    const sw = window.screen.availWidth || window.screen.width;
-    // currentCx adalah titik tengah jendela yang dipindahkan. Pakai setengah
-    // lebar jendela terluas (hub/calendar), bukan compactLyrics, agar deteksi
-    // tetap benar ketika posisi disimpan saat hub sedang terbuka.
-    const maxWindowWidth = Math.max(...Object.values(SIZES).map(([w]) => w));
-    const edgeHalfW = maxWindowWidth / 2;
-    const leftDistance = currentCx - edgeHalfW;
-    const rightDistance = sw - (currentCx + edgeHalfW);
-    const wasLeft = notch.classList.contains("is-edge-left");
-    const wasRight = notch.classList.contains("is-edge-right");
+  // Ketika magnet ke tepi atas, hentikan efek mengecil/memantul saat drag.
+  // Telinga lengkung tetap terlihat, tetapi badan notch tidak membentuk celah di tengah.
+  const topDocked = !bottom && !isFloating && topOffset <= 8 && side === null;
+  notch.classList.toggle("is-top", topDocked);
+  shell.classList.toggle("is-top", topDocked);
 
-    // Hysteresis: masuk sisi pada 10px, tetapi pertahankan status sampai
-    // jarak melewati 28px agar ukuran/posisi yang berubah tidak memicu flicker.
-    const isLeft = wasLeft ? leftDistance <= 28 : leftDistance <= 10;
-    const isRight = wasRight ? rightDistance <= 28 : rightDistance <= 10;
-    const wasEdge = wasLeft || wasRight;
+  placeShell();
+  if (changed) render();
+}
 
-    notch.classList.toggle("is-edge-left", isLeft && !isRight);
-    notch.classList.toggle("is-edge-right", isRight && !isLeft);
-    if (shell) {
-      shell.classList.toggle("is-edge-left", isLeft && !isRight);
-      shell.classList.toggle("is-edge-right", isRight && !isLeft);
-    }
-    const isEdge = (isLeft && !isRight) || (isRight && !isLeft);
-    if (wasEdge !== isEdge || wasLeft !== notch.classList.contains("is-edge-left") || wasRight !== notch.classList.contains("is-edge-right")) {
-      render();
-    }
+// Magnet ke tepi atas/bawah/kiri/kanan dengan histeresis lebar supaya tidak bolak-balik.
+let lastSent = { cx: NaN, ty: NaN };
+function snapPosition(rawCx: number, rawTy: number, curX: number, curY: number) {
+  const L = MON.x, R = MON.x + MON.w, Tp = MON.y;
+  // tepi bawah: pakai yang lebih kecil antara ukuran monitor dari Rust dan ukuran layar webview
+  const B = MON.y + Math.min(MON.h, window.screen.height || MON.h);
+  let cx = rawCx, ty = rawTy;
+
+  const wasL = notch.classList.contains("is-edge-left");
+  const wasR = notch.classList.contains("is-edge-right");
+  const wasB = notch.classList.contains("is-bottom");
+  const wasT = !wasB && !notch.classList.contains("is-floating");
+
+  // Bawah ditentukan dari posisi KURSOR (kursor tidak bisa melewati tepi layar, jadi selalu tercapai).
+  // Menghitung dari posisi pil gagal kalau titik pegang pil tidak sama dengan titik awal drag.
+  const nearBottom = B - curY <= (wasB ? 90 : 48) || B - (rawTy + 28 * CFG.scale) <= (wasB ? 60 : 24);
+  if (nearBottom) {
+    ty = BOTTOM_TY;
+    cx = rawCx; // di dasar layar: cx bebas, tidak ikut menjadi bubble sisi
   } else {
-    const wasEdge = notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
-    notch.classList.remove("is-edge-left", "is-edge-right");
-    if (shell) shell.classList.remove("is-edge-left", "is-edge-right");
-    if (wasEdge) render();
+    if (rawTy - Tp <= (wasT ? 60 : 24)) ty = Tp;
+    if (rawCx - L <= (wasL ? 110 : 70) || curX - L <= (wasL ? 90 : 40)) cx = L;
+    else if (R - rawCx <= (wasR ? 110 : 70) || R - curX <= (wasR ? 90 : 40)) cx = R;
   }
+  return { cx, ty };
 }
 
 async function startWindowDrag(e: PointerEvent, targetEl: HTMLElement) {
   if (e.button !== 0) return; // hanya klik kiri
   try {
     const pos = await invoke<[number, number]>("notch_start_move");
-    startCx = pos[0];
-    startTy = pos[1];
+    const s = CFG.scale;
+    startCx = notch.classList.contains("is-edge-left") ? MON.x + 30 * s
+      : notch.classList.contains("is-edge-right") ? MON.x + MON.w - 30 * s
+        : pos[0];
+    startTy = isBottomTy(pos[1]) ? MON.y + MON.h - 28 * s : pos[1];
     startScreenX = e.screenX;
     startScreenY = e.screenY;
     isDraggingWindow = true;
+    syncPosBar();
     windowDragMoved = false;
+    lastSent = { cx: NaN, ty: NaN };
+    $("shell").classList.add("moving");
     notch.classList.add("is-dragging");
     targetEl.setPointerCapture(e.pointerId);
   } catch (err) {
@@ -571,21 +813,26 @@ function onWindowPointerMove(e: PointerEvent) {
     windowDragMoved = true;
   }
   if (windowDragMoved) {
-    const newCx = startCx + dx;
-    const newTy = startTy + dy;
-    invoke("notch_move_to", { cx: newCx, ty: newTy });
-    updatePositionUI(true, newTy, newCx);
-    setBase('love');
+    const s = snapPosition(startCx + dx, startTy + dy, e.screenX, e.screenY);
+    if (s.cx !== lastSent.cx || s.ty !== lastSent.ty) { // jangan kirim ulang yang sama
+      lastSent = s;
+      invoke("notch_move_to", { cx: s.cx, ty: s.ty });
+      updatePositionUI(true, s.ty, s.cx);
+    }
+    setBase("love");
   }
 }
 
 function onWindowPointerUp(e: PointerEvent, targetEl: HTMLElement) {
   if (!isDraggingWindow) return;
   isDraggingWindow = false;
+  syncPosBar();
   notch.classList.remove("is-dragging");
+  $("shell").classList.remove("moving");
+  if (windowDragMoved) holdHover = true;
   try {
     targetEl.releasePointerCapture(e.pointerId);
-  } catch {}
+  } catch { }
   if (windowDragMoved) {
     suppressClickUntil = Date.now() + 350;
     insideSince = Date.now();
@@ -594,8 +841,13 @@ function onWindowPointerUp(e: PointerEvent, targetEl: HTMLElement) {
     invoke("notch_end_move", { save: false });
   }
 
-  // Drag state baru saja berakhir: hitung target sekali lagi agar notch langsung
-  // masuk mode tepi yang benar, tanpa menunggu event pointer lain.
+  // Drag selesai: hitung ulang posisi melayang dan area klik supaya tetap sinkron.
+  if (windowDragMoved) {
+    updatePositionUI(true, currentTy, currentCx);
+    setHit(notch.dataset.view ?? "idle");
+  }
+
+  // Hitung target sekali lagi agar notch langsung masuk mode tepi yang benar.
   render();
 }
 
@@ -609,35 +861,12 @@ async function resetPosition() {
   }
 }
 
-// Pegangan drag pada hub
-const posBar = $("notch-pos-bar");
-const dragHandle = $("drag-handle");
-
-const onDragStart = (e: PointerEvent) => {
-  if ((e.target as HTMLElement).closest("#notch-reset-btn")) return;
-  e.stopPropagation();
-  startWindowDrag(e, dragHandle);
-};
-
-dragHandle.addEventListener("pointerdown", onDragStart);
-dragHandle.addEventListener("pointermove", onWindowPointerMove);
-dragHandle.addEventListener("pointerup", (e) => onWindowPointerUp(e, dragHandle));
-dragHandle.addEventListener("pointercancel", (e) => onWindowPointerUp(e, dragHandle));
-
-if (posBar) {
-  posBar.addEventListener("pointerdown", onDragStart);
-}
-
-// Drag pada notch saat idle / compact atau dengan menahan Alt
+// Drag langsung dari body notch di SEMUA view (idle, compact, bubble, hub, lirik, kalender, kartu).
+// Kontrol interaktif dikecualikan supaya tetap bisa diklik / diketik.
+const NO_DRAG = "button, input, textarea, select, a, .dot";
 notch.addEventListener("pointerdown", (e) => {
-  const view = notch.dataset.view;
-  const isIdleOrCompact = view === "idle" || view === "compact" || view === "clock";
-  const isButton = !!(e.target as HTMLElement).closest("button");
-  if (isButton) return;
-
-  if (isIdleOrCompact || e.altKey) {
-    startWindowDrag(e, notch);
-  }
+  if ((e.target as HTMLElement).closest(NO_DRAG)) return;
+  startWindowDrag(e, notch);
 });
 notch.addEventListener("pointermove", onWindowPointerMove);
 notch.addEventListener("pointerup", (e) => onWindowPointerUp(e, notch));
@@ -662,9 +891,20 @@ listen<{ custom: boolean; x?: number; y?: number }>("position-changed", (e) => {
 // Inisialisasi status posisi saat startup
 invoke<{ custom: boolean; x: number; y: number }>("notch_get_position")
   .then((p) => {
-    updatePositionUI(p.custom, p.y, p.x);
+    if (p.custom) {
+      // Posisi kustom: pakai cx & ty yang tersimpan
+      updatePositionUI(true, p.y, p.x);
+    } else {
+      // Posisi default: pusatkan notch di tengah atas monitor (MON.w / 2)
+      const centerCx = MON.x + Math.round(MON.w / 2);
+      updatePositionUI(false, 0, centerCx);
+    }
   })
-  .catch(() => {});
+  .catch(() => {
+    // Fallback: pusatkan menggunakan screen.width
+    const centerCx = Math.round(window.screen.width / 2);
+    updatePositionUI(false, 0, centerCx);
+  });
 
 // ---------- klik notch ----------
 let clicks: number[] = [];
@@ -680,7 +920,8 @@ notch.addEventListener("click", (e) => {
   if (clicks.length >= 5) { flash("angry", 2000); clicks = []; }
   else flash("happy", 1200);
 
-  if (override === "bt" || override === "dev" || override === "hud") collapse();
+  // kartu pengingat (rem) tidak ditutup lewat klik: hanya lewat tombol Tunda / Selesai
+  if (override === "bt" || override === "dev" || override === "hud" || override === "prayerAlert") collapse();
   else if (!override) openHub(homePage());
 });
 notch.addEventListener("dblclick", () => flash("love", 2500));
@@ -703,7 +944,7 @@ function look(dx: number, dy: number) {
   const dist = Math.hypot(dx, dy) || 1;
   const k = Math.min(1, dist / 300);
   eyes.style.setProperty("--lx", `${(dx / dist) * max * k}px`);
-  eyes.style.setProperty("--ly", `${Math.max(-2, Math.min(1, (dy / dist) * max * k))}px`);
+  eyes.style.setProperty("--ly", `${Math.max(-1, Math.min(1, (dy / dist) * max * k))}px`);
 }
 let lastPos = { dx: 0, dy: 0 };
 listen<{ dx: number; dy: number }>("cursor", (e) => {
@@ -713,15 +954,16 @@ listen<{ dx: number; dy: number }>("cursor", (e) => {
     markActive();
   }
   lastPos = { dx, dy };
-  look(dx, dy);
+
+  const v = notch.dataset.view ?? "idle";
+  const hr = hitRect(v);
+  const [WW] = winLogical();
+  look(dx - (hr.x + hr.w / 2 - WW / 2), dy - hr.y); // mata menghadap kursor dari tengah notch, bukan tengah jendela
 
   // Windows: hover dihitung dari posisi global (jendela click-through tidak menerima event mouse)
   if (isWin) {
-    const [hw, hh] = HIT[notch.dataset.view ?? "idle"];
-    const edgeOffset = notch.classList.contains("is-edge-left") ? -10
-      : notch.classList.contains("is-edge-right") ? 10 : 0;
-    const notchDx = dx - edgeOffset;
-    setInside(Math.abs(notchDx) <= hw / 2 && dy >= -12 && dy <= hh - 12);
+    const px = WW / 2 + dx, py = dy + 12;
+    setInside(px >= hr.x && px <= hr.x + hr.w && py >= hr.y && py <= hr.y + hr.h);
   }
 });
 setInterval(() => {
@@ -771,7 +1013,7 @@ if (compactLayer && compactBars) {
   compactLayer.insertBefore(compactLyrics, compactBars);
 }
 
-// Tampilan ringkas di sisi layar: hanya cover album berbentuk disc berputar.
+// Tampilan ringkas di sisi/dasar layar: hanya cover album berbentuk disc berputar.
 const edgeDisc = document.createElement("div");
 edgeDisc.className = "edge-disc";
 edgeDisc.setAttribute("aria-hidden", "true");
@@ -1103,6 +1345,7 @@ const HUD_ICONS = {
 };
 
 function showHud(kind: string, value: number, muted: boolean) {
+  if (override === "rem") return; // jangan menimpa pengingat aktif
   if ((override === "hub" || override === "lyr" || override === "cal") && inside) return;
 
   const v = Math.max(0, Math.min(100, Math.round(value)));
@@ -1647,6 +1890,551 @@ if (names.includes("shelf")) {
 }
 refreshShelf();
 
+// ---------- pengingat (reminder) ----------
+type RepeatMode = "none" | "daily" | "monthly";
+type Reminder = {
+  id: string;
+  text: string;
+  due_at: number;
+  done: boolean;
+  notified: boolean;
+  repeat_mode?: RepeatMode | string;
+  repeat_daily?: boolean; // kompatibilitas dengan data lama
+  repeat_anchor_at: number;
+  repeat_day_of_month?: number;
+  repeat_timezone_offset_minutes?: number;
+};
+
+const fmtDue = (ms: number) => {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString("id-ID", {
+    day: "numeric", month: "short",
+    year: sameYear ? undefined : "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+};
+
+// pengingat yang sedang berbunyi; kartu tetap tampil sampai Selesai / Tunda ditekan
+const ringing = new Map<string, Reminder>();
+let audioCtx: AudioContext | null = null;
+
+function beep() {
+  try {
+    audioCtx ??= new AudioContext();
+    const ctx = audioCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const t = ctx.currentTime;
+    [0, 0.2].forEach((off) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t + off);
+      g.gain.exponentialRampToValueAtTime(0.25, t + off + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.15);
+      o.connect(g).connect(ctx.destination);
+      o.start(t + off);
+      o.stop(t + off + 0.16);
+    });
+  } catch { /* audio tidak tersedia: kartu tetap tampil */ }
+}
+
+function showRing() {
+  const list = [...ringing.values()];
+  if (list.length === 0) {
+    if (override === "rem") collapse();
+    return;
+  }
+  const r = list[0];
+  $("rem-text").textContent = r.text;
+  $("rem-sub").textContent =
+    list.length > 1
+      ? `Pengingat · +${list.length - 1} lagi`
+      : `Pengingat${r.due_at ? " · " + fmtDue(r.due_at) : ""}`;
+  hubByHover = false;
+  expand("rem", 0); // tanpa timer: tidak hilang sendiri
+}
+
+function endRing(action: "stop" | "snooze") {
+  const r = [...ringing.values()][0];
+  if (!r) return;
+  ringing.delete(r.id);
+  const call = action === "stop"
+    ? invoke<Reminder[]>("reminders_stop", { id: r.id })
+    : invoke<Reminder[]>("reminders_snooze", { id: r.id, minutes: 5 });
+  call.then(paintReminders).catch(() => { });
+  flash(action === "stop" ? "happy" : "sleepy", 1200);
+  showRing(); // tampilkan pengingat berikutnya, atau tutup kalau sudah habis
+}
+document.getElementById("rem-stop")?.addEventListener("click", (e) => { e.stopPropagation(); endRing("stop"); });
+document.getElementById("rem-snooze")?.addEventListener("click", (e) => { e.stopPropagation(); endRing("snooze"); });
+
+function paintReminders(items: Reminder[]) {
+  // sinkronkan kartu: pengingat yang diselesaikan/dihapus/ditunda dari menu ikut hilang
+  let changed = false;
+  for (const id of [...ringing.keys()]) {
+    const it = items.find((r) => r.id === id);
+    if (!it || it.done || it.due_at > Date.now()) { ringing.delete(id); changed = true; }
+  }
+  if (changed) showRing();
+
+  const list = document.getElementById("rm-list");
+  if (!list) return; // halaman reminder dimatikan di config
+  const left = items.filter((r) => !r.done).length;
+  $("rm-count").textContent = left ? String(left) : "";
+  list.replaceChildren();
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "rm-empty";
+    empty.textContent = "Belum ada pengingat";
+    list.appendChild(empty);
+    return;
+  }
+
+  const now = Date.now();
+  items.forEach((r) => {
+    const overdue = !r.done && r.due_at > 0 && r.due_at <= now;
+    const row = document.createElement("button"); // button: tidak memicu geser halaman
+    row.className = "rm-item" + (r.done ? " done" : "") + (overdue ? " overdue" : "");
+    row.title = r.text;
+
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const txt = document.createElement("span");
+    txt.className = "txt";
+    txt.textContent = r.text;
+    row.append(dot, txt);
+    if (r.due_at) {
+      const due = document.createElement("span");
+      due.className = "due";
+      const mode: RepeatMode = r.repeat_mode === "monthly"
+        ? "monthly"
+        : (r.repeat_mode === "daily" || r.repeat_daily ? "daily" : "none");
+      const repeatLabel = mode === "daily"
+        ? " · ↻ Harian"
+        : mode === "monthly"
+          ? ` · ↻ Tanggal ${r.repeat_day_of_month || new Date(r.repeat_anchor_at || r.due_at).getDate()}/bln`
+          : "";
+      due.textContent = `${fmtDue(r.due_at)}${repeatLabel}`;
+      row.appendChild(due);
+    }
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "×";
+    row.appendChild(x);
+
+    row.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if ((e.target as HTMLElement).closest(".x")) {
+        invoke<Reminder[]>("reminders_remove", { id: r.id }).then(paintReminders).catch(() => { });
+      } else {
+        invoke<Reminder[]>("reminders_toggle", { id: r.id }).then(paintReminders).catch(() => { });
+        if (!r.done) flash("happy", 900);
+      }
+    });
+    list.appendChild(row);
+  });
+}
+
+function refreshReminders() {
+  invoke<Reminder[]>("reminders_list").then(paintReminders).catch(() => { });
+}
+
+document.getElementById("rm-clear-done")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  invoke<Reminder[]>("reminders_clear_done").then(paintReminders).catch(() => { });
+});
+
+// ---- picker tanggal, jam, dan pengulangan ----
+const remPage = document.querySelector<HTMLElement>(".p-reminder");
+let pickAt = 0;      // waktu terpilih (ms), 0 = tanpa waktu
+let pk = new Date(); // nilai yang sedang diatur di picker
+let repeatMode: RepeatMode = "none";
+
+function paintWhen() {
+  $("rm-when-txt").textContent = pickAt ? fmtDue(pickAt) : "";
+  $("rm-when").classList.toggle("set", pickAt !== 0);
+}
+
+function paintRepeatMode() {
+  const select = document.getElementById("pk-repeat-mode") as HTMLSelectElement | null;
+  if (select) select.value = repeatMode;
+}
+
+const pkDateInput = document.getElementById("pk-date-input") as HTMLInputElement | null;
+
+function formatDmy(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear()).padStart(4, "0");
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+// Format otomatis saat pengguna mengetik: dd/mm/yyyy.
+function formatDmyInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length < 2) return digits;
+  if (digits.length === 2) return `${digits}/`;
+  if (digits.length < 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length === 4) return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function parseDmy(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const check = new Date(year, month - 1, day);
+  if (check.getFullYear() !== year || check.getMonth() !== month - 1 || check.getDate() !== day) return null;
+  return { year, month, day };
+}
+
+function setPkDateFromInput(): boolean {
+  if (!pkDateInput) return false;
+  const parsed = parseDmy(pkDateInput.value);
+  if (!parsed) return false;
+  // Konstruksi ulang tanggal agar tanggal 31 tidak overflow saat berpindah bulan.
+  pk = new Date(parsed.year, parsed.month - 1, parsed.day, pk.getHours(), pk.getMinutes(), 0, 0);
+  return true;
+}
+
+function paintPick() {
+  $("pk-h").textContent = String(pk.getHours()).padStart(2, "0");
+  $("pk-m").textContent = String(pk.getMinutes()).padStart(2, "0");
+}
+
+// Jaga ukuran panel hub ketika picker pengingat atau daftar catatan diperluas.
+// Window native tetap berukuran tetap; ukuran view dan hitbox disesuaikan di dalamnya.
+function syncHubDynamicHeight() {
+  const reminderExpanded = notch.classList.contains("reminder-picking");
+  const notesExpanded = notch.classList.contains("notes-expanded");
+  const height = reminderExpanded ? 230 : notesExpanded ? 300 : BASE_SIZES.hub[1];
+  const hitHeight = reminderExpanded ? 242 : notesExpanded ? 330 : BASE_HIT.hub[1];
+  SIZES.hub[1] = Math.round(height * CFG.scale);
+  HIT.hub[1] = Math.round(hitHeight * CFG.scale);
+  if (notch.dataset.view === "hub") {
+    placeShell("hub");
+    setHit("hub");
+  }
+}
+
+// Saat picker terbuka, beri ruang vertikal tambahan agar baris pengulangan tidak terpotong.
+function setReminderPickerExpanded(expanded: boolean) {
+  notch.classList.toggle("reminder-picking", expanded);
+  syncHubDynamicHeight();
+}
+
+function openPick() {
+  if (pickAt) {
+    pk = new Date(pickAt);
+    if (pkDateInput) pkDateInput.value = formatDmy(pk);
+  } else {
+    // Tanggal default selalu hari ini; waktu awal dibulatkan ke kelipatan 5 menit berikutnya.
+    const today = new Date();
+    if (pkDateInput) pkDateInput.value = formatDmy(today);
+    pk = new Date(today);
+    pk.setMinutes(Math.ceil(pk.getMinutes() / 5) * 5, 0, 0);
+  }
+  pkDateInput?.classList.remove("invalid");
+  pkDateInput?.removeAttribute("aria-invalid");
+  paintPick();
+  paintRepeatMode();
+  remPage?.classList.add("picking");
+  setReminderPickerExpanded(true);
+}
+const closePick = () => {
+  remPage?.classList.remove("picking");
+  setReminderPickerExpanded(false);
+};
+
+document.getElementById("rm-when")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (remPage?.classList.contains("picking")) closePick(); else openPick();
+});
+document.querySelectorAll<HTMLElement>("[data-pk]").forEach((b) =>
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [unit, sign] = [b.dataset.pk![0], b.dataset.pk![1] === "+" ? 1 : -1];
+    if (unit === "h") pk.setHours(pk.getHours() + sign);
+    else if (unit === "m") pk.setMinutes(pk.getMinutes() + sign * 5);
+    paintPick();
+  })
+);
+
+// Sisipkan garis miring otomatis setelah DD dan MM, sambil menjaga posisi caret.
+pkDateInput?.addEventListener("input", () => {
+  const oldValue = pkDateInput.value;
+  const oldCaret = pkDateInput.selectionStart ?? oldValue.length;
+  const digitsBeforeCaret = oldValue.slice(0, oldCaret).replace(/\D/g, "").length;
+  const formatted = formatDmyInput(oldValue);
+  pkDateInput.value = formatted;
+
+  let nextCaret = digitsBeforeCaret;
+  if (digitsBeforeCaret === 2 && formatted.length >= 3) nextCaret = 3;
+  else if (digitsBeforeCaret === 4 && formatted.length >= 6) nextCaret = 6;
+  else if (digitsBeforeCaret > 2 && digitsBeforeCaret < 4) nextCaret = digitsBeforeCaret + 1;
+  else if (digitsBeforeCaret > 4) nextCaret = digitsBeforeCaret + 2;
+  nextCaret = Math.min(nextCaret, formatted.length);
+  pkDateInput.setSelectionRange(nextCaret, nextCaret);
+  pkDateInput.classList.remove("invalid");
+  pkDateInput.removeAttribute("aria-invalid");
+
+  const parsed = parseDmy(formatted);
+  if (parsed) {
+    pk = new Date(parsed.year, parsed.month - 1, parsed.day, pk.getHours(), pk.getMinutes(), 0, 0);
+  }
+});
+
+pkDateInput?.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  // Backspace tepat setelah slash menghapus digit di depannya, bukan slash otomatis.
+  if (e.key === "Backspace" && pkDateInput.selectionStart === pkDateInput.selectionEnd) {
+    const caret = pkDateInput.selectionStart ?? 0;
+    if (caret > 0 && pkDateInput.value[caret - 1] === "/") {
+      e.preventDefault();
+      const digits = pkDateInput.value.replace(/\D/g, "");
+      const digitsBefore = pkDateInput.value.slice(0, caret - 1).replace(/\D/g, "").length;
+      const removeAt = Math.max(0, digitsBefore - 1);
+      const nextDigits = digits.slice(0, removeAt) + digits.slice(removeAt + 1);
+      pkDateInput.value = formatDmyInput(nextDigits);
+      const nextCaret = Math.min(removeAt, pkDateInput.value.length);
+      pkDateInput.setSelectionRange(nextCaret, nextCaret);
+      pkDateInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+});
+document.getElementById("pk-repeat-mode")?.addEventListener("change", (e) => {
+  e.stopPropagation();
+  const value = (e.currentTarget as HTMLSelectElement).value;
+  repeatMode = value === "daily" || value === "monthly" ? value : "none";
+});
+document.getElementById("pk-ok")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!setPkDateFromInput()) {
+    pkDateInput?.classList.add("invalid");
+    pkDateInput?.setAttribute("aria-invalid", "true");
+    pkDateInput?.focus();
+    return;
+  }
+  pk.setSeconds(0, 0);
+  pickAt = pk.getTime();
+  pkDateInput?.classList.remove("invalid");
+  pkDateInput?.removeAttribute("aria-invalid");
+  paintWhen();
+
+  // Jika teks pengingat sudah diisi, tombol Atur sekaligus menyimpan item ke daftar.
+  // Jika input masih kosong, simpan pilihan tanggal/jam sementara dan tutup picker;
+  // item bisa dibuat setelah teks diisi dengan tombol tambah.
+  const reminderText = (document.getElementById("rm-input") as HTMLInputElement | null)?.value.trim();
+  if (reminderText) {
+    addReminder();
+    return;
+  }
+  closePick();
+});
+document.getElementById("pk-clear")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  pickAt = 0;
+  pkDateInput?.classList.remove("invalid");
+  pkDateInput?.removeAttribute("aria-invalid");
+  repeatMode = "none";
+  paintWhen();
+  paintRepeatMode();
+  closePick();
+});
+
+function addReminder() {
+  const input = $("rm-input") as HTMLInputElement;
+  const text = input.value.trim();
+  if (!text) return;
+  const mode: RepeatMode = pickAt > 0 ? repeatMode : "none";
+  const timezoneOffsetMinutes = pickAt > 0 ? new Date(pickAt).getTimezoneOffset() : new Date().getTimezoneOffset();
+  invoke<Reminder[]>("reminders_add", {
+    text,
+    dueAt: pickAt,
+    repeatMode: mode,
+    timezoneOffsetMinutes,
+  })
+    .then((items) => {
+      paintReminders(items);
+      input.value = "";
+      pickAt = 0;
+      repeatMode = "none";
+      paintWhen();
+      paintRepeatMode();
+      closePick();
+      flash("happy", 900);
+    })
+    .catch(() => { });
+}
+document.getElementById("rm-add-btn")?.addEventListener("click", (e) => { e.stopPropagation(); addReminder(); });
+document.getElementById("rm-input")?.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if ((e as KeyboardEvent).key === "Enter") addReminder();
+});
+paintWhen();
+paintRepeatMode();
+
+// dikirim Rust saat jatuh tempo, lalu diulang tiap 20 detik sampai dihentikan
+listen<Reminder>("reminder-due", (e) => {
+  const r = e.payload;
+  const first = !ringing.has(r.id);
+  ringing.set(r.id, r);
+  beep();
+  if (first || override === null) {
+    flash("surprised", 2500);
+    showRing();
+  } else {
+    flash("surprised", 1200);
+  }
+  refreshReminders();
+});
+
+refreshReminders();
+
+// ---------- catatan (notes) — tersimpan permanen, terpisah dari config ----------
+type Note = { id: string; text: string; updated_at: number };
+
+function fmtNoteDate(ms: number): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Baru saja";
+  if (diffMin < 60) return `${diffMin} mnt lalu`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH} jam lalu`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD} hari lalu`;
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+}
+
+function openNoteDetail(n: Note) {
+  invoke("open_note_detail", { id: n.id }).catch(console.error);
+}
+function paintNotes(items: Note[]) {
+  const list = document.getElementById("nt-list");
+  if (!list) return;
+  $("nt-count").textContent = items.length ? String(items.length) : "";
+  list.replaceChildren();
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "nt-empty";
+    empty.textContent = "Belum ada catatan";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach((n) => {
+    const card = document.createElement("button");
+    card.className = "nt-item";
+    card.title = "Klik untuk buka detail";
+
+    // Preview teks (2 baris pertama)
+    const preview = document.createElement("span");
+    preview.className = "nt-item-preview";
+    const lines = n.text.split("\n");
+    preview.textContent = lines.slice(0, 2).join(" ").slice(0, 120) + (n.text.length > 120 ? "…" : "");
+
+    // Meta baris bawah
+    const meta = document.createElement("span");
+    meta.className = "nt-item-meta";
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "nt-item-date";
+    dateSpan.textContent = fmtNoteDate(n.updated_at);
+
+    const lenSpan = document.createElement("span");
+    lenSpan.className = "nt-item-len";
+    lenSpan.textContent = `${n.text.length} kar`;
+
+    meta.appendChild(dateSpan);
+    meta.appendChild(lenSpan);
+
+    // Tombol hapus
+    const delBtn = document.createElement("span");
+    delBtn.className = "nt-item-del";
+    delBtn.textContent = "×";
+    delBtn.title = "Hapus";
+
+    card.appendChild(preview);
+    card.appendChild(meta);
+    card.appendChild(delBtn);
+
+    card.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if ((e.target as HTMLElement).closest(".nt-item-del")) {
+        invoke<Note[]>("notes_remove", { id: n.id }).then(paintNotes).catch(() => { });
+      } else {
+        openNoteDetail(n);
+      }
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function setNotesExpanded(expanded: boolean) {
+  notch.classList.toggle("notes-expanded", expanded);
+  const button = document.getElementById("nt-expand");
+  if (button) {
+    const label = expanded ? "Sembunyikan daftar catatan" : "Tampilkan daftar catatan";
+    button.setAttribute("aria-expanded", String(expanded));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }
+  syncHubDynamicHeight();
+}
+
+document.getElementById("nt-expand")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setNotesExpanded(!notch.classList.contains("notes-expanded"));
+});
+
+function refreshNotes() {
+  invoke<Note[]>("notes_list").then(paintNotes).catch(() => { });
+}
+
+// Dengarkan perubahan dari jendela detail
+listen("notes-changed", () => refreshNotes()).catch(() => { });
+
+document.getElementById("nt-clear")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  invoke<Note[]>("notes_clear").then(paintNotes).catch(() => { });
+  flash("surprised", 900);
+});
+
+function addNote() {
+  const input = $("nt-input") as HTMLTextAreaElement;
+  const text = input.value.trim();
+  if (!text) return;
+  invoke<Note[]>("notes_add", { text })
+    .then((items) => {
+      paintNotes(items);
+      input.value = "";
+      flash("love", 900);
+    })
+    .catch(() => { });
+}
+document.getElementById("nt-add-btn")?.addEventListener("click", (e) => { e.stopPropagation(); addNote(); });
+document.getElementById("nt-input")?.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if ((e as KeyboardEvent).key === "Enter" && !(e as KeyboardEvent).shiftKey) {
+    e.preventDefault();
+    addNote();
+  }
+});
+
+refreshNotes();
+
 // ---------- tes manual lewat keyboard ----------
 // T ganti mata <-> jam | M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
 const keyMoods: Mood[] = ["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious"];
@@ -1701,6 +2489,110 @@ initNudge({
   },
   mood: (m, ms) => flash(m as Mood, ms),
 });
+
+// Pengingat jadwal shalat memakai kartu kecil tersendiri, tidak menimpa kartu perangkat.
+initPrayer({
+  card: (title, sub, ms) => {
+    $("pr-alert-title").textContent = title;
+    $("pr-alert-sub").textContent = sub;
+    hubByHover = false;
+    expand("prayerAlert", ms);
+  },
+  mood: (m, ms) => flash(m as Mood, ms),
+});
+function safeUpdateUrl(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  try {
+    const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    const url = new URL(candidate);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function showUpdateBanner(currentVersion: string, remote: RemoteUpdateConfig) {
+  updateTargetUrl = safeUpdateUrl(remote.link_update) ?? "";
+  $("update-current-version").textContent = `Versi saat ini ${currentVersion}`;
+  $("update-new-version").textContent = `Versi ${remote.new_version} tersedia untuk diunduh.`;
+
+  const openButton = $("update-open") as HTMLButtonElement;
+  openButton.disabled = !updateTargetUrl;
+  openButton.title = updateTargetUrl ? `Buka ${updateTargetUrl}` : "Tautan update belum valid";
+
+  // Jangan memotong kartu pengingat/perangkat yang sedang tampil.
+  if (override === null || override === "hub" || override === "update") {
+    hubByHover = false;
+    expand("update", 0); // banner tetap tampil sampai pengguna memilih Nanti atau membuka rilis
+  }
+}
+
+$("update-later").addEventListener("click", (event) => {
+  event.stopPropagation();
+  collapse();
+});
+
+$("update-open").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (!updateTargetUrl) return;
+  // link_update sebaiknya URL halaman rilis GitHub yang lengkap.
+  window.open(updateTargetUrl, "_blank", "noopener,noreferrer");
+  collapse();
+});
+let updateTargetUrl = "";
+
+function compareVersionStrings(left: string, right: string): number | null {
+  const parse = (value: string): number[] | null => {
+    const clean = value.trim().replace(/^v/i, "").split(/[+-]/, 1)[0];
+    if (!clean || !/^\d+(?:\.\d+)*$/.test(clean)) return null;
+    return clean.split(".").map((part) => Number(part));
+  };
+  const a = parse(left);
+  const b = parse(right);
+  if (!a || !b) return null;
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av > bv) return 1;
+    if (av < bv) return -1;
+  }
+  return 0;
+}
+void loadRemoteUpdateConfig()
+  .then(async (config) => {
+    window.__NOTCH_UPDATE_CONFIG__ = config;
+    window.dispatchEvent(
+      new CustomEvent<RemoteUpdateConfig>("notch:firebase-update-config", { detail: config })
+    );
+    console.info("[Firebase] Konfigurasi update berhasil dimuat:", config);
+
+    try {
+      const currentVersion = await getVersion();
+      const comparison = compareVersionStrings(config.new_version, currentVersion);
+      if (comparison === null) {
+        console.warn("[Firebase] Format versi tidak valid; banner update dilewati.", {
+          installed: currentVersion,
+          offered: config.new_version,
+        });
+        return;
+      }
+      if (comparison > 0) {
+        console.info(`[Firebase] Update tersedia: ${currentVersion} -> ${config.new_version}`);
+        showUpdateBanner(currentVersion, config);
+      } else {
+        console.info(`[Firebase] Aplikasi sudah terbaru (terpasang ${currentVersion}).`);
+      }
+    } catch (error) {
+      console.warn("[Firebase] Tidak bisa membaca versi aplikasi Tauri:", error);
+    }
+  })
+  .catch((error: unknown) => {
+    console.warn("[Firebase] Gagal memuat notch_config/update_config:", error);
+  });
 if (clockOn) startClock();
+void syncWindow(); // jendela native diset sekali ke ukuran tetap
 render();
 updateBase();

@@ -5,11 +5,33 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>notch</title>
-  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/base.css" />
+  <link rel="stylesheet" href="/src/eyes.css" />
+  <link rel="stylesheet" href="/src/eye-themes.css" />
+  <link rel="stylesheet" href="/src/media.css" />
+  <link rel="stylesheet" href="/src/widgets.css" />
+  <link rel="stylesheet" href="/src/system.css" />
+  <link rel="stylesheet" href="/src/reminder-notes-base.css" />
+  <link rel="stylesheet" href="/src/privacy.css" />
+  <link rel="stylesheet" href="/src/shelf-lyrics.css" />
+  <link rel="stylesheet" href="/src/position.css" />
+  <link rel="stylesheet" href="/src/edge.css" />
+  <link rel="stylesheet" href="/src/window-bottom.css" />
+  <link rel="stylesheet" href="/src/reminder-alert.css" />
+  <link rel="stylesheet" href="/src/reminder-notes-compact.css" />
+  <link rel="stylesheet" href="/src/hub-layout.css" />
+  <link rel="stylesheet" href="/src/notes-input.css" />
+  <link rel="stylesheet" href="/src/reminder-picker.css" />
+  <link rel="stylesheet" href="/src/notes-expand.css" />
+  <link rel="stylesheet" href="/src/top-dock-fix.css" />
   <link rel="stylesheet" href="/src/nudge.css" />
   <link rel="stylesheet" href="/src/calendar.css" />
   <link rel="stylesheet" href="/src/clock.css" />
+  <link rel="stylesheet" href="/src/hub-compact.css" />
+  <link rel="stylesheet" href="/src/prayer.css" />
+  <link rel="stylesheet" href="/src/update-banner.css" />
   <script type="module" src="/src/main.ts" defer></script>
+
 </head>
 
 <body>
@@ -50,8 +72,12 @@
           <div class="bars"><i></i><i></i><i></i><i></i></div>
         </div>
 
-        <!-- hub: halaman yang bisa digeser -->
+        <!-- hub: nav ikon di atas + halaman yang bisa digeser -->
         <div class="layer l-hub">
+          <div class="hub-nav">
+            <div class="nv-list" id="hub-nav"></div>
+            <div class="nv-right"><span id="nv-date"></span><b id="nv-time"></b></div>
+          </div>
           <div class="pages" id="pages">
             <div class="track" id="track">
 
@@ -211,26 +237,162 @@
                 </button>
               </div>
 
-              <!-- halaman 7: status sistem -->
+              <!-- halaman status sistem: CPU, memori, penyimpanan, jaringan, dan uptime -->
               <div class="page p-stats" data-page="stats">
-                <div class="st-row">
-                  <span>CPU</span>
-                  <div class="st-bar">
-                    <div id="st-cpu"></div>
-                  </div>
-                  <b id="st-cpu-v">0%</b>
+                <div class="st-head">
+                  <strong>STATUS SISTEM</strong>
+                  <span id="st-host">Perangkat</span>
                 </div>
-                <div class="st-row">
-                  <span>RAM</span>
-                  <div class="st-bar">
-                    <div id="st-ram"></div>
+
+                <div class="st-grid">
+                  <div class="st-metric" id="st-cpu-metric">
+                    <div class="st-metric-top">
+                      <span>CPU</span>
+                      <b id="st-cpu-v">0%</b>
+                    </div>
+                    <div class="st-bar"><div id="st-cpu"></div></div>
+                    <small id="st-cpu-meta">Memuat informasi CPU…</small>
                   </div>
-                  <b id="st-ram-v">0%</b>
+
+                  <div class="st-metric">
+                    <div class="st-metric-top">
+                      <span>RAM</span>
+                      <b id="st-ram-v">0%</b>
+                    </div>
+                    <div class="st-bar"><div id="st-ram"></div></div>
+                    <small id="st-ram-meta">0 / 0 GiB digunakan</small>
+                  </div>
+
+                  <div class="st-metric">
+                    <div class="st-metric-top">
+                      <span>SWAP</span>
+                      <b id="st-swap-v">0%</b>
+                    </div>
+                    <div class="st-bar"><div id="st-swap"></div></div>
+                    <small id="st-swap-meta">0 / 0 GiB digunakan</small>
+                  </div>
+
+                  <div class="st-metric">
+                    <div class="st-metric-top">
+                      <span>PENYIMPANAN</span>
+                      <b id="st-disk-v">0%</b>
+                    </div>
+                    <div class="st-bar"><div id="st-disk"></div></div>
+                    <small id="st-disk-meta">Memuat kapasitas…</small>
+                  </div>
                 </div>
-                <div class="st-net">
-                  <span id="st-down">&darr; 0 KB/s</span>
-                  <span id="st-ram-gb">0 / 0 GB</span>
-                  <span id="st-up">&uarr; 0 KB/s</span>
+
+                <div class="st-footer">
+                  <div class="st-net">
+                    <span id="st-down">&darr; 0 KB/s</span>
+                    <span id="st-up">&uarr; 0 KB/s</span>
+                  </div>
+                  <div class="st-system-info">
+                    <span id="st-processes">0 proses</span>
+                    <span id="st-uptime">Aktif 0m</span>
+                  </div>
+                  <div class="st-os">
+                    <span id="st-os">Sistem operasi</span>
+                    <span id="st-kernel"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- halaman: pengingat (reminder) -->
+              <div class="page p-reminder" data-page="reminder">
+                <div class="rm-add">
+                  <input id="rm-input" type="text" placeholder="Ingatkan aku untuk…" maxlength="200" autocomplete="off" autocorrect="off" spellcheck="false" />
+                  <button id="rm-when" class="rm-when" aria-label="Atur tanggal & jam" title="Atur tanggal & jam">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                    <span id="rm-when-txt"></span>
+                  </button>
+                  <button id="rm-add-btn" aria-label="Tambah pengingat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                  <button id="rm-clear-done" class="rm-trash" aria-label="Hapus yang selesai" title="Hapus yang selesai">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    </svg>
+                    <b id="rm-count"></b>
+                  </button>
+                </div>
+
+                <!-- Picker tanggal/jam dan aturan pengulangan -->
+                <div class="rm-pick" id="rm-pick">
+                  <div class="pk-fields">
+                    <div class="pk pk-date">
+                      <input
+                        id="pk-date-input"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="dd/mm/yyyy"
+                        aria-label="Tanggal (dd/mm/yyyy)"
+                        title="Masukkan tanggal dengan format dd/mm/yyyy"
+                        maxlength="10"
+                        autocomplete="off"
+                        autocorrect="off"
+                        spellcheck="false"
+                      />
+                    </div>
+                    <div class="pk pk-time">
+                      <button data-pk="h-" aria-label="Jam kurang">‹</button>
+                      <span id="pk-h">00</span>
+                      <button data-pk="h+" aria-label="Jam tambah">›</button>
+                    </div>
+                    <i>:</i>
+                    <div class="pk pk-time">
+                      <button data-pk="m-" aria-label="Menit kurang">‹</button>
+                      <span id="pk-m">00</span>
+                      <button data-pk="m+" aria-label="Menit tambah">›</button>
+                    </div>
+                  </div>
+                  <div class="pk-actions">
+                    <label for="pk-repeat-mode">Ulangi</label>
+                    <select id="pk-repeat-mode" class="pk-repeat-mode" aria-label="Frekuensi pengulangan">
+                      <option value="none">Tidak berulang</option>
+                      <option value="daily">Setiap hari</option>
+                      <option value="monthly">Bulanan · tanggal yang sama</option>
+                    </select>
+                    <button id="pk-ok" class="pk-ok">Atur</button>
+                    <button id="pk-clear" class="pk-x" aria-label="Tanpa waktu" title="Hapus tanggal dan pengulangan">×</button>
+                  </div>
+                </div>
+
+                <div class="rm-list" id="rm-list">
+                  <div class="rm-empty">Belum ada pengingat</div>
+                </div>
+              </div>
+
+              <!-- halaman: catatan (notes) -->
+              <div class="page p-note" data-page="notes">
+                <div class="nt-add">
+                  <textarea id="nt-input" placeholder="Tulis catatan baru…" maxlength="4000" rows="2"></textarea>
+                  <div class="nt-add-actions">
+                    <button id="nt-add-btn" aria-label="Tambah catatan" title="Tambah (Enter)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                    <button id="nt-expand" aria-label="Tampilkan daftar catatan" aria-expanded="false" title="Tampilkan daftar catatan">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="m7 10 5 5 5-5" />
+                      </svg>
+                    </button>
+                    <button id="nt-clear" class="nt-trash" aria-label="Hapus semua catatan" title="Hapus semua catatan">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                      </svg>
+                      <b id="nt-count"></b>
+                    </button>
+                  </div>
+                </div>
+                <div class="nt-list" id="nt-list">
+                  <div class="nt-empty">Belum ada catatan</div>
                 </div>
               </div>
 
@@ -264,11 +426,71 @@
                 </div>
               </div>
 
+              <!-- halaman jadwal shalat -->
+              <div class="page p-prayer" data-page="prayer">
+                <div class="pr-left">
+                  <div class="pr-overview">
+                    <div id="pr-name">Memuat jadwal…</div>
+                    <div class="pr-row">
+                      <div id="pr-count">--:--:--</div>
+                      <div class="pr-at">
+                        <b id="pr-at">--:--</b>
+                        <small id="pr-when"></small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="pr-city">
+                    <div>
+                      <span id="pr-city">Memuat lokasi…</span>
+                      <small id="pr-src">Dari config</small>
+                    </div>
+                    <button type="button" id="pr-refresh" aria-label="Muat ulang jadwal" title="Muat ulang jadwal">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 7v5h-5M4 17v-5h5" />
+                        <path d="M5.5 9a7 7 0 0 1 11.7-2L20 12M4 12l2.8 5a7 7 0 0 0 11.7-2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="pr-right">
+                  <div id="pr-meta">Imsak --:-- · Terbit --:--</div>
+                  <div id="pr-arc" class="pr-arc"></div>
+                  <div class="pr-ctl">
+                    <div class="pr-seg" role="group" aria-label="Mode pengingat shalat">
+                      <button type="button" data-mode="adzan">Adzan</button>
+                      <button type="button" data-mode="tone">Nada</button>
+                      <button type="button" data-mode="silent">Senyap</button>
+                    </div>
+                    <button type="button" id="pr-remind" aria-label="Aktifkan pengingat sebelum waktu shalat">
+                      <span id="pr-remind-txt">10 menit sebelum</span>
+                      <i aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
             <div class="dots" id="dots"></div>
           </div>
         </div>
 
+        <div class="layer l-update" role="status" aria-live="polite" aria-labelledby="update-title">
+          <div class="update-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
+              <path d="M5 17v3h14v-3" />
+            </svg>
+          </div>
+          <div class="update-copy">
+            <strong id="update-title">Pembaruan tersedia</strong>
+            <span id="update-new-version">Versi baru Notch tersedia.</span>
+            <small id="update-current-version">Memeriksa versi aplikasi…</small>
+          </div>
+          <div class="update-actions">
+            <button type="button" id="update-later" class="update-btn update-secondary">Nanti</button>
+            <button type="button" id="update-open" class="update-btn update-primary">Lihat update</button>
+          </div>
+        </div>
         <!-- lirik: tampilan diperluas dari halaman media -->
         <div class="layer l-lyr">
           <div class="ly-top">
@@ -315,7 +537,19 @@
             </div>
           </div>
         </div>
-
+        <div class="layer l-rem">
+          <div class="rem-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+          </div>
+          <div class="rem-text">
+            <strong id="rem-text">-</strong>
+            <small id="rem-sub">Pengingat</small>
+          </div>
+          <button id="rem-snooze" class="rem-btn" aria-label="Tunda 5 menit">Tunda</button>
+          <button id="rem-stop" class="rem-btn rem-ok" aria-label="Selesai">Selesai</button>
+        </div>
         <!-- bluetooth -->
         <div class="layer l-bt">
           <div class="ring" id="bt-ring" style="--pct:70">
@@ -352,23 +586,16 @@
           <span id="hud-val">0</span>
         </div>
 
-        <!-- bilah posisi kompak: drag move & pusatkan -->
-        <div id="notch-pos-bar" class="pos-bar" title="Kontrol Posisi Notch">
-          <div id="drag-handle" class="pos-btn pos-drag" title="Tahan dan geser untuk memindahkan notch">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 9l-3 3 3 3M9 5l3-3 3 5M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
-            </svg>
-            <span>Geser</span>
-          </div>
-          <div class="pos-divider"></div>
-          <button id="notch-reset-btn" class="pos-btn pos-reset" aria-label="Pusatkan kembali ke tengah" title="Pusatkan kembali ke tengah">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-            </svg>
-            <span>Pusatkan</span>
-          </button>
-        </div>
+      </div>
+      <!-- tombol pusatkan: mengambang di bawah notch saat di-hover (di luar #notch yang overflow:hidden) -->
+      <div id="notch-pos-bar" class="pos-bar" title="Kontrol Posisi Notch">
+        <button id="notch-reset-btn" class="pos-btn pos-reset" aria-label="Pusatkan kembali ke tengah" title="Pusatkan kembali ke tengah">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+          </svg>
+          <span>Pusatkan</span>
+        </button>
       </div>
     </div>
   </div>

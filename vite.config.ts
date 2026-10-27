@@ -1,38 +1,67 @@
-import { defineConfig } from "vite";
-// @ts-expect-error type error without @types/node package
+import { defineConfig, loadEnv } from "vite";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { resolve } from "path";
+// Host khusus untuk pengembangan Tauri
 const host = process.env.TAURI_DEV_HOST;
 
-// https://vite.dev/config/
-export default defineConfig(() => ({
-  // Opsi Vite untuk pengembangan Tauri, hanya berlaku di `tauri dev` atau `tauri build`
-  //
-  // 1. jangan sembunyikan error dari Rust
-  clearScreen: false,
-  // 2. Tauri butuh port tetap, gagal kalau port itu sedang dipakai
-  server: {
-    port: 1420,
-    strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
+// Lokasi root project, yaitu folder yang berisi package.json
+const projectRoot = fileURLToPath(new URL(".", import.meta.url));
+
+export default defineConfig(({ mode }) => {
+  // Ganti parameter ketiga jadi "" agar membaca semua variabel tanpa filter
+  const env = loadEnv(mode, projectRoot, "");
+
+  // Pemeriksaan konfigurasi di Terminal Node.js
+  console.info("[Vite env check]", {
+    mode,
+    projectRoot,
+    projectIdPresent: Boolean(env.VITE_FIREBASE_PROJECT_ID?.trim()),
+    apiKeyPresent: Boolean(env.VITE_FIREBASE_API_KEY?.trim()),
+  });
+
+  return {
+    root: projectRoot,
+    envDir: projectRoot,
+    envPrefix: ["VITE_", "TAURI_ENV_*"],
+
+    // 👇 TAMBAHKAN BAGIAN INI (Agar nilainya diteruskan ke kode frontend Anda)
+    define: {
+      "import.meta.env.VITE_FIREBASE_PROJECT_ID": JSON.stringify(
+        env.VITE_FIREBASE_PROJECT_ID || ""
+      ),
+      "import.meta.env.VITE_FIREBASE_API_KEY": JSON.stringify(
+        env.VITE_FIREBASE_API_KEY || ""
+      ),
+    },
+    // 👆 BATAS TAMBAHAN
+
+    clearScreen: false,
+
+    server: {
+      port: 1420,
+      strictPort: true,
+      host: host || false,
+      hmr: host
+        ? {
           protocol: "ws",
           host,
           port: 1421,
         }
-      : undefined,
-    watch: {
-      // 3. abaikan `src-tauri` saat memantau perubahan file
-      ignored: ["**/src-tauri/**"],
-    },
-  },
-  build: {
-    rollupOptions: {
-      // path relatif terhadap root proyek, jadi tidak perlu `path` maupun `__dirname`
-      input: {
-        main: "index.html",
-        settings: "settings.html",
+        : undefined,
+      watch: {
+        ignored: ["**/src-tauri/**"],
       },
     },
-  },
-}));
+
+    build: {
+      rollupOptions: {
+        input: {
+          main: resolve(import.meta.dirname, "index.html"),
+          settings: resolve(import.meta.dirname, "settings.html"),
+          "note-detail": resolve(import.meta.dirname, "note-detail.html"),
+        },
+      },
+    },
+  };
+});

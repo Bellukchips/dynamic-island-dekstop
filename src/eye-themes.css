@@ -1,0 +1,556 @@
+/*
+ * Notch Eye Themes — 80 kombinasi (8 mood × 10 skin).
+ * Link stylesheet ini SETELAH styles.css supaya override warna mata dengan benar.
+ * Struktur yang dibutuhkan: .eyes[data-mood] > .eye > .shine/.lid-t/.lid-b
+ * Pilih skin melalui atribut data-eye-theme pada .eyes:
+ * aurora | neon | pastel | pixel | holo | ember | ocean | sakura | cyber | monochrome
+ * Mood tetap memakai data-mood bawaan: normal, happy, sleepy, surprised, angry, love, suspicious, sad.
+ */
+
+/* ---------- Sistem skin: efek yang digunakan oleh semua mood ---------- */
+.eyes[data-eye-theme="aurora"] {
+  --eye-glow-extra: 7px;
+  --eye-glow-alpha: .96;
+  --eye-glow-soft: .48;
+  --eye-highlight-alpha: .68;
+  --eye-offset-shadow: 0 0 0 transparent;
+  --eye-outline: 0 solid transparent;
+  --eye-filter: saturate(1.12);
+}
+.eyes[data-eye-theme="neon"] {
+  --eye-glow-extra: 15px;
+  --eye-glow-alpha: 1;
+  --eye-glow-soft: .68;
+  --eye-highlight-alpha: .88;
+  --eye-offset-shadow: 0 0 0 transparent;
+  --eye-outline: 0 solid transparent;
+  --eye-filter: saturate(1.3);
+}
+.eyes[data-eye-theme="pastel"] {
+  --eye-glow-extra: 0px;
+  --eye-glow-alpha: .66;
+  --eye-glow-soft: .22;
+  --eye-highlight-alpha: .84;
+  --eye-offset-shadow: 0 0 0 transparent;
+  --eye-outline: 0 solid transparent;
+  --eye-filter: saturate(.88);
+}
+.eyes[data-eye-theme="pixel"] {
+  --eye-glow-extra: 0px;
+  --eye-glow-alpha: .34;
+  --eye-glow-soft: .08;
+  --eye-highlight-alpha: .08;
+  --eye-offset-shadow: 3px 3px 0 rgba(var(--eye-skin-rgb, 120, 220, 255), .28);
+  --eye-outline: 0 solid transparent;
+  --eye-filter: none;
+}
+.eyes[data-eye-theme="holo"] {
+  --eye-glow-extra: 6px;
+  --eye-glow-alpha: .84;
+  --eye-glow-soft: .34;
+  --eye-highlight-alpha: .76;
+  --eye-offset-shadow: inset 0 0 3px rgba(255, 255, 255, .28);
+  --eye-outline: 1px solid rgba(var(--eye-skin-rgb, 120, 220, 255), .78);
+  --eye-filter: saturate(1.35) contrast(1.04);
+}
+.eyes[data-eye-theme="ember"] {
+  --eye-glow-extra: 10px;
+  --eye-glow-alpha: .96;
+  --eye-glow-soft: .46;
+  --eye-highlight-alpha: .76;
+  --eye-offset-shadow: inset 0 -3px 5px rgba(45, 7, 0, .30);
+  --eye-outline: 0 solid transparent;
+  --eye-filter: saturate(1.2) contrast(1.04);
+}
+.eyes[data-eye-theme="ocean"] {
+  --eye-glow-extra: 4px;
+  --eye-glow-alpha: .86;
+  --eye-glow-soft: .32;
+  --eye-highlight-alpha: .78;
+  --eye-offset-shadow: inset 0 -3px 5px rgba(0, 35, 80, .24);
+  --eye-outline: 1px solid rgba(var(--eye-skin-rgb, 80, 190, 255), .30);
+  --eye-filter: saturate(1.16) contrast(1.03);
+}
+.eyes[data-eye-theme="sakura"] {
+  --eye-glow-extra: 2px;
+  --eye-glow-alpha: .76;
+  --eye-glow-soft: .25;
+  --eye-highlight-alpha: .90;
+  --eye-offset-shadow: inset 0 -2px 4px rgba(95, 20, 65, .13);
+  --eye-outline: 1px solid rgba(255, 205, 229, .32);
+  --eye-filter: saturate(.94) brightness(1.04);
+}
+.eyes[data-eye-theme="cyber"] {
+  --eye-glow-extra: 13px;
+  --eye-glow-alpha: 1;
+  --eye-glow-soft: .56;
+  --eye-highlight-alpha: .90;
+  --eye-offset-shadow: 2px 0 0 rgba(255, 40, 210, .24), -2px 0 0 rgba(0, 255, 255, .20);
+  --eye-outline: 1px solid rgba(var(--eye-skin-rgb, 83, 255, 242), .76);
+  --eye-filter: saturate(1.48) contrast(1.1);
+}
+.eyes[data-eye-theme="monochrome"] {
+  --eye-glow-extra: 2px;
+  --eye-glow-alpha: .58;
+  --eye-glow-soft: .18;
+  --eye-highlight-alpha: .74;
+  --eye-offset-shadow: inset 0 0 4px rgba(255, 255, 255, .26);
+  --eye-outline: 1px solid rgba(232, 238, 248, .38);
+  --eye-filter: grayscale(.82) brightness(1.08);
+}
+
+/* Dipasang dengan specificity lebih tinggi daripada warna dasar mood di styles.css. */
+.eyes[data-mood][data-eye-theme] .eye {
+  background-color: rgb(var(--eye-skin-rgb, var(--c, 120, 220, 255)));
+  background-image:
+    radial-gradient(110% 120% at 28% 16%, rgba(255, 255, 255, var(--eye-highlight-alpha, .68)), transparent 48%),
+    linear-gradient(160deg, rgba(var(--eye-skin-rgb, var(--c, 120, 220, 255)), .9), rgb(var(--eye-skin-rgb, var(--c, 120, 220, 255))));
+  box-shadow:
+    0 0 calc(6px + var(--eye-glow-extra, 0px)) rgba(var(--eye-skin-rgb, var(--c, 120, 220, 255)), var(--eye-glow-alpha, .85)),
+    0 0 calc(15px + var(--eye-glow-extra, 0px)) rgba(var(--eye-skin-rgb, var(--c, 120, 220, 255)), var(--eye-glow-soft, .36)),
+    var(--eye-offset-shadow, 0 0 0 transparent);
+  border: var(--eye-outline, 0 solid transparent);
+}
+.eyes[data-mood][data-eye-theme] .shine {
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 0 4px rgba(255, 255, 255, .4);
+}
+.eyes[data-mood][data-eye-theme="pixel"] .eye {
+  border-radius: 1px;
+  animation: none;
+}
+.eyes[data-mood][data-eye-theme="pixel"] .shine {
+  display: none;
+}
+.eyes[data-mood][data-eye-theme="holo"] .eye {
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,.32), transparent 42%),
+    linear-gradient(160deg, rgba(var(--eye-skin-rgb, var(--c, 120, 220, 255)), .88), rgba(var(--eye-skin-rgb, var(--c, 120, 220, 255)), .58));
+}
+.eyes[data-mood][data-eye-theme="ember"] .eye {
+  background-image: radial-gradient(120% 100% at 25% 15%, rgba(255,245,205,.76), transparent 40%), linear-gradient(155deg, rgba(var(--eye-skin-rgb, 255,106,55), .98), rgba(120, 24, 24, .76));
+}
+.eyes[data-mood][data-eye-theme="ocean"] .eye {
+  background-image: radial-gradient(100% 85% at 27% 15%, rgba(235,255,255,.76), transparent 44%), linear-gradient(160deg, rgba(var(--eye-skin-rgb, 62,201,255), .92), rgba(10, 58, 130, .72));
+}
+.eyes[data-mood][data-eye-theme="sakura"] .eye {
+  border-radius: 48% 52% 44% 56%;
+  background-image: radial-gradient(100% 90% at 28% 15%, rgba(255,255,255,.9), transparent 48%), linear-gradient(155deg, rgba(var(--eye-skin-rgb, 255,143,190), .92), rgba(171, 84, 143, .58));
+}
+.eyes[data-mood][data-eye-theme="cyber"] .eye {
+  background-image: linear-gradient(115deg, rgba(255,255,255,.42) 0 10%, transparent 10% 42%, rgba(255,0,210,.16) 42% 48%, transparent 48%), linear-gradient(160deg, rgba(var(--eye-skin-rgb, 83,255,242), .98), rgba(45, 34, 140, .8));
+}
+.eyes[data-mood][data-eye-theme="monochrome"] .eye {
+  background-image: radial-gradient(100% 100% at 26% 14%, rgba(255,255,255,.88), transparent 46%), linear-gradient(160deg, rgba(var(--eye-skin-rgb, 229,236,248), .88), rgba(92, 103, 126, .72));
+}
+.eyes[data-mood][data-eye-theme="cyber"] .shine { border-radius: 1px; }
+.eyes[data-mood][data-eye-theme="monochrome"] .shine { box-shadow: 0 0 2px rgba(255,255,255,.6); }
+
+/* ---------- 40 palet awal: lima skin × delapan mood ---------- */
+.eyes[data-mood="normal"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 73, 226, 255;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 0, 255, 221;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 160, 211, 255;
+  --eye-glow-alpha: 0.62;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 120, 255, 184;
+  --eye-glow-alpha: 0.36;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 187, 132, 255;
+  --eye-glow-alpha: 0.82;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 75, 255, 181;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 190, 255, 25;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 255, 183, 218;
+  --eye-glow-alpha: 0.64;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 144, 255, 83;
+  --eye-glow-alpha: 0.38;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 92, 255, 219;
+  --eye-glow-alpha: 0.82;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 143, 157, 255;
+  --eye-glow-alpha: 0.9;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 127, 95, 255;
+  --eye-glow-alpha: 0.95;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 204, 190, 240;
+  --eye-glow-alpha: 0.6;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 112, 156, 255;
+  --eye-glow-alpha: 0.34;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 174, 139, 255;
+  --eye-glow-alpha: 0.8;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 255, 220, 91;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 255, 116, 47;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 255, 207, 165;
+  --eye-glow-alpha: 0.64;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 255, 240, 87;
+  --eye-glow-alpha: 0.4;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 255, 117, 184;
+  --eye-glow-alpha: 0.82;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 255, 77, 100;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 255, 28, 53;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 255, 150, 162;
+  --eye-glow-alpha: 0.68;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 255, 66, 51;
+  --eye-glow-alpha: 0.42;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 255, 105, 36;
+  --eye-glow-alpha: 0.86;
+}
+
+.eyes[data-mood="love"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 255, 103, 183;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="love"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 255, 31, 152;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="love"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 255, 188, 221;
+  --eye-glow-alpha: 0.67;
+}
+
+.eyes[data-mood="love"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 255, 87, 187;
+  --eye-glow-alpha: 0.42;
+}
+
+.eyes[data-mood="love"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 222, 104, 255;
+  --eye-glow-alpha: 0.85;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 255, 174, 74;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 209, 255, 29;
+  --eye-glow-alpha: 1;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 231, 190, 135;
+  --eye-glow-alpha: 0.65;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 255, 214, 88;
+  --eye-glow-alpha: 0.4;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 255, 199, 80;
+  --eye-glow-alpha: 0.84;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="aurora"] {
+  --eye-skin-rgb: 90, 154, 255;
+  --eye-glow-alpha: 0.9;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="neon"] {
+  --eye-skin-rgb: 57, 110, 220;
+  --eye-glow-alpha: 0.97;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="pastel"] {
+  --eye-skin-rgb: 170, 192, 236;
+  --eye-glow-alpha: 0.61;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="pixel"] {
+  --eye-skin-rgb: 104, 213, 255;
+  --eye-glow-alpha: 0.37;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="holo"] {
+  --eye-skin-rgb: 153, 117, 255;
+  --eye-glow-alpha: 0.82;
+}
+
+
+/* ---------- Tambahan 40 palet: lima skin baru × delapan mood ---------- */
+.eyes[data-mood="normal"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 106, 55;
+  --eye-glow-alpha: 0.95;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 62, 201, 255;
+  --eye-glow-alpha: 0.88;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 255, 143, 190;
+  --eye-glow-alpha: 0.76;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 83, 255, 242;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="normal"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 229, 236, 248;
+  --eye-glow-alpha: 0.56;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 177, 55;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 65, 246, 196;
+  --eye-glow-alpha: 0.94;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 255, 171, 205;
+  --eye-glow-alpha: 0.8;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 175, 255, 47;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="happy"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 255, 255, 255;
+  --eye-glow-alpha: 0.62;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 177, 91, 91;
+  --eye-glow-alpha: 0.8;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 115, 154, 220;
+  --eye-glow-alpha: 0.78;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 190, 151, 194;
+  --eye-glow-alpha: 0.7;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 103, 118, 255;
+  --eye-glow-alpha: 0.92;
+}
+
+.eyes[data-mood="sleepy"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 158, 166, 185;
+  --eye-glow-alpha: 0.48;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 151, 39;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 76, 224, 255;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 255, 197, 153;
+  --eye-glow-alpha: 0.78;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 255, 255, 84;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="surprised"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 255, 255, 255;
+  --eye-glow-alpha: 0.62;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 52, 36;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 73, 139, 255;
+  --eye-glow-alpha: 0.95;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 255, 119, 151;
+  --eye-glow-alpha: 0.86;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 255, 51, 132;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="angry"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 224, 224, 230;
+  --eye-glow-alpha: 0.6;
+}
+
+.eyes[data-mood="love"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 106, 79;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="love"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 73, 214, 228;
+  --eye-glow-alpha: 0.92;
+}
+
+.eyes[data-mood="love"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 255, 130, 197;
+  --eye-glow-alpha: 0.88;
+}
+
+.eyes[data-mood="love"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 248, 69, 255;
+  --eye-glow-alpha: 1.0;
+}
+
+.eyes[data-mood="love"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 255, 245, 250;
+  --eye-glow-alpha: 0.6;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 255, 160, 45;
+  --eye-glow-alpha: 0.96;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 61, 202, 208;
+  --eye-glow-alpha: 0.86;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 226, 174, 131;
+  --eye-glow-alpha: 0.74;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 199, 255, 44;
+  --eye-glow-alpha: 0.98;
+}
+
+.eyes[data-mood="suspicious"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 202, 209, 224;
+  --eye-glow-alpha: 0.52;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="ember"] {
+  --eye-skin-rgb: 145, 111, 123;
+  --eye-glow-alpha: 0.82;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="ocean"] {
+  --eye-skin-rgb: 72, 133, 210;
+  --eye-glow-alpha: 0.84;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="sakura"] {
+  --eye-skin-rgb: 168, 164, 211;
+  --eye-glow-alpha: 0.7;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="cyber"] {
+  --eye-skin-rgb: 87, 107, 255;
+  --eye-glow-alpha: 0.92;
+}
+
+.eyes[data-mood="sad"][data-eye-theme="monochrome"] {
+  --eye-skin-rgb: 148, 160, 182;
+  --eye-glow-alpha: 0.48;
+}
+
+/* Hormati preferensi aksesibilitas: animasi dari mood dasar tetap dikontrol styles.css.
+   Skin ini sendiri tidak menambahkan animasi baru. */
+@media (prefers-reduced-motion: reduce) {
+  .eyes[data-mood][data-eye-theme] .eye { transition-duration: 0.01ms; }
+}

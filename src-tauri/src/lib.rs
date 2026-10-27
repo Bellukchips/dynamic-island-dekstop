@@ -16,52 +16,57 @@ mod clipboard;
 mod privacy;
 mod lyrics;
 mod shelf;
+mod notes;
+mod reminder;
+mod prayer;
 #[cfg(target_os = "windows")]
 mod winps;
 // area klik pil (x, lebar, tinggi) dalam piksel logis. Dipakai di Windows.
 #[cfg(target_os = "windows")]
-static HIT: std::sync::Mutex<(i32, i32, i32)> = std::sync::Mutex::new((5, 130, 24));
+static HIT: std::sync::Mutex<(i32, i32, i32, i32)> = std::sync::Mutex::new((5, 0, 130, 24));
 
 // Posisi kustom notch (center_x, top_y) dalam piksel fisik.
 // Jika None, notch dipusatkan di tengah atas monitor.
+static WIN_PHYS: std::sync::Mutex<(i32, i32)> = std::sync::Mutex::new((0, 0));
 static NOTCH_POS: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
 // Menandakan apakah notch sedang digeser oleh user
 static IS_DRAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // Nomor generasi membatalkan animasi resize sebelumnya saat target mode berubah lagi.
-static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 // Terapkan posisi notch (di tengah atas atau di posisi kustom) berdasarkan ukuran jendela saat ini
-fn apply_notch_position(window: &tauri::WebviewWindow) {
+fn apply_notch_position_for(window: &tauri::WebviewWindow, width: i32, height: i32) {
     let monitor = window
         .current_monitor()
         .ok()
         .flatten()
         .or_else(|| window.primary_monitor().ok().flatten());
-    if let (Some(m), Ok(size)) = (monitor, window.outer_size()) {
+    if let Some(m) = monitor {
         let cur = *NOTCH_POS.lock().unwrap();
+        let mon_pos = m.position();
+        let mon_size = m.size();
         let (x, y) = match cur {
             Some((cx, ty)) => {
-                let mon_pos = m.position();
-                let mon_size = m.size();
-                let half_w = size.width as i32 / 2;
-
-                // Batasi posisi agar notch menempel pas di tepi tanpa terpotong
+                let half_w = width / 2;
                 let min_x = mon_pos.x + half_w;
-                let max_x = mon_pos.x + mon_size.width as i32 - half_w;
+                let max_x = (mon_pos.x + mon_size.width as i32 - half_w).max(min_x);
                 let min_y = mon_pos.y;
-                let max_y = mon_pos.y + mon_size.height as i32 - size.height as i32;
-
-                let clamped_cx = cx.clamp(min_x, max_x);
-                let clamped_y = ty.clamp(min_y, max_y);
-
-                (clamped_cx - half_w, clamped_y)
+                // ty sangat besar (BOTTOM_TY) => otomatis menempel di dasar layar
+                let max_y = (mon_pos.y + mon_size.height as i32 - height).max(min_y);
+                (cx.clamp(min_x, max_x) - half_w, ty.clamp(min_y, max_y))
             }
-            None => {
-                let x = m.position().x + (m.size().width as i32 - size.width as i32) / 2;
-                (x, m.position().y)
-            }
+            None => (mon_pos.x + (mon_size.width as i32 - width) / 2, mon_pos.y),
         };
         let _ = window.set_position(PhysicalPosition::new(x, y));
+    }
+}
+
+fn apply_notch_position(window: &tauri::WebviewWindow) {
+    let (w, h) = *WIN_PHYS.lock().unwrap();
+    if w > 0 && h > 0 {
+        apply_notch_position_for(window, w, h);
+    } else if let Ok(size) = window.outer_size() {
+        apply_notch_position_for(window, size.width as i32, size.height as i32);
     }
 }
 
@@ -94,43 +99,99 @@ fn open_settings(app: &tauri::AppHandle) {
     .build();
 }
 
+// jendela detail catatan (dibuat saat diminta, dipakai ulang kalau sudah ada)
 #[tauri::command]
-async fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
-    use std::sync::atomic::Ordering;
-    let animation_id = SIZE_ANIMATION_ID.fetch_add(1, Ordering::SeqCst) + 1;
+async fn open_note_detail(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("note-detail") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+        let _ = w.emit("note-open", &id);
+        return Ok(());
+    }
+    let id_js = serde_json::to_string(&id).map_err(|e| e.to_string())?;
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "note-detail",
+        tauri::WebviewUrl::App("note-detail.html".into()),
+    )
+    .title("Catatan")
+    .inner_size(680.0, 520.0)
+    .min_inner_size(400.0, 300.0)
+    .resizable(true)
+    .focused(true)
+    .initialization_script(&format!("window.__NOTE_ID__ = {};", id_js))
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
 
-    // Jalankan animasi native pada blocking pool. Fungsi command tetap async sehingga
-    // renderer bisa menyelesaikan animasi CSS sambil ukuran jendela berubah.
-    let _ = tauri::async_runtime::spawn_blocking(move || {
-        let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
-        let (start_w, start_h) = window
-            .inner_size()
-            .map(|s| (s.width as f64 / scale, s.height as f64 / scale))
-            .unwrap_or((w, h));
+// #[tauri::command]
+// async fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
+//     use std::sync::atomic::Ordering;
+//     let animation_id = SIZE_ANIMATION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // 20 titik x 16ms ~= 300ms, cocok dengan transition CSS.
-        const STEPS: u32 = 20;
-        for step in 1..=STEPS {
-            if SIZE_ANIMATION_ID.load(Ordering::SeqCst) != animation_id {
-                return;
-            }
-            let t = step as f64 / STEPS as f64;
-            let eased = t * t * (3.0 - 2.0 * t); // smoothstep tanpa overshoot
-            let cur_w = start_w + (w - start_w) * eased;
-            let cur_h = start_h + (h - start_h) * eased;
-            let _ = window.set_size(tauri::LogicalSize::new(cur_w.max(1.0), cur_h.max(1.0)));
-            apply_notch_position(&window);
-            if step < STEPS {
-                std::thread::sleep(std::time::Duration::from_millis(16));
-            }
-        }
+//     // Jalankan animasi native pada blocking pool. Fungsi command tetap async sehingga
+//     // renderer bisa menyelesaikan animasi CSS sambil ukuran jendela berubah.
+//     let _ = tauri::async_runtime::spawn_blocking(move || {
+//         let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
+//         let (start_w, start_h) = window
+//             .inner_size()
+//             .map(|s| (s.width as f64 / scale, s.height as f64 / scale))
+//             .unwrap_or((w, h));
 
-        if SIZE_ANIMATION_ID.load(Ordering::SeqCst) == animation_id {
-            let _ = window.set_size(tauri::LogicalSize::new(w, h));
-            apply_notch_position(&window);
-        }
-    })
-    .await;
+//         // 20 titik x 16ms ~= 300ms, cocok dengan transition CSS.
+//         const STEPS: u32 = 20;
+//         for step in 1..=STEPS {
+//             if SIZE_ANIMATION_ID.load(Ordering::SeqCst) != animation_id {
+//                 return;
+//             }
+//             let t = step as f64 / STEPS as f64;
+//             let eased = t * t * (3.0 - 2.0 * t); // smoothstep tanpa overshoot
+//             let cur_w = start_w + (w - start_w) * eased;
+//             let cur_h = start_h + (h - start_h) * eased;
+//             let _ = window.set_size(tauri::LogicalSize::new(cur_w.max(1.0), cur_h.max(1.0)));
+//             apply_notch_position_for(
+//                 &window,
+//                 (cur_w.max(1.0) * scale).round() as i32,
+//                 (cur_h.max(1.0) * scale).round() as i32,
+//             );
+//             if step < STEPS {
+//                 std::thread::sleep(std::time::Duration::from_millis(16));
+//             }
+//         }
+
+//         if SIZE_ANIMATION_ID.load(Ordering::SeqCst) == animation_id {
+//             let _ = window.set_size(tauri::LogicalSize::new(w, h));
+//             apply_notch_position_for(&window, (w * scale).round() as i32, (h * scale).round() as i32);
+//         }
+//     })
+//     .await;
+// }
+
+#[tauri::command]
+fn notch_monitor(window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
+    let m = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or("monitor tidak ditemukan")?;
+    let s = window.scale_factor().unwrap_or(1.0);
+    Ok(serde_json::json!({
+        "x": m.position().x as f64 / s,
+        "y": m.position().y as f64 / s,
+        "w": m.size().width as f64 / s,
+        "h": m.size().height as f64 / s,
+    }))
+}
+#[tauri::command]
+fn set_size(window: tauri::WebviewWindow, w: f64, h: f64) {
+    let scale = window.scale_factor().unwrap_or(1.0).max(0.1);
+    *WIN_PHYS.lock().unwrap() = ((w * scale).round() as i32, (h * scale).round() as i32);
+    let _ = window.set_size(tauri::LogicalSize::new(w, h));
+    apply_notch_position(&window);
+    reposition_later(&window);
 }
 #[tauri::command]
 fn notch_start_move(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
@@ -142,8 +203,14 @@ fn notch_start_move(window: tauri::WebviewWindow) -> Result<(f64, f64), String> 
     let size = window.outer_size().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().unwrap_or(1.0);
 
-    let cx = (pos.x as f64 + size.width as f64 / 2.0) / scale;
-    let ty = pos.y as f64 / scale;
+    let stored = *NOTCH_POS.lock().unwrap();
+    let (cx, ty) = match stored {
+        Some((cx, ty)) => (cx as f64 / scale, ty as f64 / scale),
+        None => (
+            (pos.x as f64 + size.width as f64 / 2.0) / scale,
+            pos.y as f64 / scale,
+        ),
+    };
     Ok((cx, ty))
 }
 
@@ -219,7 +286,7 @@ fn notch_get_position(window: tauri::WebviewWindow) -> Result<serde_json::Value,
 
 // Hanya area (x, 0, w, h) yang menerima klik. Sisanya tembus ke aplikasi di bawahnya.
 #[tauri::command]
-fn set_hit_area(window: tauri::WebviewWindow, x: i32, w: i32, h: i32) {
+fn set_hit_area(window: tauri::WebviewWindow, x: i32, y: i32, w: i32, h: i32) {
     #[cfg(target_os = "linux")]
     {
         use gtk::prelude::*;
@@ -228,7 +295,7 @@ fn set_hit_area(window: tauri::WebviewWindow, x: i32, w: i32, h: i32) {
             if let Ok(gtk_win) = win.gtk_window() {
                 if let Some(gdk_win) = gtk_win.window() {
                     let region = gtk::cairo::Region::create_rectangle(
-                        &gtk::cairo::RectangleInt::new(x, 0, w, h),
+                        &gtk::cairo::RectangleInt::new(x, y, w, h),
                     );
                     gdk_win.input_shape_combine_region(&region, 0, 0);
                 }
@@ -238,11 +305,11 @@ fn set_hit_area(window: tauri::WebviewWindow, x: i32, w: i32, h: i32) {
     #[cfg(target_os = "windows")]
     {
         let _ = window;
-        *HIT.lock().unwrap() = (x, w, h);
+        *HIT.lock().unwrap() = (x, y, w, h);
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
-        let _ = (window, x, w, h);
+        let _ = (window, x, y, w, h);
     }
 }
 
@@ -347,12 +414,13 @@ pub fn run() {
                     #[cfg(target_os = "windows")]
                     {
                         if !IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
-                            let (hx, hw, hh) = *HIT.lock().unwrap();
-                            let left = pos.x as f64 + hx as f64 * scale;
-                            let inside = cur.x >= left
-                                && cur.x <= left + hw as f64 * scale
-                                && cur.y >= pos.y as f64
-                                && cur.y <= pos.y as f64 + hh as f64 * scale;
+                        let (hx, hy, hw, hh) = *HIT.lock().unwrap();
+                        let left = pos.x as f64 + hx as f64 * scale;
+                        let top = pos.y as f64 + hy as f64 * scale;
+                        let inside = cur.x >= left
+                            && cur.x <= left + hw as f64 * scale
+                            && cur.y >= top
+                            && cur.y <= top + hh as f64 * scale;
                             if inside != last_inside {
                                 last_inside = inside;
                                 let _ = w.set_ignore_cursor_events(!inside);
@@ -424,6 +492,7 @@ pub fn run() {
             clipboard::start(app.handle().clone()); 
             privacy::start(app.handle().clone());
             shelf::start(app.handle().clone());
+            reminder::start(app.handle().clone());
             // setelah semua modul mendaftar: satu PowerShell bersama untuk perangkat/kecerahan/Bluetooth
             #[cfg(target_os = "windows")]
             winps::start();
@@ -453,7 +522,22 @@ pub fn run() {
             shelf::shelf_clear,
             shelf::shelf_open,
             shelf::shelf_reveal,
-            config::cfg_get,
+            notes::notes_list,
+            notes::notes_add,
+            notes::notes_update,
+            notes::notes_remove,
+            notes::notes_clear,
+            reminder::reminders_list,
+            reminder::reminders_add,
+            reminder::reminders_toggle,
+            reminder::reminders_remove,
+            reminder::reminders_clear_done,
+            reminder::reminders_stop,
+            reminder::reminders_snooze,            
+            prayer::prayer_month,
+            prayer::prayer_info,
+            prayer::prayer_set_prefs,
+config::cfg_get,
             config::cfg_preview,
             config::cfg_save,
             config::cfg_restart,
@@ -465,7 +549,9 @@ pub fn run() {
             notch_move_to,
             notch_end_move,
             notch_reset_position,
-            notch_get_position
+            notch_get_position,
+            notch_monitor,
+            open_note_detail
         ])
         .run(tauri::generate_context!())
         .expect("gagal menjalankan aplikasi");

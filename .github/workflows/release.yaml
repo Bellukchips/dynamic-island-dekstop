@@ -94,11 +94,16 @@ jobs:
       - name: Pasang dependensi frontend
         run: npm install
 
+      # Variabel VITE_* dibaca Vite dari environment proses saat build frontend
+      # (dijalankan tauri-action lewat beforeBuildCommand), jadi file .env tidak diperlukan di CI.
+      # Nilai diambil dari: Settings -> Secrets and variables -> Actions.
       - name: Build dan unggah ke release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: 1 # runner CI tidak punya FUSE
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
         with:
           releaseId: ${{ needs.prepare.outputs.release_id }}
           args: ${{ matrix.args }}

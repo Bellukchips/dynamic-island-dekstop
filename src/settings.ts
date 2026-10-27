@@ -7,6 +7,7 @@ type Appearance = {
     dark_bg: string;
     light_bg: string;
     accent: string;
+    default_mood: string;
 };
 type Cfg = {
     scale: number;
@@ -18,7 +19,7 @@ type Cfg = {
 const FALLBACK: Cfg = {
     scale: 1,
     hide_fullscreen: true,
-    appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "" },
+    appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal" },
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -66,6 +67,8 @@ function fill(c: Cfg) {
     inp("text").value = norm(a.text, "#ffffff");
     inp("accent_auto").checked = !a.accent;
     inp("accent").value = norm(a.accent, "#788cff");
+    const moodEl = document.getElementById("default_mood") as HTMLSelectElement | null;
+    if (moodEl) moodEl.value = a.default_mood || "normal";
     inp("scale").value = String(c.scale);
     inp("hide_fullscreen").checked = c.hide_fullscreen;
     sync();
@@ -80,6 +83,7 @@ function collect(): Cfg {
         light_bg: inp("light_bg").value,
         text: inp("text_auto").checked ? "" : inp("text").value,
         accent: inp("accent_auto").checked ? "" : inp("accent").value,
+        default_mood: (document.getElementById("default_mood") as HTMLSelectElement | null)?.value || "normal",
     };
     c.scale = parseFloat(inp("scale").value);
     c.hide_fullscreen = inp("hide_fullscreen").checked;
@@ -139,6 +143,10 @@ document.querySelectorAll<HTMLInputElement>("input").forEach((el) => {
         sync();
         preview();
     });
+});
+document.getElementById("default_mood")?.addEventListener("change", () => {
+    sync();
+    preview();
 });
 
 // ---------- simpan ----------
