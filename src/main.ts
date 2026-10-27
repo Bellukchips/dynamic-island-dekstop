@@ -575,6 +575,7 @@ function onWindowPointerMove(e: PointerEvent) {
     const newTy = startTy + dy;
     invoke("notch_move_to", { cx: newCx, ty: newTy });
     updatePositionUI(true, newTy, newCx);
+    setBase('love');
   }
 }
 
