@@ -143,17 +143,6 @@
     input[type="color"]:disabled { cursor: not-allowed; }
     input[type="range"] { width: 130px; max-width: 46vw; accent-color: var(--accent); cursor: pointer; }
     input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
-
-    /* Switch khusus untuk animasi gerak otomatis */
-    .motion-switch { position: relative; display: inline-flex; flex: 0 0 42px; width: 42px; height: 24px; align-items: center; cursor: pointer; }
-    .motion-switch input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
-    .motion-switch-track { position: relative; display: block; width: 42px; height: 24px; border-radius: 999px; background: var(--line); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); transition: background .18s ease; }
-    .motion-switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.22); transition: transform .18s cubic-bezier(.2,.8,.2,1); }
-    .motion-switch input:checked + .motion-switch-track { background: var(--accent); }
-    .motion-switch input:checked + .motion-switch-track::after { transform: translateX(18px); }
-    .motion-switch input:focus-visible + .motion-switch-track { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .motion-switch input:disabled + .motion-switch-track { opacity: .5; cursor: not-allowed; }
-    @media (prefers-reduced-motion: reduce) { .motion-switch-track, .motion-switch-track::after { transition: none; } }
     .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
     input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     input[type="text"], input[type="search"], input[type="number"], select {
@@ -212,6 +201,9 @@
     button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
     button:disabled { opacity: .48; cursor: progress; }
     .card .btns { display: flex; gap: 8px; padding: 6px 0 10px; }
+    .adhan-test-controls { flex-wrap: wrap; }
+    #adhan-test-status[data-state="playing"] { color: var(--good) !important; }
+    #adhan-test-status[data-state="error"] { color: var(--bad) !important; }
 
     /* ---------- bilah bawah ---------- */
     .foot { position: fixed; left: var(--side-w); right: 0; bottom: 0; z-index: 25; height: var(--foot-h); display: flex; align-items: center; gap: 12px; padding: 0 24px; border-top: 1px solid var(--line); background: var(--surface); }
@@ -527,11 +519,8 @@
               <input type="checkbox" id="autostart" data-os />
             </div>
             <div class="row">
-              <label for="bottom_play">Animasi gerak otomatis<span class="note">Efek liquid saat notch menempel di bawah, kiri, atau kanan layar. Matikan untuk menghentikan gerakan acak. Langsung berlaku.</span></label>
-              <label class="motion-switch" title="Aktifkan atau matikan animasi gerak otomatis">
-                <input type="checkbox" id="bottom_play" aria-label="Aktifkan animasi gerak otomatis" />
-                <span class="motion-switch-track" aria-hidden="true"></span>
-              </label>
+              <label for="bottom_play">Animasi lucu saat notch di bawah layar<span class="note">Melompat, menari, dan berkeliling sampai tepi layar. Langsung berlaku.</span></label>
+              <input type="checkbox" id="bottom_play" />
             </div>
           </div>
           <div class="card" id="position-section">
@@ -542,6 +531,18 @@
               <span id="pos-status" style="color:var(--muted)">Tengah atas (bawaan)</span>
             </div>
             <div class="btns"><button type="button" id="pos-reset">Pusatkan ke tengah lagi</button></div>
+          </div>
+          <div class="card full" id="adhan-test-card">
+            <h2>Suara adzan</h2>
+            <p class="hint">Putar file adzan.mp3 untuk pengujian. Tombol ini hanya mengontrol tes suara dari jendela Settings dan tidak mengubah pengingat jadwal shalat.</p>
+            <div class="row">
+              <span>Status pemutaran</span>
+              <span id="adhan-test-status" role="status" aria-live="polite" data-state="ready" style="color:var(--muted)">Siap diputar</span>
+            </div>
+            <div class="btns adhan-test-controls">
+              <button type="button" class="primary" id="adhan-test-start">▶ Mulai tes adzan</button>
+              <button type="button" id="adhan-test-pause" disabled>Ⅱ Jeda</button>
+            </div>
           </div>
         </div>
       </section>
@@ -934,19 +935,14 @@
       } catch {}
     }
 
-    // Animasi gerak otomatis (bawah + sisi) memakai saklar bersama yang dibaca modul bottom-play.ts.
-    // Perubahan langsung berlaku tanpa tombol Simpan; modul animasi membaca nilai ini secara berkala.
+    // Animasi lucu di dasar layar: disimpan di localStorage ("notch.bottomPlay") dan dibaca langsung
+    // oleh jendela notch, jadi tidak perlu tombol Simpan.
     (() => {
-      const KEY = "notch.bottomPlay"; // nama key dipertahankan agar cocok dengan versi aplikasi sebelumnya
+      const KEY = "notch.bottomPlay";
       const box = inp("bottom_play");
       try { box.checked = localStorage.getItem(KEY) !== "0"; } catch { box.checked = true; }
       box.addEventListener("change", () => {
-        try {
-          localStorage.setItem(KEY, box.checked ? "1" : "0");
-          say(box.checked ? "Animasi gerak otomatis diaktifkan." : "Animasi gerak otomatis dimatikan.", "ok");
-        } catch {
-          say("Tidak dapat menyimpan pilihan animasi pada penyimpanan lokal.", "err");
-        }
+        try { localStorage.setItem(KEY, box.checked ? "1" : "0"); } catch { /* penyimpanan tidak tersedia */ }
       });
     })();
 
@@ -1089,6 +1085,7 @@
       show(location.hash.slice(1));
     })();
   </script>
+  <script type="module" src="/src/settings-adhan-test.ts"></script>
 </body>
 
 </html>
