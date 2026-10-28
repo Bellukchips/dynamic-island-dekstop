@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notch — notch interaktif untuk desktop</title>
+<meta name="description" content="Notch: aplikasi desktop bergaya notch dengan media, lirik, cuaca, timer, pengingat, catatan, clipboard, shelf file, dan banyak lagi. Windows & Linux.">
+<style>
+:root{--bg:#f5f5f7;--fg:#111;--mut:#5b5b66;--card:#fff;--line:#e2e2e8;--acc:#6c5ce7;--pill:#000;--pillfg:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0b0f;--fg:#f2f2f5;--mut:#9a9aa6;--card:#15151b;--line:#26262e;--acc:#a29bfe;--pill:#000;--pillfg:#fff}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,"Segoe UI",Roboto,sans-serif}
+a{color:var(--acc)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0}
+nav b{font-size:18px}
+nav a{margin-left:18px;text-decoration:none;color:var(--mut);font-size:14px}
+.hero{text-align:center;padding:36px 0 56px}
+.pill{display:inline-flex;gap:12px;align-items:center;justify-content:center;background:var(--pill);width:190px;height:38px;border-radius:0 0 20px 20px;margin-bottom:28px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.eye{width:9px;height:14px;border-radius:50%;background:var(--pillfg);animation:blink 5s infinite}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+h1{font-size:clamp(34px,6vw,56px);line-height:1.1;margin:0 0 14px;letter-spacing:-.02em}
+.lead{color:var(--mut);max-width:620px;margin:0 auto 26px;font-size:18px}
+.btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-block;padding:11px 22px;border-radius:999px;text-decoration:none;font-weight:600;border:1px solid var(--line);color:var(--fg);background:var(--card)}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#fff}
+.tags{margin-top:18px;color:var(--mut);font-size:13px}
+h2{font-size:28px;margin:56px 0 6px;letter-spacing:-.01em}
+.sub{color:var(--mut);margin:0 0 22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h3{margin:0 0 6px;font-size:17px}
+.card p{margin:0;color:var(--mut);font-size:14.5px}
+.ic{font-size:24px;display:block;margin-bottom:8px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;overflow-x:auto;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:block;overflow-x:auto}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:600}
+footer{margin:64px 0 32px;color:var(--mut);font-size:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><b>Notch</b><div><a href="#fitur">Fitur</a><a href="#pasang">Pasang</a><a href="#kontrol">Kontrol</a><a href="#config">Konfigurasi</a></div></nav>
+
+<header class="hero">
+  <div class="pill" aria-hidden="true"><span class="eye"></span><span class="eye"></span></div>
+  <h1>Notch untuk desktop-mu</h1>
+  <p class="lead">Pil kecil di tepi layar yang membuka hub berisi media, lirik, cuaca, timer, pengingat, catatan, clipboard, dan shelf file. Dengan mata yang mengikuti kursormu.</p>
+  <div class="btns">
+    <a class="btn p" href="https://github.com/USERNAME/REPO/releases">Unduh rilis</a>
+    <a class="btn" href="https://github.com/USERNAME/REPO">Lihat di GitHub</a>
+  </div>
+  <div class="tags">Windows · Linux (X11 / Wayland) · dibuat dengan Tauri 2 + Rust + TypeScript</div>
+</header>
+
+<section id="fitur">
+  <h2>Semua fitur</h2>
+  <p class="sub">Halaman hub bisa diaktifkan, dimatikan, dan diurutkan lewat Pengaturan.</p>
+  <div class="grid">
+    <div class="card"><span class="ic">🎵</span><h3>Media</h3><p>Judul, artis, cover album, kontrol putar/jeda/lanjut, dan geser progress untuk pindah menit. Warna aksen mengikuti cover.</p></div>
+    <div class="card"><span class="ic">🎤</span><h3>Lirik</h3><p>Lirik bersinkron dengan lagu, dengan baris aktif langsung di tampilan ringkas notch.</p></div>
+    <div class="card"><span class="ic">🕒</span><h3>Jam &amp; kalender</h3><p>Jam dan tanggal di notch. Klik tanggal untuk kalender bulanan dengan hari libur dan peringatan Indonesia.</p></div>
+    <div class="card"><span class="ic">🌦️</span><h3>Cuaca</h3><p>Suhu, terasa seperti, kelembapan, dan peringatan hujan beberapa menit sebelumnya.</p></div>
+    <div class="card"><span class="ic">🔋</span><h3>Baterai</h3><p>Persentase, status mengisi, dan peringatan baterai rendah lewat ekspresi mata.</p></div>
+    <div class="card"><span class="ic">🍅</span><h3>Timer Pomodoro</h3><p>Fokus, istirahat, dan istirahat panjang. Durasi dan jumlah ronde bisa diatur.</p></div>
+    <div class="card"><span class="ic">⚡</span><h3>Kontrol cepat</h3><p>Mic, Wi-Fi, Bluetooth, keep awake, dan tema gelap/terang dalam satu halaman.</p></div>
+    <div class="card"><span class="ic">📈</span><h3>Status sistem</h3><p>CPU, RAM, serta kecepatan unduh dan unggah secara langsung.</p></div>
+    <div class="card"><span class="ic">⏰</span><h3>Pengingat</h3><p>Pilih tanggal dan jam, ulang harian atau bulanan, bunyi pengingat, lalu tunda 5 menit atau selesai.</p></div>
+    <div class="card"><span class="ic">📝</span><h3>Catatan</h3><p>Simpan catatan cepat dan buka detailnya di jendela tersendiri. Tersimpan permanen.</p></div>
+    <div class="card"><span class="ic">📋</span><h3>Riwayat clipboard</h3><p>Klik item untuk menyalin ulang, atau bersihkan semuanya.</p></div>
+    <div class="card"><span class="ic">🗂️</span><h3>Shelf file</h3><p>Seret file ke notch untuk menyimpannya sementara, lalu seret keluar ke File Explorer atau aplikasi lain.</p></div>
+    <div class="card"><span class="ic">🕌</span><h3>Jadwal shalat</h3><p>Jadwal harian dan pengingat waktu shalat lewat kartu kecil.</p></div>
+    <div class="card"><span class="ic">🔒</span><h3>Indikator privasi</h3><p>Titik penanda dan kartu saat mikrofon atau kamera sedang dipakai aplikasi.</p></div>
+    <div class="card"><span class="ic">🔌</span><h3>Kartu perangkat</h3><p>Pemberitahuan saat Bluetooth, USB, charger, keyboard, atau mouse dicolok dan dicabut.</p></div>
+    <div class="card"><span class="ic">🔊</span><h3>HUD volume &amp; kecerahan</h3><p>Indikator volume dan kecerahan tampil di notch, termasuk status mute.</p></div>
+    <div class="card"><span class="ic">👀</span><h3>Mata ekspresif</h3><p>Mata mengikuti kursor, berkedip, dan berganti ekspresi. Ada 10 tema mata dari aurora sampai monochrome.</p></div>
+    <div class="card"><span class="ic">🧲</span><h3>Geser sesuka hati</h3><p>Tahan lalu geser notch (berubah jadi bola), menempel ke tepi atas, bawah, kiri, atau kanan. Reset posisi dari tray.</p></div>
+    <div class="card"><span class="ic">🎨</span><h3>Tema &amp; skala</h3><p>Otomatis, terang, gelap, atau warna kustom. Ukuran 0,5× sampai 1,5×. Berubah langsung dari Pengaturan.</p></div>
+    <div class="card"><span class="ic">🔔</span><h3>Banner update</h3><p>Memberi tahu saat ada versi baru dan membuka halaman rilisnya.</p></div>
+  </div>
+</section>
+
+<section id="pasang">
+  <h2>Pasang &amp; jalankan</h2>
+  <p class="sub">Butuh Rust (stable), Node.js 18+, dan pustaka sistem Tauri. Rinciannya per sistem operasi ada di <a href="https://github.com/USERNAME/REPO#prasyarat">README</a>.</p>
+<pre><code>git clone https://github.com/USERNAME/REPO.git
+cd REPO
+npm install
+npm run tauri dev      # mode pengembangan
+npm run tauri build    # buat installer</code></pre>
+</section>
+
+<section id="kontrol">
+  <h2>Kontrol</h2>
+  <p class="sub">Hover untuk membuka hub, klik untuk pindah, scroll atau ikon di atas untuk ganti halaman.</p>
+  <table>
+    <tr><th>Aksi</th><th>Hasil</th></tr>
+    <tr><td>Hover / klik notch</td><td>Buka hub</td></tr>
+    <tr><td>Scroll mouse atau touchpad</td><td>Ganti halaman</td></tr>
+    <tr><td>Tahan lalu geser</td><td>Pindahkan notch</td></tr>
+    <tr><td>Klik kanan item shelf</td><td>Tampilkan di folder</td></tr>
+    <tr><td>Seret file ke notch</td><td>Simpan ke shelf</td></tr>
+    <tr><td>Ikon tray</td><td>Pengaturan, Pusatkan Notch, Keluar</td></tr>
+  </table>
+</section>
+
+<section id="config">
+  <h2>Konfigurasi</h2>
+  <p class="sub">Semua bisa diatur dari jendela Pengaturan atau langsung di <code>config.toml</code>.</p>
+<pre><code>scale = 1.0
+pages = ["media", "clock", "weather", "battery", "timer", "quick",
+         "stats", "reminder", "notes", "clipboard", "shelf", "lyrics",
+         "privacy", "prayer"]
+
+[appearance]
+theme = "auto"        # auto | light | dark | custom
+default_mood = "normal"
+eye_theme = "aurora"</code></pre>
+</section>
+
+<footer>Notch · dibuat dengan Tauri 2 · <a href="https://github.com/USERNAME/REPO">GitHub</a></footer>
+</div>
+</body>
+</html>
