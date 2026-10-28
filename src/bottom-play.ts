@@ -143,9 +143,11 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (isSideDock(dock) && h.setTy) return h.setTy(value);
         return h.setCx(value);
     };
+
     // ---------- menunggu (digerakkan frame, bisa dibatalkan) ----------
     const until = (ok: () => boolean) => new Promise<void>((res, rej) => { waits.push({ ok, res, rej }); });
     const wait = (ms: number) => { const t = performance.now() + ms; return until(() => performance.now() >= t); };
+
     // ---------- posisi native ----------
     function flush() {
         if (inflight || wanted < 0) return;
@@ -182,6 +184,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
     }
 
     // ---------- fisika ----------
+
     function physics(dt: number) {
         if (grav) {
             if (y.x < 0 || y.v < 0) {
