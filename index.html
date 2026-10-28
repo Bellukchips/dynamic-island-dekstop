@@ -43,6 +43,7 @@
   <link rel="stylesheet" href="/src/clock.css" />
   <link rel="stylesheet" href="/src/hub-compact.css" />
   <link rel="stylesheet" href="/src/prayer.css" />
+  <link rel="stylesheet" href="/src/prayer-alert.css" />
   <link rel="stylesheet" href="/src/update-banner.css" />
   <link rel="stylesheet" href="/src/orb-drag.css" />
   <script type="module" src="/src/main.ts" defer></script>
@@ -587,6 +588,24 @@
             <small id="dev-sub">Terhubung</small>
           </div>
           <div class="dev-chip" id="dev-chip"></div>
+        </div>
+
+        <!-- Alert adzan: ditahan tetap tampil selama file adzan.mp3 diputar -->
+        <div class="layer l-prayer-alert" role="status" aria-live="assertive" aria-labelledby="pr-alert-title">
+          <div class="pr-alert-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 10v4h3l5 4V6l-5 4H4z" />
+              <path d="M16 9a5 5 0 0 1 0 6M18.5 6.5a8.5 8.5 0 0 1 0 11" />
+            </svg>
+          </div>
+          <div class="pr-alert-copy">
+            <strong id="pr-alert-title">Waktu shalat</strong>
+            <small id="pr-alert-sub">Adzan sedang diputar</small>
+          </div>
+          <div class="pr-alert-right">
+            <span class="pr-alert-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <b id="pr-alert-status">ADZAN</b>
+          </div>
         </div>
 
         <!-- HUD volume / brightness -->
