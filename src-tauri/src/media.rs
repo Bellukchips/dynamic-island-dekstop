@@ -130,6 +130,8 @@ mod imp {
             if let Ok(p) = finder.find_active() {
                 let _ = match action {
                     "toggle" => p.play_pause(),
+                    "pause" => p.pause(),
+                    "play" => p.play(),
                     "next" => p.next(),
                     "prev" => p.previous(),
                     _ => Ok(()),
@@ -281,6 +283,8 @@ mod imp {
         if let Ok(s) = session() {
             let _ = match action {
                 "toggle" => s.TryTogglePlayPauseAsync().map(|_| ()),
+                "pause" => s.TryPauseAsync().map(|_| ()),
+                "play" => s.TryPlayAsync().map(|_| ()),
                 "next" => s.TrySkipNextAsync().map(|_| ()),
                 "prev" => s.TrySkipPreviousAsync().map(|_| ()),
                 _ => Ok(()),
