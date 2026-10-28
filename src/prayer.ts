@@ -1,9 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-// Vite akan mengemas aset ini dari src/public/adzan.mp3 ke URL yang benar saat build.
-const ADZAN_URL = new URL("./public/adzan.mp3", import.meta.url).href;
-
 // Halaman jadwal shalat + pengingat. Data dari Rust (prayer_month), semua hitungan di sini.
 
 type Day = {
@@ -16,6 +13,8 @@ type Entry = { key: string; name: string; at: Date };
 type Hooks = {
     card: (title: string, sub: string, ms: number) => void;
     mood: (m: string, ms: number) => void;
+    adhanStart: (prayerName: string, sub: string) => void;
+    adhanEnd: () => void;
 };
 
 const PRAYERS: [keyof Day, string][] = [
@@ -165,41 +164,62 @@ function tone(times: number) {
         }
     } catch { /* audio tidak tersedia: kartu tetap tampil */ }
 }
-// File suara berada di src/public/adzan.mp3. ADZAN_URL diproses Vite agar
-// path tetap benar baik saat npm run dev maupun saat aplikasi dibuild.
-let adzanAudio: HTMLAudioElement | null = null;
-function adzan() {
-    let fallbackPlayed = false;
-    const fallbackTone = () => {
-        if (fallbackPlayed) return;
-        fallbackPlayed = true;
+
+// File disimpan di src/public/adzan.mp3. Vite akan memasukkan MP3 ke bundle produksi.
+const ADZAN_URL = new URL("./public/adzan.mp3", import.meta.url).href;
+let activeAdhanAudio: HTMLAudioElement | null = null;
+let activeAdhanFinish: (() => void) | null = null;
+
+/** Putar MP3 adzan. showNotch=true hanya untuk adzan pada jadwal shalat, bukan pratinjau tombol mode. */
+function adzan(prayerName = "Adzan", showNotch = true) {
+    // Jangan biarkan audio lama / callback lama mempertahankan kartu atau status pause.
+    if (activeAdhanFinish) {
+        const stopPrevious = activeAdhanFinish;
+        activeAdhanFinish = null;
+        if (activeAdhanAudio) {
+            activeAdhanAudio.pause();
+            activeAdhanAudio.currentTime = 0;
+        }
+        stopPrevious();
+    }
+
+    const audio = new Audio(ADZAN_URL);
+    audio.preload = "auto";
+    audio.volume = 0.9;
+    activeAdhanAudio = audio;
+
+    let finished = false;
+    let failed = false;
+    let fallbackTimer = 0;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(fallbackTimer);
+        if (activeAdhanAudio === audio) activeAdhanAudio = null;
+        if (activeAdhanFinish === finish) activeAdhanFinish = null;
+        if (showNotch) hooks.adhanEnd();
+    };
+    activeAdhanFinish = finish;
+
+    const playbackFailed = (reason: unknown) => {
+        if (failed || finished) return;
+        failed = true;
+        console.error("[Prayer] Gagal memutar adzan.mp3:", reason, "URL:", ADZAN_URL);
+        audio.pause();
+        // Fallback pendek agar kegagalan file tidak membuat media terus terjeda.
         tone(3);
+        fallbackTimer = window.setTimeout(finish, 2600);
     };
 
-    try {
-        const audio = adzanAudio ??= new Audio(ADZAN_URL);
-        audio.preload = "auto";
-        audio.volume = 0.9;
-        audio.onerror = () => {
-            console.error("[Prayer] Gagal memuat file adzan:", ADZAN_URL, audio.error);
-            fallbackTone();
-        };
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", () => playbackFailed(`file audio tidak dapat dimuat (kode ${audio.error?.code ?? "unknown"})`), { once: true });
 
-        // Mulai dari awal apabila pratinjau atau audio sebelumnya masih berjalan.
-        audio.pause();
-        try { audio.currentTime = 0; } catch { /* metadata mungkin belum dimuat */ }
-
-        const playback = audio.play();
-        if (playback) {
-            void playback.catch((error: unknown) => {
-                console.error("[Prayer] Gagal memutar suara adzan:", error, ADZAN_URL);
-                fallbackTone();
-            });
-        }
-    } catch (error) {
-        console.error("[Prayer] Audio adzan tidak tersedia:", error, ADZAN_URL);
-        fallbackTone();
+    if (showNotch) {
+        const sub = `${hhmm(new Date())} · ${prefs?.kabkota ?? "Lokasi shalat"}`;
+        hooks.adhanStart(prayerName, sub);
     }
+
+    void audio.play().catch(playbackFailed);
 }
 
 // ---------- pengingat ----------
@@ -233,10 +253,14 @@ function checkReminders() {
                 hooks.mood("surprised", 3000);
                 if (prefs.mode !== "silent") tone(1);
             } else {
-                hooks.card(`Waktu ${c.name}`, `${hhmm(c.at)} · ${prefs.kabkota}`, 15000);
                 hooks.mood("love", 4000);
-                if (prefs.mode === "adzan") adzan();
-                else if (prefs.mode === "tone") tone(3);
+                if (prefs.mode === "adzan") {
+                    // Kartu tetap terbuka hingga HTMLAudioElement memicu ended (atau gagal).
+                    adzan(c.name, true);
+                } else {
+                    hooks.card(`Waktu ${c.name}`, `${hhmm(c.at)} · ${prefs.kabkota}`, 15000);
+                    if (prefs.mode === "tone") tone(3);
+                }
             }
         }
     }
@@ -256,7 +280,7 @@ function wire() {
             e.stopPropagation();
             if (!prefs) return;
             prefs.mode = b.dataset.mode as Mode;
-            if (prefs.mode === "adzan") adzan(); else if (prefs.mode === "tone") tone(1); // pratinjau suara
+            if (prefs.mode === "adzan") adzan("Tes adzan", false); else if (prefs.mode === "tone") tone(1); // pratinjau suara
             render(); savePrefs();
         }));
     el("pr-remind")?.addEventListener("click", (e) => {
