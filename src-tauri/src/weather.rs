@@ -107,6 +107,10 @@ fn fetch() -> Result<WeatherEvent, String> {
 }
 
 pub fn start(app: AppHandle) {
+    // halaman "weather" dihapus dari config -> tidak perlu thread dan permintaan jaringan sama sekali
+    if !crate::config::get().pages.iter().any(|p| p == "weather") {
+        return;
+    }
     let (tx, rx) = mpsc::channel::<()>();
     let _ = REFRESH.set(Mutex::new(tx));
 

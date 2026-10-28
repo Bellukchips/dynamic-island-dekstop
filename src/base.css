@@ -71,7 +71,7 @@ body {
   border-radius: 0 0 17px 17px;
 }
 #notch[data-view="compactLyrics"] {
-  width: 340px;
+  width: calc(var(--cl-w, 340) * 1px); /* diatur main.ts menurut panjang lirik */
   height: 34px;
   border-radius: 0 0 17px 17px;
 }
@@ -154,7 +154,7 @@ body {
   padding: 0 14px;
 }
 #notch[data-view="compactLyrics"] .l-compact {
-  width: 320px;
+  width: calc(var(--cl-w, 340) * 1px - 20px);
 }
 .l-hub {
   width: 400px;

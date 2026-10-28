@@ -57,6 +57,15 @@ fn with_items<R>(f: impl FnOnce(&mut Vec<Note>) -> R) -> R {
     r
 }
 
+// hanya baca: tidak menulis ulang file (with_items selalu menyimpan)
+fn read_items<R>(f: impl FnOnce(&Vec<Note>) -> R) -> R {
+    let mut guard = NOTES.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(load());
+    }
+    f(guard.as_ref().unwrap())
+}
+
 fn sorted(mut items: Vec<Note>) -> Vec<Note> {
     items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at)); // terbaru di atas
     items
@@ -64,7 +73,7 @@ fn sorted(mut items: Vec<Note>) -> Vec<Note> {
 
 #[tauri::command]
 pub fn notes_list() -> Vec<Note> {
-    with_items(|items| sorted(items.clone()))
+    read_items(|items| sorted(items.clone()))
 }
 
 #[tauri::command]

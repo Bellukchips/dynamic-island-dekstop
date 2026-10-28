@@ -91,6 +91,15 @@ fn with_items<R>(f: impl FnOnce(&mut Vec<Reminder>) -> R) -> R {
     result
 }
 
+// hanya baca: tidak menulis ulang file (with_items selalu menyimpan)
+fn read_items<R>(f: impl FnOnce(&Vec<Reminder>) -> R) -> R {
+    let mut guard = ITEMS.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(load());
+    }
+    f(guard.as_ref().unwrap())
+}
+
 fn sorted(mut items: Vec<Reminder>) -> Vec<Reminder> {
     items.sort_by(|a, b| {
         a.done.cmp(&b.done).then_with(|| {
@@ -114,7 +123,7 @@ fn effective_repeat_mode(r: &Reminder) -> &str {
 
 #[tauri::command]
 pub fn reminders_list() -> Vec<Reminder> {
-    with_items(|items| sorted(items.clone()))
+    read_items(|items| sorted(items.clone()))
 }
 
 #[tauri::command]

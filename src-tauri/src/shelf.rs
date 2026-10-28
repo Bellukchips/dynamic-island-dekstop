@@ -46,6 +46,12 @@ pub fn start(app: AppHandle) {
     }
 }
 
+// diagnostik: frontend menulis jejak drag-drop ke terminal (tauri dev) lewat sini
+#[tauri::command]
+pub fn shelf_log(msg: String) {
+    eprintln!("[shelf] {msg}");
+}
+
 #[tauri::command]
 pub fn shelf_list() -> Vec<Item> {
     alive()

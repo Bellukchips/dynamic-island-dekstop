@@ -63,6 +63,22 @@ mod imp {
         )
     }
 
+    // Hanya field yang dipakai yang disimpan; sisa JSON pactl dilewati tanpa dialokasikan.
+    #[derive(serde::Deserialize)]
+    struct Sink {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        ports: Option<Vec<Port>>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Port {
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        availability: Option<String>,
+    }
+
     // jack headset 3.5mm: port sink headphones/headset yang "available"
     fn scan_jack(out: &mut HashMap<String, (String, String)>) {
         let Ok(o) = std::process::Command::new("pactl")
@@ -71,19 +87,19 @@ mod imp {
         else {
             return;
         };
-        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&o.stdout) else {
+        let Ok(sinks) = serde_json::from_slice::<Vec<Sink>>(&o.stdout) else {
             return;
         };
 
-        for s in v.as_array().into_iter().flatten() {
-            let sink = s["name"].as_str().unwrap_or("");
+        for s in &sinks {
+            let sink = s.name.as_deref().unwrap_or("");
             // Bluetooth dan USB sudah ditangani modul lain
             if sink.contains("bluez") || sink.contains("usb") {
                 continue;
             }
-            for p in s["ports"].as_array().into_iter().flatten() {
-                let name = p["name"].as_str().unwrap_or("");
-                let avail = p["availability"].as_str().unwrap_or("");
+            for p in s.ports.iter().flatten() {
+                let name = p.name.as_deref().unwrap_or("");
+                let avail = p.availability.as_deref().unwrap_or("");
                 if avail == "available" && (name.contains("headphone") || name.contains("headset")) {
                     out.insert(
                         format!("jack:{sink}"),
@@ -94,7 +110,11 @@ mod imp {
         }
     }
 
-    fn scan() -> HashMap<String, (String, String)> {
+    // Jack butuh spawn `pactl`, jadi hanya disegarkan tiap putaran genap (~3 dtk); sisanya pakai hasil terakhir.
+    fn scan(
+        jack: &mut HashMap<String, (String, String)>,
+        refresh_jack: bool,
+    ) -> HashMap<String, (String, String)> {
         let mut out = HashMap::new();
 
         // 1) perangkat USB
@@ -147,13 +167,19 @@ mod imp {
         }
 
         // 4) jack headset 3.5mm
-        scan_jack(&mut out);
+        if refresh_jack {
+            jack.clear();
+            scan_jack(jack);
+        }
+        out.extend(jack.iter().map(|(k, v)| (k.clone(), v.clone())));
         out
     }
 
     pub fn start(app: AppHandle) {
         std::thread::spawn(move || {
-            let mut known = scan();
+            let mut jack: HashMap<String, (String, String)> = HashMap::new();
+            let mut round: u32 = 0;
+            let mut known = scan(&mut jack, true);
             println!("devices: {} perangkat terdeteksi saat start", known.len());
             let ls = |p: &str| {
                 fs::read_dir(p)
@@ -164,7 +190,8 @@ mod imp {
             println!("devices: /sys/bus/usb/devices = {:?}", ls("/sys/bus/usb/devices"));
             loop {
                 std::thread::sleep(Duration::from_millis(1500));
-                let now = scan();
+                round = round.wrapping_add(1);
+                let now = scan(&mut jack, round % 2 == 0);
 
                 for (k, (kind, name)) in &now {
                     if !known.contains_key(k) {

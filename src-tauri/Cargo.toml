@@ -1,8 +1,8 @@
 [package]
 name = "notch"
-version = "0.1.0"
+version = "1.1.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["bellukstudio"]
 edition = "2024"
 
 [lib]
@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 toml = "0.8"
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
+tauri-plugin-drag = "2"   # BARU: drag file keluar dari notch (shelf) ke File Explorer / aplikasi lain
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
@@ -44,6 +45,7 @@ windows = { version = "0.61", features = [
   "Win32_System_Variant",
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_Media_Audio",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Media_Audio_Endpoints",
   "Win32_Media_MediaFoundation",   # <-- BARU: IMFSensorActivityMonitor (indikator kamera)
   "Devices",

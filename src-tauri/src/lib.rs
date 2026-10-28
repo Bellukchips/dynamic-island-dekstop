@@ -31,6 +31,24 @@ static WIN_PHYS: std::sync::Mutex<(i32, i32)> = std::sync::Mutex::new((0, 0));
 static NOTCH_POS: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
 // Menandakan apakah notch sedang digeser oleh user
 static IS_DRAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// true selama item shelf diseret KELUAR (loop OLE drag Windows sedang berjalan): jendela tidak boleh
+// diubah gaya click-through-nya dari thread lain di tengah seretan
+static DRAG_OUT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+fn set_drag_out(window: tauri::WebviewWindow, active: bool) {
+    DRAG_OUT.store(active, std::sync::atomic::Ordering::SeqCst);
+    #[cfg(target_os = "windows")]
+    {
+        if active {
+            let _ = window.set_ignore_cursor_events(false);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = window;
+    }
+}
 // Nomor generasi membatalkan animasi resize sebelumnya saat target mode berubah lagi.
 // static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -70,15 +88,50 @@ fn apply_notch_position(window: &tauri::WebviewWindow) {
     }
 }
 
+// Satu thread pekerja tetap (dulu: thread baru TIAP set_size dipanggil, yang terjadi tiap
+// notch membuka/menutup). Panggilan baru mengulang urutan dari awal.
+static REPOS_TX: std::sync::OnceLock<std::sync::Mutex<std::sync::mpsc::Sender<tauri::WebviewWindow>>> =
+    std::sync::OnceLock::new();
+
 // reposisikan beberapa kali karena compositor menerapkan ukuran dengan jeda
 fn reposition_later(window: &tauri::WebviewWindow) {
-    let win = window.clone();
-    std::thread::spawn(move || {
-        for ms in [60u64, 150, 300] {
-            std::thread::sleep(std::time::Duration::from_millis(ms));
-            apply_notch_position(&win);
-        }
+    use std::sync::mpsc::{self, RecvTimeoutError};
+    use std::time::Duration;
+
+    let tx = REPOS_TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<tauri::WebviewWindow>();
+        std::thread::spawn(move || {
+            // jeda berurutan 60 + 90 + 150 ms = reposisi pada 60, 150, dan 300 ms
+            const STEPS: [u64; 3] = [60, 90, 150];
+            while let Ok(mut win) = rx.recv() {
+                let mut i = 0;
+                while i < STEPS.len() {
+                    match rx.recv_timeout(Duration::from_millis(STEPS[i])) {
+                        Ok(w) => {
+                            win = w;
+                            i = 0;
+                        }
+                        Err(RecvTimeoutError::Timeout) => {
+                            apply_notch_position(&win);
+                            i += 1;
+                        }
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
+                }
+            }
+        });
+        std::sync::Mutex::new(tx)
     });
+    if let Ok(g) = tx.lock() {
+        let _ = g.send(window.clone());
+    }
+}
+
+// payload posisi kursor (30x/detik): struct bertipe, bukan serde_json::json! (peta + String per kirim)
+#[derive(serde::Serialize, Clone)]
+struct CursorPos {
+    dx: f64,
+    dy: f64,
 }
 
 // jendela pengaturan (dibuat saat diminta, dipakai ulang kalau sudah ada)
@@ -168,7 +221,11 @@ async fn open_note_detail(app: tauri::AppHandle, id: String) -> Result<(), Strin
 //     })
 //     .await;
 // }
-
+#[cfg(target_os = "windows")]
+fn lbutton_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    unsafe { (GetAsyncKeyState(VK_LBUTTON.0 as i32) as u16 & 0x8000) != 0 }
+}
 #[tauri::command]
 fn notch_monitor(window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
     let m = window
@@ -342,8 +399,17 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(cfg_plugin)
+        .plugin(tauri_plugin_drag::init()) // drag keluar: notch -> File Explorer
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
+            // eprintln!("[dnd-rust] hook aktif");
+            // if std::env::var_os("NOTCH_DND_TEST").is_some() {
+            //     eprintln!("[dnd-rust] TES: click-through DIMATIKAN");
+            // }
+            // if std::env::var_os("NOTCH_NO_TOP").is_some() {
+            //     let _ = win.set_always_on_top(false);
+            //     eprintln!("[dnd-rust] TES: alwaysOnTop DIMATIKAN");
+            // }
 
             #[allow(unused_mut)]
             let mut layer_ok = false;
@@ -382,6 +448,8 @@ pub fn run() {
             // posisi kursor untuk mata (~30 fps). Di Windows sekaligus mengatur click-through.
             #[cfg(target_os = "windows")]
             let mut last_inside = true;
+            #[cfg(target_os = "windows")]
+            let mut resync = false; // paksa terapkan ulang click-through setelah seretan keluar selesai
             let w = win.clone();
             std::thread::spawn(move || {
               // kirim posisi hanya saat kursor bergerak (plus denyut ~4x/detik saat diam,
@@ -408,28 +476,33 @@ pub fn run() {
                         still % 8 == 0
                     };
                     if send {
-                        let _ = w.emit("cursor", serde_json::json!({ "dx": dx, "dy": dy }));
+                        let _ = w.emit("cursor", CursorPos { dx, dy });
                     }
 
                     #[cfg(target_os = "windows")]
                     {
-                        if !IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                        if DRAG_OUT.load(std::sync::atomic::Ordering::Relaxed) {
+                            resync = true;
+                        } else if !IS_DRAGGING.load(std::sync::atomic::Ordering::Relaxed) {
                         let (hx, hy, hw, hh) = *HIT.lock().unwrap();
-                        let left = pos.x as f64 + hx as f64 * scale;
-                        let top = pos.y as f64 + hy as f64 * scale;
+                        let grow = if lbutton_down() { 40.0 * scale } else { 0.0 }; // lebih longgar saat ada seretan
+                        let left = pos.x as f64 + hx as f64 * scale - grow;
+                        let top = pos.y as f64 + hy as f64 * scale - grow;
                         let inside = cur.x >= left
-                            && cur.x <= left + hw as f64 * scale
-                            && cur.y >= top
-                            && cur.y <= top + hh as f64 * scale;
-                            if inside != last_inside {
+                                && cur.x <= left + hw as f64 * scale + grow * 2.0
+                                && cur.y >= top
+                                && cur.y <= top + hh as f64 * scale + grow * 2.0;
+                            if inside != last_inside || resync {
+                                resync = false;
                                 last_inside = inside;
                                 let _ = w.set_ignore_cursor_events(!inside);
+                                // let _ = w.set_ignore_cursor_events(!inside && std::env::var_os("NOTCH_DND_TEST").is_none());
                             }
                         }
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_millis(33));
-              }
+                }
             });
 
             // Inisialisasi posisi kustom jika ada di konfigurasi
@@ -499,6 +572,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // diagnostik drag-drop dari luar (Explorer dsb.): hapus blok ini kalau sudah beres
+            if let tauri::WindowEvent::DragDrop(d) = event {
+                if !matches!(d, tauri::DragDropEvent::Over { .. }) {
+                    eprintln!("[dnd-rust] {} {:?}", window.label(), d);
+                }
+            }
             // jendela pengaturan ditutup tanpa simpan -> kembalikan tampilan notch ke isi file
             if window.label() == "settings" {
                 if let tauri::WindowEvent::Destroyed = event {
@@ -508,8 +587,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             media::media_control,
+            media::media_seek,
             set_size,
             set_hit_area,
+            set_drag_out,
+            shelf::shelf_log,
             quick::quick_state,
             quick::quick_toggle,
             clipboard::clip_list,
@@ -537,7 +619,7 @@ pub fn run() {
             prayer::prayer_month,
             prayer::prayer_info,
             prayer::prayer_set_prefs,
-config::cfg_get,
+            config::cfg_get,
             config::cfg_preview,
             config::cfg_save,
             config::cfg_restart,

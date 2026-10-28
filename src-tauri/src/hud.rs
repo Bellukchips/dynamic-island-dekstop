@@ -16,9 +16,37 @@ pub fn start(app: AppHandle) {
 #[cfg(target_os = "linux")]
 mod imp {
     use super::HudEvent;
-    use std::process::Command;
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc::{self, RecvTimeoutError};
     use std::time::Duration;
     use tauri::{AppHandle, Emitter};
+
+    // `pactl subscribe` mencetak satu baris tiap ada perubahan audio. Volume cukup dibaca saat ada
+    // kejadian (dulu: menjalankan wpctl 4x per detik, terus-menerus, hanya untuk melihat "tidak berubah").
+    fn subscribe_audio() -> Option<mpsc::Receiver<()>> {
+        let mut child = Command::new("pactl")
+            .arg("subscribe")
+            .env("LC_ALL", "C")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let out = child.stdout.take()?;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            // contoh baris: "Event 'change' on sink #52" (sink-input / source tidak relevan)
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                if (line.contains(" sink ") || line.contains(" server")) && tx.send(()).is_err() {
+                    break;
+                }
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        });
+        Some(rx)
+    }
 
     fn run(cmd: &str, args: &[&str]) -> Option<String> {
         let o = Command::new(cmd).args(args).output().ok()?;
@@ -72,14 +100,47 @@ mod imp {
             let mut last_br = brightness();
             println!("hud: volume={:?} brightness={:?}", last_vol, last_br);
 
+            let mut events = subscribe_audio();
+            let mut tick: u32 = 0;
             loop {
-                std::thread::sleep(Duration::from_millis(250));
+                let mut check_vol = false;
+                let mut drop_events = false;
+                match &events {
+                    Some(rx) => match rx.recv_timeout(Duration::from_millis(250)) {
+                        Ok(()) => {
+                            // gabungkan rentetan kejadian (mis. saat slider digeser) jadi satu pembacaan
+                            std::thread::sleep(Duration::from_millis(60));
+                            while rx.try_recv().is_ok() {}
+                            check_vol = true;
+                        }
+                        Err(RecvTimeoutError::Timeout) => {
+                            tick = tick.wrapping_add(1);
+                            check_vol = tick % 8 == 0; // jaring pengaman tiap ~2 dtk
+                        }
+                        Err(RecvTimeoutError::Disconnected) => drop_events = true,
+                    },
+                    None => {
+                        // pactl subscribe tidak tersedia: kembali ke polling, coba lagi tiap ~10 dtk
+                        std::thread::sleep(Duration::from_millis(250));
+                        check_vol = true;
+                        tick = tick.wrapping_add(1);
+                        if tick % 40 == 0 {
+                            events = subscribe_audio();
+                        }
+                    }
+                }
+                if drop_events {
+                    events = None;
+                    continue;
+                }
 
-                let v = volume_wpctl().or_else(volume_pactl);
-                if v.is_some() && v != last_vol {
-                    last_vol = v;
-                    let (value, muted) = v.unwrap();
-                    let _ = app.emit("hud", HudEvent { kind: "volume", value, muted });
+                if check_vol {
+                    let v = volume_wpctl().or_else(volume_pactl);
+                    if v.is_some() && v != last_vol {
+                        last_vol = v;
+                        let (value, muted) = v.unwrap();
+                        let _ = app.emit("hud", HudEvent { kind: "volume", value, muted });
+                    }
                 }
 
                 let b = brightness();
@@ -102,9 +163,13 @@ mod imp {
     use windows::Win32::Media::Audio::{eMultimedia, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 
-    fn volume() -> windows::core::Result<(u8, bool)> {
+    // enumerator dibuat sekali dan dipakai ulang (dulu: CoCreateInstance baru tiap 250 ms)
+    fn enumerator() -> Option<IMMDeviceEnumerator> {
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok() }
+    }
+
+    fn volume(en: &IMMDeviceEnumerator) -> windows::core::Result<(u8, bool)> {
         unsafe {
-            let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
             let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia)?;
             let vol = dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None)?;
             let v = vol.GetMasterVolumeLevelScalar()?;
@@ -137,16 +202,24 @@ mod imp {
             unsafe {
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED).ok();
             }
-            let mut last = volume().ok();
+            let mut en = enumerator();
+            let mut last = en.as_ref().and_then(|e| volume(e).ok());
             println!("hud: volume={:?}", last);
 
             loop {
                 std::thread::sleep(Duration::from_millis(250));
-                if let Ok(v) = volume() {
-                    if Some(v) != last {
-                        last = Some(v);
-                        let _ = app.emit("hud", HudEvent { kind: "volume", value: v.0, muted: v.1 });
+                if en.is_none() {
+                    en = enumerator();
+                }
+                match en.as_ref().map(volume) {
+                    Some(Ok(v)) => {
+                        if Some(v) != last {
+                            last = Some(v);
+                            let _ = app.emit("hud", HudEvent { kind: "volume", value: v.0, muted: v.1 });
+                        }
                     }
+                    Some(Err(_)) => en = None, // buat ulang di putaran berikutnya
+                    None => {}
                 }
             }
         });

@@ -12,10 +12,18 @@ pub struct MediaState {
 }
 
 // bytes gambar -> data URL (webview tidak boleh membuka file lokal)
+// Dibuat langsung ke satu String berkapasitas pas (dulu: encode -> String sementara -> format! -> salinan lagi).
 pub(crate) fn data_url(mime: &str, bytes: &[u8]) -> String {
     use base64::{engine::general_purpose::STANDARD, Engine};
-    format!("data:{mime};base64,{}", STANDARD.encode(bytes))
+    let prefix = format!("data:{mime};base64,");
+    let mut s = String::with_capacity(prefix.len() + bytes.len().div_ceil(3) * 4);
+    s.push_str(&prefix);
+    STANDARD.encode_string(bytes, &mut s);
+    s
 }
+
+// Artwork lebih besar dari ini tidak dikirim: data URL-nya ikut tinggal di memori webview.
+pub(crate) const MAX_ART_BYTES: u64 = 3_000_000;
 
 // Kirim hanya saat keadaan berubah (posisi lagu yang berjalan tetap terkirim tiap detik).
 // Diulang tiap 5 detik sebagai pengingat untuk frontend yang baru selesai dimuat.
@@ -32,7 +40,7 @@ impl Dedup {
             return;
         }
         self.at = std::time::Instant::now();
-        let _ = app.emit("media", s.clone());
+        let _ = app.emit("media", &s); // referensi: tidak perlu salinan
         self.last = Some(s);
     }
 }
@@ -46,6 +54,12 @@ pub fn media_control(action: String) {
     imp::control(&action);
 }
 
+// pindah ke menit tertentu (detik dari awal lagu)
+#[tauri::command]
+pub fn media_seek(position: f64) {
+    imp::seek(position);
+}
+
 // ======================= Linux (MPRIS) =======================
 #[cfg(target_os = "linux")]
 mod imp {
@@ -56,6 +70,9 @@ mod imp {
 
     fn load_art(url: &str) -> Option<String> {
         if let Some(path) = url.strip_prefix("file://") {
+            if std::fs::metadata(path).ok()?.len() > super::MAX_ART_BYTES {
+                return None;
+            }
             let bytes = std::fs::read(path).ok()?;
             let mime = if path.ends_with(".png") { "image/png" } else { "image/jpeg" };
             Some(data_url(mime, &bytes))
@@ -117,6 +134,22 @@ mod imp {
                     "prev" => p.previous(),
                     _ => Ok(()),
                 };
+            }
+        }
+    }
+
+    // MPRIS: seek relatif terhadap posisi sekarang
+    pub fn seek(secs: f64) {
+        if let Ok(finder) = PlayerFinder::new() {
+            if let Ok(p) = finder.find_active() {
+                if let Ok(cur) = p.get_position() {
+                    let target = Duration::from_secs_f64(secs.max(0.0));
+                    let _ = if target >= cur {
+                        p.seek_forwards(&(target - cur))
+                    } else {
+                        p.seek_backwards(&(cur - target))
+                    };
+                }
             }
         }
     }
@@ -182,7 +215,7 @@ mod imp {
         let props = s.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
         let stream = props.Thumbnail().ok()?.OpenReadAsync().ok()?.get().ok()?;
         let size = stream.Size().ok()? as u32;
-        if size == 0 || size > 8_000_000 {
+        if size == 0 || size as u64 > super::MAX_ART_BYTES {
             return None;
         }
         let input = stream.GetInputStreamAt(0).ok()?;
@@ -252,6 +285,14 @@ mod imp {
                 "prev" => s.TrySkipPreviousAsync().map(|_| ()),
                 _ => Ok(()),
             };
+        }
+    }
+
+    // SMTC: posisi dalam satuan 100 ns. Hanya berhasil kalau aplikasi pemutarnya mengizinkan seek.
+    pub fn seek(secs: f64) {
+        if let Ok(s) = session() {
+            let ticks = (secs.max(0.0) * 10_000_000.0) as i64;
+            let _ = s.TryChangePlaybackPositionAsync(ticks);
         }
     }
 }

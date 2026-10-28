@@ -112,11 +112,24 @@
   font-variant-numeric: tabular-nums;
 }
 .bar {
+  position: relative;
   flex: 1;
   height: 4px;
   background: rgba(var(--fg-rgb), 0.14);
   border-radius: 4px;
-  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.15s ease;
+}
+/* area sentuh lebih tinggi daripada garisnya supaya mudah digeser */
+.bar::before {
+  content: "";
+  position: absolute;
+  inset: -9px 0;
+}
+.m-time .bar:hover,
+.m-time .bar.seeking {
+  transform: scaleY(1.6);
 }
 #m-progress {
   height: 100%;
@@ -128,6 +141,24 @@
     rgb(var(--accent))
   );
   transition: width 1s linear;
+  position: relative;
+}
+/* kenop di ujung progress, muncul saat di-hover / digeser */
+#m-progress::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  transform: translateY(-50%) scale(0);
+  transition: transform 0.15s ease;
+}
+.m-time .bar:hover #m-progress::after,
+.m-time .bar.seeking #m-progress::after {
+  transform: translateY(-50%) scale(1);
 }
 
 .btns {

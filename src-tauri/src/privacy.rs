@@ -56,6 +56,10 @@ impl Debounce {
 
 // Kirim hanya saat berubah; diulang tiap 5 detik untuk frontend yang baru selesai dimuat.
 pub fn start(app: AppHandle) {
+    // fitur "privacy" dihapus dari config -> tidak perlu polling (spawn proses, scan /proc, dsb.)
+    if !crate::config::get().pages.iter().any(|p| p == "privacy") {
+        return;
+    }
     std::thread::spawn(move || {
         imp::init();
         let mut last: Option<Privacy> = None;
@@ -101,7 +105,9 @@ pub fn start(app: AppHandle) {
 mod imp {
     use super::Privacy;
     use std::path::Path;
-    use std::process::Command;
+    use std::process::{Command, Stdio};
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
 
     // 3 pembacaan berturut-turut (~3 dtk) sebelum titik/kartu kamera muncul; hilang setelah 2.
     pub const CAM_ON_CONFIRM: u32 = 3;
@@ -226,26 +232,87 @@ mod imp {
 
     // Kamera lewat PipeWire (portal): stream Video yang berstatus running.
     // (Node "Video/Source" saja tidak dihitung: statusnya bisa "running" sekilas saat probe.)
+    //
+    // Output pw-dump bisa ratusan KB. Dulu seluruhnya dimuat jadi serde_json::Value tiap detik;
+    // sekarang dibaca sebagai aliran dan hanya 5 field yang disimpan (sisanya dilewati serde).
+    #[derive(serde::Deserialize)]
+    struct PwObj {
+        #[serde(rename = "type", default)]
+        ty: Option<String>,
+        #[serde(default)]
+        info: Option<PwInfo>,
+    }
+    #[derive(serde::Deserialize)]
+    struct PwInfo {
+        #[serde(default)]
+        state: Option<serde_json::Value>,
+        #[serde(default)]
+        props: Option<PwProps>,
+    }
+    #[derive(serde::Deserialize)]
+    struct PwProps {
+        #[serde(rename = "media.class", default)]
+        media_class: Option<serde_json::Value>,
+        #[serde(rename = "application.name", default)]
+        application_name: Option<serde_json::Value>,
+        #[serde(rename = "node.name", default)]
+        node_name: Option<serde_json::Value>,
+    }
+
     fn pipewire_cam() -> Option<String> {
-        let out = Command::new("pw-dump").output().ok()?;
-        if !out.status.success() {
-            return None;
+        let mut child = Command::new("pw-dump")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let out = child.stdout.take()?;
+        let parsed = serde_json::from_reader::<_, Vec<PwObj>>(std::io::BufReader::new(out));
+        if parsed.is_err() {
+            let _ = child.kill();
         }
-        let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-        for o in v.as_array()? {
-            if o["type"] != "PipeWire:Interface:Node" || o["info"]["state"] != "running" {
+        let _ = child.wait();
+        let objs = parsed.ok()?;
+
+        for o in &objs {
+            if o.ty.as_deref() != Some("PipeWire:Interface:Node") {
                 continue;
             }
-            let props = &o["info"]["props"];
-            if props["media.class"].as_str() == Some("Stream/Input/Video") {
-                let name = props["application.name"]
-                    .as_str()
-                    .or_else(|| props["node.name"].as_str())
+            let Some(info) = &o.info else { continue };
+            if info.state.as_ref().and_then(|s| s.as_str()) != Some("running") {
+                continue;
+            }
+            let Some(props) = &info.props else { continue };
+            if props.media_class.as_ref().and_then(|s| s.as_str()) == Some("Stream/Input/Video") {
+                let name = props
+                    .application_name
+                    .as_ref()
+                    .and_then(|s| s.as_str())
+                    .or_else(|| props.node_name.as_ref().and_then(|s| s.as_str()))
                     .unwrap_or("aplikasi");
                 return Some(name.to_string());
             }
         }
         None
+    }
+
+    // Jalan paling sering tiap 3 dtk (bukan tiap 1 dtk): spawn proses + parse JSON besar itu mahal.
+    static PW_CACHE: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
+
+    fn pipewire_cam_cached() -> Option<String> {
+        const TTL: Duration = Duration::from_secs(3);
+        if let Ok(g) = PW_CACHE.lock() {
+            if let Some((at, v)) = g.as_ref() {
+                if at.elapsed() < TTL {
+                    return v.clone();
+                }
+            }
+        }
+        let v = pipewire_cam();
+        if let Ok(mut g) = PW_CACHE.lock() {
+            *g = Some((Instant::now(), v.clone()));
+        }
+        v
     }
 
     fn cam() -> Option<String> {
@@ -261,7 +328,7 @@ mod imp {
                 return Some("aplikasi".to_string());
             }
         }
-        pipewire_cam()
+        pipewire_cam_cached()
     }
 
     pub fn init() {}
@@ -556,6 +623,24 @@ mod imp {
         alive
     }
 
+    static WEBCAM_REG_CACHE: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
+
+    fn webcam_reg_cached() -> Option<String> {
+        const TTL: Duration = Duration::from_secs(3);
+        if let Ok(g) = WEBCAM_REG_CACHE.lock() {
+            if let Some((at, v)) = g.as_ref() {
+                if at.elapsed() < TTL {
+                    return v.clone();
+                }
+            }
+        }
+        let v = in_use("webcam");
+        if let Ok(mut g) = WEBCAM_REG_CACHE.lock() {
+            *g = Some((Instant::now(), v.clone()));
+        }
+        v
+    }
+
     fn in_use(kind: &str) -> Option<String> {
         entries(kind)
             .into_iter()
@@ -596,9 +681,17 @@ mod imp {
         // kamera: 1) monitor sensor (paling akurat)  2) registry (proses harus masih hidup)
         // 3) FrameServer, HANYA selama monitor sensor belum terbukti bekerja (tidak tersedia / belum pernah melapor)
         let streaming = CAM_PIDS.lock().ok().and_then(|g| g.first().copied()).map(proc_name);
-        let reg = in_use("webcam");
         // monitor dianggap terbukti bekerja setelah ia pernah mengirim minimal satu laporan
         let monitor_proven = MONITOR_OK.load(Ordering::Relaxed) && REPORTS.load(Ordering::Relaxed) > 0;
+        // `reg query /s` = spawn proses + teks besar. Tidak perlu kalau monitor sudah melaporkan
+        // streaming (hasilnya tak terpakai), dan kalau monitor terbukti cukup dicek tiap 3 dtk.
+        let reg = if streaming.is_some() {
+            None
+        } else if monitor_proven {
+            webcam_reg_cached()
+        } else {
+            in_use("webcam")
+        };
         let fs = CAM_FRAMESERVER_FALLBACK && !monitor_proven && frame_server_running();
         if reg.is_some() && fs {
             REG_LIVE.store(true, Ordering::Relaxed);

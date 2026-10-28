@@ -8,6 +8,7 @@
     "core:window:allow-close",
     "core:window:allow-destroy",
     "core:window:allow-show",
-    "core:window:allow-set-focus"
+    "core:window:allow-set-focus",
+    "drag:default"
   ]
 }

@@ -40,7 +40,7 @@ mod imp {
     use super::BtEvent;
     use std::collections::HashMap;
     use std::process::Command;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use tauri::{AppHandle, Emitter};
 
     // None = perintah gagal dijalankan (bukan sekadar "tidak ada perangkat")
@@ -64,6 +64,8 @@ mod imp {
         std::thread::spawn(move || {
             let mut known: HashMap<String, String> = HashMap::new(); // mac -> nama
             let mut first = true;
+            // `bluetoothctl info` = satu proses per perangkat. Baterai jarang berubah: simpan sementara.
+            let mut batt: HashMap<String, (Option<u8>, Instant)> = HashMap::new();
 
             loop {
                 // gagal membaca -> lewati putaran ini, jangan dianggap semua perangkat putus
@@ -79,7 +81,18 @@ mod imp {
                     let mut parts = line.splitn(3, ' ');
                     if parts.next() != Some("Device") { continue; }
                     let (Some(mac), Some(name)) = (parts.next(), parts.next()) else { continue };
-                    let battery = ctl(&["info", mac]).and_then(|s| parse_battery(&s));
+                    let battery = match batt.get(mac) {
+                        Some((b, at))
+                            if at.elapsed() < Duration::from_secs(if b.is_some() { 30 } else { 6 }) =>
+                        {
+                            *b
+                        }
+                        _ => {
+                            let b = ctl(&["info", mac]).and_then(|s| parse_battery(&s));
+                            batt.insert(mac.to_string(), (b, Instant::now()));
+                            b
+                        }
+                    };
                     now.insert(mac.to_string(), name.to_string());
                     cur.push(super::BtDev { name: name.to_string(), battery });
 
@@ -102,6 +115,7 @@ mod imp {
                         }
                     }
                 }
+                batt.retain(|k, _| now.contains_key(k));
                 super::set_current(cur);
                 known = now;
                 first = false;

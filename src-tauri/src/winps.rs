@@ -7,10 +7,15 @@
 use std::io::{BufRead, BufReader};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 const NO_WINDOW: u32 = 0x0800_0000;
+
+// PowerShell yang berjalan lama (apalagi dengan Get-CimInstance / Get-PnpDevice tiap putaran)
+// perlahan menggemuk. Proses dimatikan lalu dijalankan ulang berkala supaya memorinya kembali.
+const RECYCLE: Duration = Duration::from_secs(30 * 60);
 
 static SUBS: Mutex<Vec<(&'static str, mpsc::Sender<String>)>> = Mutex::new(Vec::new());
 
@@ -28,6 +33,7 @@ pub fn subscribe(tag: &'static str) -> mpsc::Receiver<String> {
 //   {104EA319-...} 2  = tingkat baterai perangkat Bluetooth (jika dilaporkan)
 const SCRIPT: &str = r##"
 $ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $mm = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
 $conn = '{83DA6326-97A6-4088-9453-A1923F573B29} 15'
@@ -71,14 +77,16 @@ while ($true) {
   }
 
   $i = ($i + 1) % 12
+  if ($i -eq 0) { [GC]::Collect() }
   Start-Sleep -Milliseconds 700
 }
 "##;
 
-fn run() {
+// true = berhenti karena daur ulang terencana (bukan crash)
+fn run() -> bool {
     let subs = SUBS.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let child = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
         .creation_flags(NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -86,12 +94,29 @@ fn run() {
         .spawn();
     let Ok(mut child) = child else {
         eprintln!("winps: PowerShell gagal dijalankan");
-        return;
+        return false;
     };
     let Some(out) = child.stdout.take() else {
         let _ = child.kill();
-        return;
+        return false;
     };
+
+    let child = Arc::new(Mutex::new(child));
+    let recycled = Arc::new(AtomicBool::new(false));
+    let (stop_tx, stop_rx) = mpsc::channel::<()>();
+    {
+        let child = Arc::clone(&child);
+        let recycled = Arc::clone(&recycled);
+        std::thread::spawn(move || {
+            // Timeout = masih jalan setelah RECYCLE -> matikan. Disconnected = run() sudah selesai, thread keluar.
+            if let Err(mpsc::RecvTimeoutError::Timeout) = stop_rx.recv_timeout(RECYCLE) {
+                recycled.store(true, Ordering::SeqCst);
+                if let Ok(mut c) = child.lock() {
+                    let _ = c.kill();
+                }
+            }
+        });
+    }
 
     for line in BufReader::new(out).lines().map_while(Result::ok) {
         if let Some((tag, rest)) = line.split_once(':') {
@@ -102,15 +127,19 @@ fn run() {
             }
         }
     }
-    let _ = child.kill();
-    let _ = child.wait();
+    drop(stop_tx);
+    if let Ok(mut c) = child.lock() {
+        let _ = c.kill();
+        let _ = c.wait();
+    }
+    recycled.load(Ordering::SeqCst)
 }
 
 // Panggil SETELAH semua modul mendaftar lewat subscribe().
 pub fn start() {
     std::thread::spawn(|| loop {
-        run();
-        // PowerShell berhenti: coba lagi nanti
-        std::thread::sleep(Duration::from_secs(10));
+        let planned = run();
+        // daur ulang terencana: segera jalan lagi; kalau berhenti sendiri: coba lagi nanti
+        std::thread::sleep(Duration::from_secs(if planned { 1 } else { 10 }));
     });
 }

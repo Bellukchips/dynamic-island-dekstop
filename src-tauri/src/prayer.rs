@@ -28,8 +28,9 @@ struct ApiData {
     jadwal: Vec<Day>,
 }
 
-// cache: "provinsi|kabkota|tahun-bulan" -> jadwal sebulan
-static CACHE: Mutex<Option<HashMap<String, Vec<Day>>>> = Mutex::new(None);
+// Cache "provinsi|kabkota|tahun-bulan" -> jadwal sebulan hanya hidup di disk. Dipanggil jarang
+// (sekitar sekali per bulan), jadi dibaca saat perlu lalu dibuang; tidak ditahan di memori.
+static IO: Mutex<()> = Mutex::new(());
 
 fn cache_path() -> PathBuf {
     crate::config::path().with_file_name("prayer_cache.json")
@@ -43,9 +44,9 @@ fn load_disk() -> HashMap<String, Vec<Day>> {
 }
 
 fn with_cache<R>(f: impl FnOnce(&mut HashMap<String, Vec<Day>>) -> R) -> R {
-    let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    let m = g.get_or_insert_with(load_disk);
-    f(m)
+    let _g = IO.lock().unwrap_or_else(|e| e.into_inner());
+    let mut m = load_disk();
+    f(&mut m)
 }
 
 fn fetch(prov: &str, kab: &str, year: i32, month: u32) -> Result<Vec<Day>, String> {

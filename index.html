@@ -14,6 +14,19 @@
   <link rel="stylesheet" href="/src/reminder-notes-base.css" />
   <link rel="stylesheet" href="/src/privacy.css" />
   <link rel="stylesheet" href="/src/shelf-lyrics.css" />
+  <style>
+    /* shelf: item bisa diseret keluar notch */
+    .sh-item {
+      cursor: grab;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .sh-item.drag-src {
+      opacity: 0.45;
+      cursor: grabbing;
+    }
+  </style>
   <link rel="stylesheet" href="/src/position.css" />
   <link rel="stylesheet" href="/src/edge.css" />
   <link rel="stylesheet" href="/src/window-bottom.css" />
@@ -30,6 +43,7 @@
   <link rel="stylesheet" href="/src/hub-compact.css" />
   <link rel="stylesheet" href="/src/prayer.css" />
   <link rel="stylesheet" href="/src/update-banner.css" />
+  <link rel="stylesheet" href="/src/orb-drag.css" />
   <script type="module" src="/src/main.ts" defer></script>
 
 </head>
@@ -250,7 +264,9 @@
                       <span>CPU</span>
                       <b id="st-cpu-v">0%</b>
                     </div>
-                    <div class="st-bar"><div id="st-cpu"></div></div>
+                    <div class="st-bar">
+                      <div id="st-cpu"></div>
+                    </div>
                     <small id="st-cpu-meta">Memuat informasi CPU…</small>
                   </div>
 
@@ -259,7 +275,9 @@
                       <span>RAM</span>
                       <b id="st-ram-v">0%</b>
                     </div>
-                    <div class="st-bar"><div id="st-ram"></div></div>
+                    <div class="st-bar">
+                      <div id="st-ram"></div>
+                    </div>
                     <small id="st-ram-meta">0 / 0 GiB digunakan</small>
                   </div>
 
@@ -268,7 +286,9 @@
                       <span>SWAP</span>
                       <b id="st-swap-v">0%</b>
                     </div>
-                    <div class="st-bar"><div id="st-swap"></div></div>
+                    <div class="st-bar">
+                      <div id="st-swap"></div>
+                    </div>
                     <small id="st-swap-meta">0 / 0 GiB digunakan</small>
                   </div>
 
@@ -277,7 +297,9 @@
                       <span>PENYIMPANAN</span>
                       <b id="st-disk-v">0%</b>
                     </div>
-                    <div class="st-bar"><div id="st-disk"></div></div>
+                    <div class="st-bar">
+                      <div id="st-disk"></div>
+                    </div>
                     <small id="st-disk-meta">Memuat kapasitas…</small>
                   </div>
                 </div>
@@ -326,18 +348,7 @@
                 <div class="rm-pick" id="rm-pick">
                   <div class="pk-fields">
                     <div class="pk pk-date">
-                      <input
-                        id="pk-date-input"
-                        type="text"
-                        inputmode="numeric"
-                        placeholder="dd/mm/yyyy"
-                        aria-label="Tanggal (dd/mm/yyyy)"
-                        title="Masukkan tanggal dengan format dd/mm/yyyy"
-                        maxlength="10"
-                        autocomplete="off"
-                        autocorrect="off"
-                        spellcheck="false"
-                      />
+                      <input id="pk-date-input" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" aria-label="Tanggal (dd/mm/yyyy)" title="Masukkan tanggal dengan format dd/mm/yyyy" maxlength="10" autocomplete="off" autocorrect="off" spellcheck="false" />
                     </div>
                     <div class="pk pk-time">
                       <button data-pk="h-" aria-label="Jam kurang">‹</button>

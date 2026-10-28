@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
 import { loadFace, saveFace, startClock, type Face } from "./clock";
@@ -58,7 +58,7 @@ let privacyOn = featureOn("privacy");
 let names: string[] = [];
 let pageCount = 0;
 let page = 0;
-let setNavActive: (page: number) => void = () => {};
+let setNavActive: (page: number) => void = () => { };
 let rebuildHubPagesFn: ((pages: string[]) => void) | undefined;
 
 // Elemen dari halaman yang dimatikan di config tidak ada di DOM (dibuang saat startup).
@@ -92,6 +92,7 @@ let keepAwake = false;
 let inside = false;
 let insideSince = 0;
 let hubByHover = false;
+let shelfDragging = false; // true selama item shelf sedang diseret keluar ke aplikasi lain
 let closeAt = 0;
 let settleUntil = 0;
 let holdHover = false; // setelah drop, jangan langsung buka hub selama kursor masih di atas notch
@@ -200,6 +201,8 @@ function applyScale(v: number) {
   CFG.scale = Math.min(1.5, Math.max(0.5, v));
   Object.assign(SIZES, scaleMap(BASE_SIZES));
   Object.assign(HIT, scaleMap(BASE_HIT));
+  SIZES.compactLyrics = [Math.round((clWidth + 20) * CFG.scale), Math.round(40 * CFG.scale)];
+  HIT.compactLyrics = [Math.round(clWidth * CFG.scale), Math.round(34 * CFG.scale)];
   syncHubDynamicHeight();
   document.documentElement.style.setProperty("--s", String(CFG.scale));
   lastView = ""; // paksa ukuran jendela & area klik dihitung ulang
@@ -261,11 +264,24 @@ const winLogical = (): [number, number] => [
 let MON = { x: 0, y: 0, w: window.screen.width, h: window.screen.height };
 let shellOx = 0, shellOy = 0;
 
+// ---------- mode ORB: saat notch ditahan & digeser, badannya berubah jadi bola ----------
+const ORB_BASE = 48;                                   // diameter bola (px CSS sebelum skala)
+const orbD = () => Math.round(ORB_BASE * CFG.scale);   // diameter bola dalam px layar
+const orbPad = () => (orbOn ? Math.round(28 * CFG.scale) : 0);
+let orbOn = false;                                     // true selama mode bola aktif
+let orbT0 = 0;                                         // waktu mulai (untuk ease posisi ke bawah kursor)
+let orbRaf = 0;
+let orbPx = 0, orbPy = 0, orbVx = 0, orbVy = 0;        // kecepatan kursor (squash & stretch)
+let orbDock = "";                                      // "t" | "b" | "left" | "right" | "" (menempel ke mana)
+let orbOutTimer: number | undefined;
+let lastPtr = { x: 0, y: 0 };                          // posisi kursor terakhir saat drag
+
 // geser notch di dalam jendela (hanya perlu saat posisi bebas dekat tepi, supaya view lebar tidak keluar layar)
 function placeShell(view?: string) {
   const [W, H] = winLogical();
   const v = view ?? notch.dataset.view ?? "idle";
-  const [vw, vh] = SIZES[v] ?? SIZES.idle;
+  // saat mode bola, ukuran yang dipakai = ukuran bola (bukan ukuran view) agar bola tepat di bawah kursor
+  const [vw, vh] = orbOn ? [orbD(), orbD()] : (SIZES[v] ?? SIZES.idle);
   const left = notch.classList.contains("is-edge-left");
   const right = notch.classList.contains("is-edge-right");
   const bottom = notch.classList.contains("is-bottom");
@@ -277,14 +293,15 @@ function placeShell(view?: string) {
       ox = want - winCx;
     }
     if (!bottom) {
-      const winTy = clamp(currentTy, MON.y, MON.y + MON.h - H);
+      const pad = orbPad();
+      const winTy = clamp(currentTy - pad, MON.y, MON.y + MON.h - H);
       const wantTy = Math.min(currentTy, MON.y + MON.h - vh);
       oy = wantTy - winTy;
     }
   }
   // Posisi melayang (termasuk SAAT drag): beri jarak dari tepi atas supaya hub tidak menempel.
   // Jarak dibatasi sisa ruang jendela agar view tinggi (kalender) tidak terpotong.
-  if (notch.classList.contains("is-floating")) {
+  if (notch.classList.contains("is-floating") && !orbOn) {
     const gap = Math.round(14 * CFG.scale);
     oy += Math.max(0, Math.min(gap, H - (oy + vh)));
   }
@@ -299,7 +316,8 @@ function placeShell(view?: string) {
 // area klik pil dalam koordinat jendela
 function hitRect(view: string) {
   const [W, H] = winLogical();
-  const [hw, hh] = HIT[view] ?? HIT.idle;
+  let [hw, hh] = HIT[view] ?? HIT.idle;
+  if (orbOn) { hw = Math.max(hw, orbD()); hh = Math.max(hh, orbD()); } // bola selalu di dalam area klik
   const left = notch.classList.contains("is-edge-left");
   const right = notch.classList.contains("is-edge-right");
   const bottom = notch.classList.contains("is-bottom");
@@ -678,7 +696,7 @@ window.addEventListener("blur", () => setInside(false));
 // watchdog: buka/tutup hub dengan hysteresis
 setInterval(() => {
   const now = Date.now();
-  if (dragging || isDraggingWindow || now < settleUntil) return;
+  if (dragging || isDraggingWindow || shelfDragging || seeking || now < settleUntil) return;
 
   if (override === "hub" || override === "lyr" || override === "cal") {
     if (inside) {
@@ -753,6 +771,15 @@ function updatePositionUI(custom: boolean, topY: number, cx?: number) {
 
   placeShell();
   if (changed) render();
+
+  // bola menempel ke tepi (atas/bawah/kiri/kanan) -> beri denyut cincin sekali
+  if (orbOn) {
+    const dock = bottom ? "b" : side ? side : topDocked ? "t" : "";
+    if (dock !== orbDock) {
+      orbDock = dock;
+      if (dock) popOrb();
+    }
+  }
 }
 
 // Magnet ke tepi atas/bawah/kiri/kanan dengan histeresis lebar supaya tidak bolak-balik.
@@ -797,28 +824,113 @@ async function startWindowDrag(e: PointerEvent, targetEl: HTMLElement) {
     syncPosBar();
     windowDragMoved = false;
     lastSent = { cx: NaN, ty: NaN };
+    lastPtr = { x: e.screenX, y: e.screenY };
     $("shell").classList.add("moving");
-    notch.classList.add("is-dragging");
+    // is-dragging / is-orb baru dipasang setelah kursor benar-benar bergeser (lihat enterOrb),
+    // supaya klik biasa tidak memicu animasi bola.
     targetEl.setPointerCapture(e.pointerId);
   } catch (err) {
     console.error("Gagal memulai drag window:", err);
   }
 }
 
+// ---------- mode ORB ----------
+const orbFx = document.createElement("div"); // cincin riak di sekeliling bola (gaya di orb-drag.css)
+orbFx.id = "orb-fx";
+orbFx.setAttribute("aria-hidden", "true");
+$("shell").appendChild(orbFx);
+
+function popOrb() {
+  const shell = $("shell");
+  shell.classList.remove("orb-pop");
+  void shell.offsetWidth; // restart animasi
+  shell.classList.add("orb-pop");
+}
+
+function enterOrb() {
+  if (orbOn) return;
+  orbOn = true;
+  orbT0 = performance.now();
+  orbPx = lastPtr.x; orbPy = lastPtr.y; orbVx = 0; orbVy = 0; orbDock = "";
+  clearTimeout(orbOutTimer);
+  const shell = $("shell");
+  notch.classList.remove("is-orb-out");
+  shell.classList.remove("is-orb-out");
+  notch.classList.add("is-dragging", "is-orb");
+  notch.style.setProperty("--orb-d", `${orbD()}px`);
+  shell.classList.add("is-orb");
+  placeShell();
+  setHit(notch.dataset.view ?? "idle");
+  orbRaf = requestAnimationFrame(orbFrame);
+}
+
+function exitOrb() {
+  if (!orbOn) return;
+  orbOn = false;
+  cancelAnimationFrame(orbRaf);
+  const shell = $("shell");
+  notch.classList.remove("is-orb");
+  shell.classList.remove("is-orb", "orb-pop");
+  // kelas "-out" memberi transisi pegas saat bola kembali ke bentuk semula
+  notch.classList.add("is-orb-out");
+  shell.classList.add("is-orb-out");
+  for (const v of ["--orb-rot", "--orb-sx", "--orb-sy", "--orb-d"]) notch.style.removeProperty(v);
+  clearTimeout(orbOutTimer);
+  orbOutTimer = window.setTimeout(() => {
+    notch.classList.remove("is-orb-out");
+    shell.classList.remove("is-orb-out");
+  }, 560);
+}
+
+// satu frame: posisi (dengan ease ke bawah kursor) + squash & stretch mengikuti kecepatan
+function orbFrame() {
+  if (!orbOn) return;
+  applyDrag();
+  const dxp = lastPtr.x - orbPx, dyp = lastPtr.y - orbPy;
+  orbPx = lastPtr.x; orbPy = lastPtr.y;
+  orbVx += (dxp - orbVx) * 0.22;
+  orbVy += (dyp - orbVy) * 0.22;
+  const amt = Math.min(Math.hypot(orbVx, orbVy) / (36 * CFG.scale), 1);
+  const stretch = amt * (orbDock ? 0.3 : 1) * 0.32; // menempel di tepi: stretch diredam
+  notch.style.setProperty("--orb-rot", `${Math.atan2(orbVy, orbVx).toFixed(3)}rad`);
+  notch.style.setProperty("--orb-sx", (1 + stretch).toFixed(3));
+  notch.style.setProperty("--orb-sy", (1 - stretch * 0.5).toFixed(3));
+  orbRaf = requestAnimationFrame(orbFrame);
+}
+
+// hitung & kirim posisi jendela dari posisi kursor terakhir
+function applyDrag() {
+  const dx = lastPtr.x - startScreenX;
+  const dy = lastPtr.y - startScreenY;
+  let rawCx = startCx + dx;
+  let rawTy = startTy + dy;
+  if (orbOn) {
+    // geser titik pegang secara halus (260ms) sampai bola tepat berada di bawah kursor
+    const t = Math.min(1, (performance.now() - orbT0) / 260);
+    const k = 1 - Math.pow(1 - t, 3);
+    rawCx += k * (startScreenX - startCx);
+    rawTy += k * (startScreenY - orbD() / 2 - startTy);
+  }
+  const s = snapPosition(rawCx, rawTy, lastPtr.x, lastPtr.y);
+  if (s.cx !== lastSent.cx || s.ty !== lastSent.ty) { // jangan kirim ulang yang sama
+    lastSent = s;
+    const sendTy = isBottomTy(s.ty) ? s.ty : Math.max(MON.y, s.ty - orbPad());
+    invoke("notch_move_to", { cx: s.cx, ty: sendTy });
+    updatePositionUI(true, s.ty, s.cx);
+  }
+}
+
 function onWindowPointerMove(e: PointerEvent) {
   if (!isDraggingWindow) return;
+  lastPtr = { x: e.screenX, y: e.screenY };
   const dx = e.screenX - startScreenX;
   const dy = e.screenY - startScreenY;
-  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+  if (!windowDragMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
     windowDragMoved = true;
+    enterOrb(); // mulai jadi bola
   }
   if (windowDragMoved) {
-    const s = snapPosition(startCx + dx, startTy + dy, e.screenX, e.screenY);
-    if (s.cx !== lastSent.cx || s.ty !== lastSent.ty) { // jangan kirim ulang yang sama
-      lastSent = s;
-      invoke("notch_move_to", { cx: s.cx, ty: s.ty });
-      updatePositionUI(true, s.ty, s.cx);
-    }
+    applyDrag();
     setBase("love");
   }
 }
@@ -827,12 +939,16 @@ function onWindowPointerUp(e: PointerEvent, targetEl: HTMLElement) {
   if (!isDraggingWindow) return;
   isDraggingWindow = false;
   syncPosBar();
+  exitOrb(); // bola -> kembali ke bentuk notch semula (tepat sebelum posisi dihitung ulang)
   notch.classList.remove("is-dragging");
   $("shell").classList.remove("moving");
   if (windowDragMoved) holdHover = true;
   try {
     targetEl.releasePointerCapture(e.pointerId);
   } catch { }
+  if (windowDragMoved && !isBottomTy(lastSent.ty)) {
+    invoke("notch_move_to", { cx: lastSent.cx, ty: lastSent.ty });
+  }
   if (windowDragMoved) {
     suppressClickUntil = Date.now() + 350;
     insideSince = Date.now();
@@ -1013,6 +1129,38 @@ if (compactLayer && compactBars) {
   compactLayer.insertBefore(compactLyrics, compactBars);
 }
 
+// Lebar notch (view compactLyrics) menyesuaikan panjang baris lirik supaya tidak terpotong.
+// Satuan = px CSS sebelum skala; skala diterapkan lewat zoom di #notch dan SIZES/HIT di bawah.
+const CL_MIN = 340;   // lebar dasar (sama dengan BASE_HIT.compactLyrics)
+const CL_MAX = 560;   // batas atas: jendela native 600px dikurangi telinga 2x10px dan sedikit ruang
+const CL_FIXED = 116; // cover 22 + equalizer 18 + margin lirik 16 + padding 28 + telinga 20 + cadangan 12
+let clWidth = CL_MIN;
+let clFont = "";
+const clCtx = document.createElement("canvas").getContext("2d");
+function fitCompactLyricWidth(text: string) {
+  let target = CL_MIN;
+  if (text && clCtx) {
+    if (!clFont) {
+      const cs = getComputedStyle(compactLyrics);
+      clFont = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    }
+    clCtx.font = clFont;
+    const need = Math.ceil((clCtx.measureText(text).width + CL_FIXED) / 10) * 10; // kelipatan 10px: tidak gonta-ganti terus
+    target = Math.min(CL_MAX, Math.max(CL_MIN, need));
+  }
+  if (target === clWidth) return;
+  clWidth = target;
+  notch.style.setProperty("--cl-w", String(target));
+  const sc = CFG.scale;
+  SIZES.compactLyrics = [Math.round((target + 20) * sc), Math.round(40 * sc)];
+  HIT.compactLyrics = [Math.round(target * sc), Math.round(34 * sc)];
+  if (notch.dataset.view === "compactLyrics") {
+    settleUntil = Date.now() + 350; // tepi yang bergeser jangan memicu hover bolak-balik
+    placeShell("compactLyrics");
+    setHit("compactLyrics");
+  }
+}
+
 // Tampilan ringkas di sisi/dasar layar: hanya cover album berbentuk disc berputar.
 const edgeDisc = document.createElement("div");
 edgeDisc.className = "edge-disc";
@@ -1159,8 +1307,10 @@ listen<Media>("media", (e) => {
   $("ly-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
   $("ly-artist").textContent = m.active ? m.artist : "";
   if (!m.active) showDefaultArt();
-  $("m-progress").style.width = m.length > 0 ? `${(m.position / m.length) * 100}%` : "0%";
-  $("t-pos").textContent = fmt(m.position);
+  if (!seekHeld()) {
+    $("m-progress").style.width = m.length > 0 ? `${(m.position / m.length) * 100}%` : "0%";
+    $("t-pos").textContent = fmt(m.position);
+  }
   $("t-len").textContent = fmt(m.length);
 
   if (playing && m.title && m.title !== lastTitle) {
@@ -1182,6 +1332,60 @@ const control = (action: string) => (ev: Event) => { ev.stopPropagation(); invok
 $("m-prev").addEventListener("click", control("prev"));
 $("m-toggle").addEventListener("click", control("toggle"));
 $("m-next").addEventListener("click", control("next"));
+
+// ---------- geser progress bar untuk pindah menit ----------
+const seekBar = document.querySelector<HTMLElement>(".m-time .bar");
+let seeking = false;
+let seekHoldUntil = 0; // setelah dilepas, abaikan posisi lama dari Rust sebentar
+let seekRatio = 0;
+const seekHeld = () => seeking || Date.now() < seekHoldUntil;
+
+function paintSeek(ratio: number) {
+  const prog = $("m-progress");
+  prog.style.transition = "none"; // ikut kursor tanpa jeda
+  prog.style.width = `${ratio * 100}%`;
+  if (clockLen > 0) $("t-pos").textContent = fmt(ratio * clockLen);
+}
+
+if (seekBar) {
+  const ratioAt = (clientX: number) => {
+    const r = seekBar.getBoundingClientRect();
+    return r.width > 0 ? clamp((clientX - r.left) / r.width, 0, 1) : 0;
+  };
+  const endSeek = (e: PointerEvent, commit: boolean) => {
+    if (!seeking) return;
+    seeking = false;
+    seekBar.classList.remove("seeking");
+    try { seekBar.releasePointerCapture(e.pointerId); } catch { }
+    $("m-progress").style.removeProperty("transition");
+    if (!commit || clockLen <= 0) return;
+    const target = seekRatio * clockLen;
+    seekHoldUntil = Date.now() + 1800;
+    clockPos = target; // lirik langsung ikut pindah
+    clockAt = performance.now();
+    tickLyrics(true);
+    invoke("media_seek", { position: target }).catch((err) => console.error("media_seek gagal:", err));
+    flash("happy", 800);
+  };
+  seekBar.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || clockLen <= 0) return;
+    e.stopPropagation(); // jangan memulai geser notch
+    e.preventDefault();
+    seeking = true;
+    seekBar.classList.add("seeking");
+    seekBar.setPointerCapture(e.pointerId);
+    seekRatio = ratioAt(e.clientX);
+    paintSeek(seekRatio);
+  });
+  seekBar.addEventListener("pointermove", (e) => {
+    if (!seeking) return;
+    seekRatio = ratioAt(e.clientX);
+    paintSeek(seekRatio);
+  });
+  seekBar.addEventListener("pointerup", (e) => endSeek(e, true));
+  seekBar.addEventListener("pointercancel", (e) => endSeek(e, false));
+  seekBar.addEventListener("click", (e) => e.stopPropagation());
+}
 
 // ---------- bluetooth ----------
 type BtDev = { name: string; battery: number | null };
@@ -1613,9 +1817,11 @@ let lyManualAt = 0; // waktu terakhir pengguna menggulir sendiri (auto-scroll be
 const nowPos = () => clockPos + (clockPlaying ? (performance.now() - clockAt) / 1000 : 0);
 
 function onMediaForLyrics(m: Media) {
-  clockPos = m.position;
+  if (!seekHeld()) { // posisi lama dari Rust jangan menimpa posisi hasil geser
+    clockPos = m.position;
+    clockAt = performance.now();
+  }
   clockLen = m.length;
-  clockAt = performance.now();
   clockPlaying = m.active && m.playing;
   // Pencarian lirik untuk compact view tetap aktif meskipun halaman Lyrics
   // tidak dimasukkan ke daftar halaman konfigurasi.
@@ -1707,6 +1913,7 @@ function updateCompactLyric() {
   if (!visible || !ly) {
     compactLyrics.textContent = "";
     compactLyrics.removeAttribute("title");
+    fitCompactLyricWidth("");
     return;
   }
 
@@ -1715,6 +1922,7 @@ function updateCompactLyric() {
   if (compactLyrics.textContent !== line) {
     compactLyrics.textContent = line;
     compactLyrics.title = line;
+    fitCompactLyricWidth(line);
     compactLyrics.classList.remove("lyric-change");
     // Paksa animasi transisi berjalan kembali setiap pergantian baris.
     void compactLyrics.offsetWidth;
@@ -1803,6 +2011,95 @@ const EXT_ICON: Record<string, string> = {
 const iconFor = (it: ShelfItem) =>
   it.dir ? "📁" : EXT_ICON[(it.name.split(".").pop() ?? "").toLowerCase()] ?? "📄";
 
+// ---- drag KELUAR: seret item shelf ke File Explorer / aplikasi lain ----
+// Memakai tauri-plugin-drag (drag native OS). Mode "copy": file asli di lokasi aslinya tidak
+// pernah dipindah atau dihapus, karena shelf hanya menyimpan referensi.
+let shelfNoClickUntil = 0;
+// jejak diagnostik -> terminal (tauri dev) lewat perintah shelf_log
+const slog = (m: string) => { invoke("shelf_log", { msg: m }).catch(() => { }); };
+
+// gambar kecil yang ikut kursor saat menyeret (PNG data URL, dibuat di canvas)
+function shelfDragIcon(it: ShelfItem): string {
+  const W = 230, H = 48, R = 12;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d");
+  if (!g) return "";
+  g.fillStyle = "rgba(24,24,28,0.94)";
+  g.beginPath();
+  g.moveTo(R, 0);
+  g.arcTo(W, 0, W, H, R);
+  g.arcTo(W, H, 0, H, R);
+  g.arcTo(0, H, 0, 0, R);
+  g.arcTo(0, 0, W, 0, R);
+  g.closePath();
+  g.fill();
+  g.textBaseline = "middle";
+  g.font = '22px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji",sans-serif';
+  g.fillText(iconFor(it), 12, H / 2 + 1);
+  g.fillStyle = "#fff";
+  g.font = '600 14px system-ui,"Segoe UI",sans-serif';
+  let label = it.name;
+  const max = W - 48 - 12;
+  while (label.length > 1 && g.measureText(label).width > max) label = label.slice(0, -1);
+  if (label !== it.name) label = label.slice(0, -1) + "…";
+  g.fillText(label, 48, H / 2 + 1);
+  return c.toDataURL("image/png");
+}
+
+async function startShelfDrag(it: ShelfItem, row: HTMLElement) {
+  if (shelfDragging) return;
+  shelfDragging = true;
+  shelfNoClickUntil = Number.MAX_SAFE_INTEGER; // tahan klik sampai seretan selesai
+  clearTimeout(hideTimer); // hub tetap terbuka selama seretan
+  closeAt = 0;
+  row.classList.add("drag-src");
+
+  let finished = false;
+  let safety = 0;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    window.clearTimeout(safety);
+    shelfDragging = false;
+    shelfNoClickUntil = Date.now() + 250;
+    row.classList.remove("drag-src");
+    refreshShelf(); // aplikasi tujuan bisa saja memindahkan/menghapus file
+  };
+  safety = window.setTimeout(() => {
+    invoke("set_drag_out", { active: false }).catch(() => { }); // jangan biarkan DRAG_OUT tersangkut di Rust
+    finish();
+  }, 120_000); // jaring pengaman bila callback tak pernah datang
+
+  const onEvent = new Channel<{ result: string }>();
+  onEvent.onmessage = (m) => {
+    slog(`drag keluar selesai: ${JSON.stringify(m)}`);
+    invoke("set_drag_out", { active: false }).catch(() => { });
+    finish();
+    if (/drop/i.test(String(m.result))) flash("happy", 1200);
+  };
+
+  slog(`drag keluar mulai: ${it.path}`);
+  // jendela dijaga tetap interaktif & loop click-through dijeda selama seretan native berjalan
+  await invoke("set_drag_out", { active: true }).catch(() => { });
+  try {
+    await invoke("plugin:drag|start_drag", {
+      item: [it.path],            // harus path absolut
+      image: shelfDragIcon(it),   // "data:image/png;base64,..."
+      options: { mode: "copy" },
+      onEvent,
+    });
+    slog("start_drag: perintah diterima plugin");
+  } catch (err) {
+    console.error("shelf: gagal memulai drag keluar:", err);
+    slog(`start_drag GAGAL: ${String(err)}`);
+    invoke("set_drag_out", { active: false }).catch(() => { });
+    finish();
+    flash("sad", 1500);
+  }
+}
+
 function paintShelf(items: ShelfItem[]) {
   const list = document.getElementById("sh-list");
   if (!list) return; // halaman shelf dimatikan di config
@@ -1820,7 +2117,7 @@ function paintShelf(items: ShelfItem[]) {
   items.forEach((it) => {
     const b = document.createElement("button"); // button: tidak memicu geser halaman
     b.className = "sh-item";
-    b.title = `${it.path}\nKlik: buka · Klik kanan: tampilkan di folder`;
+    b.title = `${it.path}\nKlik: buka · Klik kanan: tampilkan di folder · Seret: salin ke aplikasi lain`;
 
     const ic = document.createElement("span");
     ic.className = "ic";
@@ -1835,6 +2132,7 @@ function paintShelf(items: ShelfItem[]) {
 
     b.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (Date.now() < shelfNoClickUntil) return; // klik "bayangan" setelah seretan
       if ((e.target as HTMLElement).closest(".x")) {
         invoke<ShelfItem[]>("shelf_remove", { path: it.path }).then(paintShelf).catch(() => { });
       } else {
@@ -1846,6 +2144,25 @@ function paintShelf(items: ShelfItem[]) {
       e.preventDefault();
       e.stopPropagation();
       invoke("shelf_reveal", { path: it.path });
+    });
+
+    // tahan lalu geser > 8px = seret item ini keluar notch (File Explorer, browser, chat, dll.)
+    b.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || (e.target as HTMLElement).closest(".x")) return;
+      const sx = e.clientX, sy = e.clientY;
+      const off = () => {
+        window.removeEventListener("pointermove", mv);
+        window.removeEventListener("pointerup", off);
+        window.removeEventListener("pointercancel", off);
+      };
+      const mv = (ev: PointerEvent) => {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return;
+        off();
+        void startShelfDrag(it, b);
+      };
+      window.addEventListener("pointermove", mv);
+      window.addEventListener("pointerup", off);
+      window.addEventListener("pointercancel", off);
     });
     list.appendChild(b);
   });
@@ -1862,10 +2179,13 @@ document.getElementById("sh-clear")?.addEventListener("click", (e) => {
 });
 
 // file diseret dari aplikasi lain ke notch: buka halaman shelf saat masuk, simpan saat dilepas
-if (names.includes("shelf")) {
+{
   getCurrentWebview()
     .onDragDropEvent((ev) => {
+      if (!names.includes("shelf")) return; // dicek saat event: halaman bisa diaktifkan dari Settings
+      if (shelfDragging) return; // seretan dari shelf sendiri lewat di atas notch: abaikan
       const p = ev.payload;
+      if (p.type !== "over") slog(`drag masuk: ${p.type}${p.type === "drop" ? ` (${p.paths.length} path)` : ""}`);
       if (p.type === "enter") {
         notch.classList.add("dropping");
         hubByHover = false;
@@ -1886,7 +2206,7 @@ if (names.includes("shelf")) {
           .catch(() => { });
       }
     })
-    .catch(() => { });
+    .catch((err) => { console.error("onDragDropEvent gagal:", err); slog(`onDragDropEvent GAGAL: ${String(err)}`); });
 }
 refreshShelf();
 
