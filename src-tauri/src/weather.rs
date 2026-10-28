@@ -125,7 +125,9 @@ pub fn start(app: AppHandle) {
                     let alert = !silent && w.rain_in.is_some() && !alerted;
                     alerted = w.rain_in.is_some();
                     let _ = app.emit("weather", (w, alert));
-                    Duration::from_secs(20 * 60)
+                    // Poll cuaca lebih sering agar Conversation Moments menangkap perubahan
+                    // kondisi dengan jeda lebih pendek. Hanya berjalan jika halaman cuaca aktif.
+                    Duration::from_secs(5 * 60)
                 }
                 Err(e) => {
                     eprintln!("weather gagal: {e}");

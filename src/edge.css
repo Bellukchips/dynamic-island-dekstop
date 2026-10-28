@@ -297,3 +297,80 @@
   top: auto;
   bottom: 9px;
 }
+
+
+/* =====================================================================
+   SIDE DOCK — telinga cekung diputar agar sama dengan dock bawah
+   Catatan: radial-gradient harus dicerminkan sesuai arah putaran.
+   ===================================================================== */
+#shell.is-edge-left::before,
+#shell.is-edge-left::after,
+#shell.is-edge-right::before,
+#shell.is-edge-right::after {
+  content: "";
+  display: block !important;
+  position: absolute;
+  width: var(--e);
+  height: calc(var(--e) + 0.5px);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Sisi kiri: bentuk dock bawah diputar 90° searah jarum jam. */
+#shell.is-edge-left::before {
+  left: 0;
+  right: auto;
+  top: calc(var(--e) * -1);
+  bottom: auto;
+  background: radial-gradient(
+    circle at 100% 0%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
+}
+#shell.is-edge-left::after {
+  left: 0;
+  right: auto;
+  top: auto;
+  bottom: calc(var(--e) * -1);
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
+}
+
+/* Sisi kanan: cerminan sisi kiri (putaran berlawanan arah). */
+#shell.is-edge-right::before {
+  right: 0;
+  left: auto;
+  top: calc(var(--e) * -1);
+  bottom: auto;
+  background: radial-gradient(
+    circle at 0% 0%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
+}
+#shell.is-edge-right::after {
+  right: 0;
+  left: auto;
+  top: auto;
+  bottom: calc(var(--e) * -1);
+  background: radial-gradient(
+    circle at 0% 100%,
+    transparent calc(var(--e) - 0.5px),
+    var(--bg) var(--e)
+  );
+}
+
+/* Telinga disembunyikan saat Notch berubah menjadi ORB bulat. */
+#shell.is-orb.is-edge-left::before,
+#shell.is-orb.is-edge-left::after,
+#shell.is-orb.is-edge-right::before,
+#shell.is-orb.is-edge-right::after {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}

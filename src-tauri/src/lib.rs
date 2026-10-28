@@ -19,6 +19,7 @@ mod shelf;
 mod notes;
 mod reminder;
 mod prayer;
+mod currency;
 #[cfg(target_os = "windows")]
 mod winps;
 // area klik pil (x, lebar, tinggi) dalam piksel logis. Dipakai di Windows.
@@ -633,7 +634,8 @@ pub fn run() {
             notch_reset_position,
             notch_get_position,
             notch_monitor,
-            open_note_detail
+            open_note_detail,
+            currency::fetch_yahoo_chart
         ])
         .run(tauri::generate_context!())
         .expect("gagal menjalankan aplikasi");

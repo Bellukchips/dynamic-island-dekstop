@@ -15,6 +15,7 @@ type Hooks = {
     mood: (m: string, ms: number) => void;
     adhanStart: (prayerName: string, sub: string) => void;
     adhanEnd: () => void;
+    adhanError?: (message: string) => void;
 };
 
 const PRAYERS: [keyof Day, string][] = [
@@ -165,61 +166,112 @@ function tone(times: number) {
     } catch { /* audio tidak tersedia: kartu tetap tampil */ }
 }
 
-// File disimpan di src/public/adzan.mp3. Vite akan memasukkan MP3 ke bundle produksi.
-const ADZAN_URL = new URL("./public/adzan.mp3", import.meta.url).href;
+// MP3 utama dibundle oleh Vite. Dua jalur tambahan menangani proyek yang menyimpan aset
+// di public/adzan.mp3 (produksi) atau src/public/adzan.mp3 (mode dev).
+const ADZAN_URLS = [...new Set([
+    new URL("./public/adzan.mp3", import.meta.url).href,
+    "/adzan.mp3",
+    "/src/public/adzan.mp3",
+])];
 let activeAdhanAudio: HTMLAudioElement | null = null;
 let activeAdhanFinish: (() => void) | null = null;
 
-/** Putar MP3 adzan. showNotch=true hanya untuk adzan pada jadwal shalat, bukan pratinjau tombol mode. */
+/** Putar MP3 adzan dan coba jalur aset alternatif bila salah satu URL tidak tersedia.
+ * Alert hanya ditutup oleh event `ended`, bukan oleh fallback nada singkat.
+ */
 function adzan(prayerName = "Adzan", showNotch = true) {
-    // Jangan biarkan audio lama / callback lama mempertahankan kartu atau status pause.
+    // Hentikan siklus lama dengan rapi sebelum memulai tes/siklus baru.
     if (activeAdhanFinish) {
         const stopPrevious = activeAdhanFinish;
         activeAdhanFinish = null;
         if (activeAdhanAudio) {
             activeAdhanAudio.pause();
-            activeAdhanAudio.currentTime = 0;
+            try { activeAdhanAudio.currentTime = 0; } catch { /* abaikan */ }
         }
         stopPrevious();
     }
 
-    const audio = new Audio(ADZAN_URL);
-    audio.preload = "auto";
-    audio.volume = 0.9;
-    activeAdhanAudio = audio;
-
+    let audio: HTMLAudioElement | null = null;
     let finished = false;
-    let failed = false;
-    let fallbackTimer = 0;
+    let sourceIndex = 0;
+    const failDetails: string[] = [];
+
+    const clearActive = () => {
+        if (activeAdhanAudio === audio) activeAdhanAudio = null;
+        if (activeAdhanFinish === finish) activeAdhanFinish = null;
+    };
     const finish = () => {
         if (finished) return;
         finished = true;
-        window.clearTimeout(fallbackTimer);
-        if (activeAdhanAudio === audio) activeAdhanAudio = null;
-        if (activeAdhanFinish === finish) activeAdhanFinish = null;
+        clearActive();
         if (showNotch) hooks.adhanEnd();
     };
     activeAdhanFinish = finish;
-
-    const playbackFailed = (reason: unknown) => {
-        if (failed || finished) return;
-        failed = true;
-        console.error("[Prayer] Gagal memutar adzan.mp3:", reason, "URL:", ADZAN_URL);
-        audio.pause();
-        // Fallback pendek agar kegagalan file tidak membuat media terus terjeda.
-        tone(3);
-        fallbackTimer = window.setTimeout(finish, 2600);
-    };
-
-    audio.addEventListener("ended", finish, { once: true });
-    audio.addEventListener("error", () => playbackFailed(`file audio tidak dapat dimuat (kode ${audio.error?.code ?? "unknown"})`), { once: true });
 
     if (showNotch) {
         const sub = `${hhmm(new Date())} · ${prefs?.kabkota ?? "Lokasi shalat"}`;
         hooks.adhanStart(prayerName, sub);
     }
 
-    void audio.play().catch(playbackFailed);
+    const failAllSources = () => {
+        if (finished) return;
+        finished = true;
+        if (audio) audio.pause();
+        clearActive();
+        const detail = failDetails.length ? ` (${failDetails.join("; ")})` : "";
+        const message = `File adzan.mp3 tidak dapat dimuat. Pastikan file tersedia di src/public/adzan.mp3 atau public/adzan.mp3.${detail}`;
+        console.error("[Prayer] Semua jalur audio adzan gagal:", ADZAN_URLS, failDetails);
+        // Jangan putar beep pendek lalu menutup alert seolah adzan selesai.
+        if (showNotch) hooks.adhanError?.(message);
+    };
+
+    const tryNextSource = (reason: unknown) => {
+        if (finished) return;
+        if (audio) {
+            failDetails.push(`${audio.currentSrc || audio.src}: ${String(reason)}`);
+            audio.pause();
+            audio.removeAttribute("src");
+            audio.load();
+        }
+        if (sourceIndex >= ADZAN_URLS.length) {
+            failAllSources();
+            return;
+        }
+
+        const src = ADZAN_URLS[sourceIndex++];
+        const candidate = new Audio();
+        audio = candidate;
+        activeAdhanAudio = candidate;
+        candidate.preload = "auto";
+        candidate.volume = 0.9;
+        let attemptFailed = false;
+        const fail = (why: unknown) => {
+            if (attemptFailed || finished || audio !== candidate) return;
+            attemptFailed = true;
+            tryNextSource(why);
+        };
+        candidate.addEventListener("loadedmetadata", () => {
+            console.info(`[Prayer] Durasi file adzan: ${Number.isFinite(candidate.duration) ? `${candidate.duration.toFixed(1)} detik` : "belum diketahui"}`);
+            if (Number.isFinite(candidate.duration) && candidate.duration > 0 && candidate.duration < 15) {
+                console.warn("[Prayer] File adzan sangat singkat; pastikan ini bukan file preview.");
+            }
+        }, { once: true });
+        candidate.addEventListener("ended", () => {
+            if (audio === candidate && !attemptFailed) finish();
+        }, { once: true });
+        candidate.addEventListener("error", () => {
+            fail(`audio error ${candidate.error?.code ?? "unknown"}`);
+        }, { once: true });
+        candidate.src = src;
+        candidate.load();
+        console.info(`[Prayer] Memuat audio adzan dari: ${src}`);
+        void candidate.play().then(() => {
+            console.info(`[Prayer] Audio adzan mulai diputar: ${src}`);
+        }).catch(fail);
+    };
+
+    // Pemanggilan ini dimulai sebagai kandidat pertama; bila gagal, URL berikutnya dicoba.
+    tryNextSource("Memulai pemutaran");
 }
 
 // ---------- pengingat ----------

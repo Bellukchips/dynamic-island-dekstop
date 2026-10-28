@@ -13,6 +13,7 @@ const NAV: Record<string, [string, string]> = {
     notes: ["Catatan", `<path d="M5 3h14v18H5zM9 8h6M9 12h6M9 16h3"/>`],
     clipboard: ["Clipboard", `<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/>`],
     shelf: ["Shelf", `<path d="M3 8l2-4h14l2 4M3 8v12h18V8M3 8h18M9 12h6"/>`],
+    currency: ["Currency", `<path d="M12 3v18M17 7.5c0-1.4-2.2-2.5-5-2.5S7 6.1 7 7.5 9.2 10 12 10s5 1.1 5 2.5S14.8 15 12 15s-5-1.1-5-2.5"/>`],
     prayer: [
         "Jadwal Shalat",
         `<path d="M3 21h18M5 21V11l7-6 7 6v10M9 21v-6h6v6"/> 
@@ -28,6 +29,8 @@ export function initHubNav(names: string[], onPick: (i: number) => void) {
     if (!list) return (_page: number) => { };
 
     // Daftar dapat dibangun ulang saat checkbox fitur di Settings berubah.
+    list.setAttribute("role", "group");
+    list.setAttribute("aria-label", "Navigasi halaman Notch");
     list.replaceChildren();
     if (clockTimer !== undefined) window.clearInterval(clockTimer);
 
@@ -36,8 +39,22 @@ export function initHubNav(names: string[], onPick: (i: number) => void) {
         const b = document.createElement("button");
         b.className = "nv";
         b.title = label;
-        b.innerHTML = `<svg viewBox="0 0 24 24">${svg}</svg><span>${label}</span>`;
-        b.addEventListener("click", (e) => { e.stopPropagation(); onPick(i); });
+        b.setAttribute("type", "button");
+        b.setAttribute("aria-label", label);
+        b.setAttribute("aria-current", "false");
+        // Ikon berasal dari daftar statis NAV; label dirender sebagai teks agar aman dari HTML.
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = svg;
+        const caption = document.createElement("span");
+        caption.textContent = label;
+        b.append(icon, caption);
+        b.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onPick(i);
+        });
         list.appendChild(b);
         return b;
     });
@@ -52,13 +69,19 @@ export function initHubNav(names: string[], onPick: (i: number) => void) {
     clockTimer = window.setInterval(tick, 1000);
 
     return (page: number) => {
-        btns.forEach((b, n) => b.classList.toggle("active", n === page));
+        btns.forEach((b, n) => {
+            const active = n === page;
+            b.classList.toggle("active", active);
+            b.setAttribute("aria-current", active ? "page" : "false");
+        });
         // Gulir HANYA daftar ikon. scrollIntoView ikut menggulir #notch (overflow:hidden tetap bisa
         // digulir lewat kode), sehingga seluruh isi pil naik ke atas dan wajah jam/mata tak terlihat.
         const b = btns[page];
         if (!b) return;
         const lr = list.getBoundingClientRect(), br = b.getBoundingClientRect();
-        if (br.left < lr.left) list.scrollLeft -= lr.left - br.left;
-        else if (br.right > lr.right) list.scrollLeft += br.right - lr.right;
+        // Jangan gunakan scrollIntoView: pada WebView itu dapat menggulir parent #notch.
+        // Scroll hanya nv-list secara horizontal agar konten halaman tidak bergeser vertikal.
+        if (br.left < lr.left) list.scrollLeft -= (lr.left - br.left) + 6;
+        else if (br.right > lr.right) list.scrollLeft += (br.right - lr.right) + 6;
     };
 }

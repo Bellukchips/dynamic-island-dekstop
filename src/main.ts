@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
 import { loadFace, saveFace, startClock, type Face } from "./clock";
@@ -23,7 +23,6 @@ type Appearance = {
   light_bg: string;
   accent: string;     // kosong = otomatis dari cover album
   default_mood: string; // ekspresi mata bawaan saat idle
-  eye_theme: string; // skin visual mata: 10 pilihan, dari aurora hingga monochrome
 };
 type Cfg = {
   scale: number;
@@ -40,14 +39,9 @@ const FALLBACK: Cfg = {
   pages: ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "reminder", "notes", "clipboard", "shelf", "lyrics", "privacy", "prayer"],
   timing: { hub_auto_ms: 4000, card_ms: 3500, hud_ms: 1500, hover_open_ms: 150, hover_close_ms: 450, sleep_after_s: 60 },
   pomodoro: { focus_min: 25, break_min: 5, long_break_min: 15, rounds: 4 },
-  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal", eye_theme: "aurora" },
+  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal" },
 };
-const rawCfg = (window as any).__CFG__ ?? {};
-const CFG: Cfg = {
-  ...FALLBACK,
-  ...rawCfg,
-  appearance: { ...FALLBACK.appearance, ...(rawCfg.appearance ?? {}) },
-};
+const CFG: Cfg = { ...FALLBACK, ...((window as any).__CFG__ ?? {}) };
 const T = CFG.timing;
 // fitur tambahan (bukan halaman) juga diatur lewat daftar pages di config
 const featureOn = (name: string) => CFG.pages.includes(name);
@@ -59,7 +53,7 @@ let privacyOn = featureOn("privacy");
 let names: string[] = [];
 let pageCount = 0;
 let page = 0;
-let setNavActive: (page: number) => void = () => { };
+let setNavActive: (page: number) => void = () => {};
 let rebuildHubPagesFn: ((pages: string[]) => void) | undefined;
 
 // Elemen dari halaman yang dimatikan di config tidak ada di DOM (dibuang saat startup).
@@ -90,14 +84,13 @@ let hideTimer: number | undefined;
 let lowBattery = false;
 let keepAwake = false;
 
-// Siklus adzan: tahan notifikasi sampai file selesai dan jeda media yang sebelumnya berjalan.
+// Siklus adzan: pertahankan notifikasi sampai audio selesai dan lanjutkan media jika sebelumnya berjalan.
 let prayerAdhanActive = false;
 let resumeMediaAfterAdhan = false;
 
 let inside = false;
 let insideSince = 0;
 let hubByHover = false;
-let shelfDragging = false; // true selama item shelf sedang diseret keluar ke aplikasi lain
 let closeAt = 0;
 let settleUntil = 0;
 let holdHover = false; // setelah drop, jangan langsung buka hub selama kursor masih di atas notch
@@ -176,12 +169,6 @@ const luma = (c: number[]) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255
 const fixedAccent = () => hexRgb(CFG.appearance.accent) !== null;
 
 const osLight = matchMedia("(prefers-color-scheme: light)");
-const EYE_THEMES = ["aurora", "neon", "pastel", "pixel", "holo", "ember", "ocean", "sakura", "cyber", "monochrome"] as const;
-function applyEyeTheme() {
-  const requested = (CFG.appearance.eye_theme || "aurora").toLowerCase();
-  eyes.dataset.eyeTheme = (EYE_THEMES as readonly string[]).includes(requested) ? requested : "aurora";
-}
-
 function applyTheme() {
   const a = CFG.appearance;
   const light = a.theme === "light" || (a.theme === "auto" && osLight.matches);
@@ -198,7 +185,6 @@ function applyTheme() {
   else st.removeProperty("--accent");
 }
 applyTheme();
-applyEyeTheme();
 osLight.addEventListener("change", applyTheme); // ikut berubah saat tema OS diganti
 
 // ukuran langsung berubah tanpa restart
@@ -206,8 +192,6 @@ function applyScale(v: number) {
   CFG.scale = Math.min(1.5, Math.max(0.5, v));
   Object.assign(SIZES, scaleMap(BASE_SIZES));
   Object.assign(HIT, scaleMap(BASE_HIT));
-  SIZES.compactLyrics = [Math.round((clWidth + 20) * CFG.scale), Math.round(40 * CFG.scale)];
-  HIT.compactLyrics = [Math.round(clWidth * CFG.scale), Math.round(34 * CFG.scale)];
   syncHubDynamicHeight();
   document.documentElement.style.setProperty("--s", String(CFG.scale));
   lastView = ""; // paksa ukuran jendela & area klik dihitung ulang
@@ -220,13 +204,8 @@ listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-ch
   const p = e.payload;
   if (!p) return;
   if (p.appearance) {
-    const moodChanged = p.appearance.default_mood !== undefined &&
-      p.appearance.default_mood !== CFG.appearance.default_mood;
-    // Gabungkan supaya event pengaturan parsial tidak menghapus properti appearance lain.
-    CFG.appearance = { ...CFG.appearance, ...p.appearance };
+    CFG.appearance = p.appearance;
     applyTheme();
-    applyEyeTheme();
-    if (moodChanged) updateBase();
   }
   if (typeof p.scale === "number" && p.scale !== CFG.scale) applyScale(p.scale);
   // Perubahan halaman dipratinjau langsung dari Settings. Jangan membuang elemen DOM:
@@ -255,37 +234,68 @@ listen<{ appearance?: Appearance; scale?: number; pages?: string[] }>("config-ch
   }
 });
 
-// ---------- jendela berukuran tetap + penempatan notch di dalamnya ----------
+// ---------- ukuran jendela adaptif + penempatan notch di dalamnya ----------
 const BOTTOM_TY = 100000; // ty sangat besar = menempel di dasar layar (di-clamp oleh Rust)
 const isBottomTy = (ty: number) => ty >= BOTTOM_TY / 2;
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 
-// Jendela native berukuran TETAP (tidak pernah di-resize) -> tidak ada getaran dari resize native.
+// Jendela tetap compact untuk menu biasa. Saat Currency aktif, ukurannya membesar agar
+// dashboard konversi + saham mendapat ruang nyata (bukan sekadar CSS overflow).
 const WIN_BASE: [number, number] = [600, 336];
-const winLogical = (): [number, number] => [
-  Math.round(WIN_BASE[0] * CFG.scale),
-  Math.round(WIN_BASE[1] * CFG.scale),
-];
+const CURRENCY_WIN_BASE: [number, number] = [800, 620];
+const isCurrencyHub = (view = notch.dataset.view ?? "idle") => view === "hub" && names[page] === "currency";
+const winLogical = (view = notch.dataset.view ?? "idle"): [number, number] => {
+  const [w, h] = isCurrencyHub(view) ? CURRENCY_WIN_BASE : WIN_BASE;
+  return [Math.round(w * CFG.scale), Math.round(h * CFG.scale)];
+};
+let nativeSizeKey = "";
+let nativeSizePromise: Promise<void> | null = null;
+let desiredNativeSize: { key: string; w: number; h: number; view: string } | null = null;
+function syncNativeWindowSize(view = notch.dataset.view ?? "idle"): Promise<void> {
+  const [w, h] = winLogical(view);
+  desiredNativeSize = { key: `${w}x${h}`, w, h, view };
+  if (nativeSizePromise) return nativeSizePromise;
+  if (desiredNativeSize.key === nativeSizeKey) return Promise.resolve();
+
+  const run = async () => {
+    // Serialisasi resize native agar klik menu yang cepat tidak meninggalkan ukuran jendela
+    // dari halaman sebelumnya ketika pengguna sudah pindah ke halaman lain.
+    while (desiredNativeSize && desiredNativeSize.key !== nativeSizeKey) {
+      const target = desiredNativeSize;
+      await invoke("set_size", { w: target.w, h: target.h });
+      nativeSizeKey = target.key;
+    }
+  };
+  const pending = run();
+  nativeSizePromise = pending.finally(() => {
+    nativeSizePromise = null;
+    // Jika target berubah pada momen terakhir saat promise akan selesai, terapkan target terbaru.
+    if (desiredNativeSize && desiredNativeSize.key !== nativeSizeKey) {
+      void syncNativeWindowSize(desiredNativeSize.view).catch((error) =>
+        console.error("Gagal menyinkronkan ukuran jendela Notch:", error));
+    }
+  });
+  return nativeSizePromise;
+}
 let MON = { x: 0, y: 0, w: window.screen.width, h: window.screen.height };
 let shellOx = 0, shellOy = 0;
 
 // ---------- mode ORB: saat notch ditahan & digeser, badannya berubah jadi bola ----------
-const ORB_BASE = 48;                                   // diameter bola (px CSS sebelum skala)
-const orbD = () => Math.round(ORB_BASE * CFG.scale);   // diameter bola dalam px layar
+const ORB_BASE = 48;
+const orbD = () => Math.round(ORB_BASE * CFG.scale);
+let orbOn = false;
 const orbPad = () => (orbOn ? Math.round(28 * CFG.scale) : 0);
-let orbOn = false;                                     // true selama mode bola aktif
-let orbT0 = 0;                                         // waktu mulai (untuk ease posisi ke bawah kursor)
+let orbT0 = 0;
 let orbRaf = 0;
-let orbPx = 0, orbPy = 0, orbVx = 0, orbVy = 0;        // kecepatan kursor (squash & stretch)
-let orbDock = "";                                      // "t" | "b" | "left" | "right" | "" (menempel ke mana)
+let orbPx = 0, orbPy = 0, orbVx = 0, orbVy = 0;
+let orbDock = "";
 let orbOutTimer: number | undefined;
-let lastPtr = { x: 0, y: 0 };                          // posisi kursor terakhir saat drag
+let lastPtr = { x: 0, y: 0 };
 
 // geser notch di dalam jendela (hanya perlu saat posisi bebas dekat tepi, supaya view lebar tidak keluar layar)
 function placeShell(view?: string) {
-  const [W, H] = winLogical();
   const v = view ?? notch.dataset.view ?? "idle";
-  // saat mode bola, ukuran yang dipakai = ukuran bola (bukan ukuran view) agar bola tepat di bawah kursor
+  const [W, H] = winLogical(v);
   const [vw, vh] = orbOn ? [orbD(), orbD()] : (SIZES[v] ?? SIZES.idle);
   const left = notch.classList.contains("is-edge-left");
   const right = notch.classList.contains("is-edge-right");
@@ -304,8 +314,7 @@ function placeShell(view?: string) {
       oy = wantTy - winTy;
     }
   }
-  // Posisi melayang (termasuk SAAT drag): beri jarak dari tepi atas supaya hub tidak menempel.
-  // Jarak dibatasi sisa ruang jendela agar view tinggi (kalender) tidak terpotong.
+  // Posisi melayang diberi jarak di mode biasa; saat ORB aktif pusat bola mengikuti kursor.
   if (notch.classList.contains("is-floating") && !orbOn) {
     const gap = Math.round(14 * CFG.scale);
     oy += Math.max(0, Math.min(gap, H - (oy + vh)));
@@ -320,9 +329,9 @@ function placeShell(view?: string) {
 
 // area klik pil dalam koordinat jendela
 function hitRect(view: string) {
-  const [W, H] = winLogical();
+  const [W, H] = winLogical(view);
   let [hw, hh] = HIT[view] ?? HIT.idle;
-  if (orbOn) { hw = Math.max(hw, orbD()); hh = Math.max(hh, orbD()); } // bola selalu di dalam area klik
+  if (orbOn) { hw = Math.max(hw, orbD()); hh = Math.max(hh, orbD()); }
   const left = notch.classList.contains("is-edge-left");
   const right = notch.classList.contains("is-edge-right");
   const bottom = notch.classList.contains("is-bottom");
@@ -348,11 +357,10 @@ async function syncWindow() {
     currentCx = MON.x + Math.round(MON.w / 2);
   }
 
-  const [w, h] = winLogical();
   try {
-    await invoke("set_size", { w, h });
+    await syncNativeWindowSize(notch.dataset.view ?? "idle");
   } catch (e) {
-    console.error(e);
+    console.error("Gagal menyinkronkan ukuran jendela Notch:", e);
   }
   updatePositionUI(notch.classList.contains("is-custom-pos"), currentTy, currentCx);
 }
@@ -374,11 +382,17 @@ function applySize(view: string, previousView = appliedView || view) {
   placeShell(view);
   const finish = () => {
     if (!stillCurrent()) return;
-    setHit(view);
-    appliedView = view;
+    // Resize native dijalankan sebelum hitbox akhir dipasang. Ketika menutup, finish
+    // dipanggil setelah animasi CSS supaya panel yang sedang mengecil tidak terpotong.
+    void syncNativeWindowSize(view).then(() => {
+      if (!stillCurrent()) return;
+      placeShell(view);
+      setHit(view);
+      appliedView = view;
+    }).catch((error) => console.error("Gagal mengubah ukuran jendela Notch:", error));
   };
 
-  // Membuka: hitbox besar langsung dipasang. Menutup: tunggu animasi CSS selesai.
+  // Membuka: ukuran jendela dan hitbox diperbesar segera. Menutup: tunggu animasi CSS selesai.
   if (isExpanding) { finish(); return; }
 
   let fired = false;
@@ -486,8 +500,6 @@ let sleeping = false;
 let lastActivity = Date.now();
 
 const applyMood = (m: Mood) => { eyes.dataset.mood = m; };
-// Terapkan mood bawaan sejak awal, tanpa menunggu interval update pertama.
-applyMood(baseMood);
 
 export function setBase(m: Mood) {
   baseMood = m;
@@ -582,6 +594,9 @@ function setPage(i: number) {
   track.style.setProperty("--drag", "0px");
   dotsEl.querySelectorAll(".dot").forEach((d, n) => d.classList.toggle("active", n === page));
   setNavActive(page);
+  // Halaman Currency memerlukan ruang tambahan agar hasil konversi dan ringkasan saham
+  // tidak tertutup oleh batas panel. Ukuran CSS dan hitbox native diselaraskan bersamaan.
+  syncHubDynamicHeight();
   if (names[page] !== "notes" && notch.classList.contains("notes-expanded")) {
     setNotesExpanded(false);
   }
@@ -701,7 +716,7 @@ window.addEventListener("blur", () => setInside(false));
 // watchdog: buka/tutup hub dengan hysteresis
 setInterval(() => {
   const now = Date.now();
-  if (dragging || isDraggingWindow || shelfDragging || seeking || now < settleUntil) return;
+  if (dragging || isDraggingWindow || now < settleUntil) return;
 
   if (override === "hub" || override === "lyr" || override === "cal") {
     if (inside) {
@@ -1041,8 +1056,6 @@ notch.addEventListener("click", (e) => {
   if (clicks.length >= 5) { flash("angry", 2000); clicks = []; }
   else flash("happy", 1200);
 
-  // Alert adzan tidak boleh ditutup sebelum audio selesai.
-  if (prayerAdhanActive && override === "prayerAlert") return;
   // kartu pengingat (rem) tidak ditutup lewat klik: hanya lewat tombol Tunda / Selesai
   if (override === "bt" || override === "dev" || override === "hud" || override === "prayerAlert") collapse();
   else if (!override) openHub(homePage());
@@ -1134,38 +1147,6 @@ const compactLayer = document.querySelector<HTMLElement>(".l-compact");
 const compactBars = compactLayer?.querySelector<HTMLElement>(".bars");
 if (compactLayer && compactBars) {
   compactLayer.insertBefore(compactLyrics, compactBars);
-}
-
-// Lebar notch (view compactLyrics) menyesuaikan panjang baris lirik supaya tidak terpotong.
-// Satuan = px CSS sebelum skala; skala diterapkan lewat zoom di #notch dan SIZES/HIT di bawah.
-const CL_MIN = 340;   // lebar dasar (sama dengan BASE_HIT.compactLyrics)
-const CL_MAX = 560;   // batas atas: jendela native 600px dikurangi telinga 2x10px dan sedikit ruang
-const CL_FIXED = 116; // cover 22 + equalizer 18 + margin lirik 16 + padding 28 + telinga 20 + cadangan 12
-let clWidth = CL_MIN;
-let clFont = "";
-const clCtx = document.createElement("canvas").getContext("2d");
-function fitCompactLyricWidth(text: string) {
-  let target = CL_MIN;
-  if (text && clCtx) {
-    if (!clFont) {
-      const cs = getComputedStyle(compactLyrics);
-      clFont = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    }
-    clCtx.font = clFont;
-    const need = Math.ceil((clCtx.measureText(text).width + CL_FIXED) / 10) * 10; // kelipatan 10px: tidak gonta-ganti terus
-    target = Math.min(CL_MAX, Math.max(CL_MIN, need));
-  }
-  if (target === clWidth) return;
-  clWidth = target;
-  notch.style.setProperty("--cl-w", String(target));
-  const sc = CFG.scale;
-  SIZES.compactLyrics = [Math.round((target + 20) * sc), Math.round(40 * sc)];
-  HIT.compactLyrics = [Math.round(target * sc), Math.round(34 * sc)];
-  if (notch.dataset.view === "compactLyrics") {
-    settleUntil = Date.now() + 350; // tepi yang bergeser jangan memicu hover bolak-balik
-    placeShell("compactLyrics");
-    setHit("compactLyrics");
-  }
 }
 
 // Tampilan ringkas di sisi/dasar layar: hanya cover album berbentuk disc berputar.
@@ -1307,26 +1288,15 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 listen<Media>("media", (e) => {
   const m = e.payload;
   const wasPlaying = playing;
-  const incomingPlaying = m.active && m.playing;
-  if (prayerAdhanActive && incomingPlaying) {
-    // Jika pengguna / player lain melanjutkan musik selama adzan, jeda lagi.
-    void invoke("media_control", { action: "pause" }).catch((err) =>
-      console.warn("Tidak bisa menjeda media selama adzan:", err)
-    );
-    playing = false;
-  } else {
-    playing = incomingPlaying;
-  }
+  playing = m.active && m.playing;
 
   $("m-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
   $("m-artist").textContent = m.active ? m.artist : "Putar musik untuk memulai";
   $("ly-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
   $("ly-artist").textContent = m.active ? m.artist : "";
   if (!m.active) showDefaultArt();
-  if (!seekHeld()) {
-    $("m-progress").style.width = m.length > 0 ? `${(m.position / m.length) * 100}%` : "0%";
-    $("t-pos").textContent = fmt(m.position);
-  }
+  $("m-progress").style.width = m.length > 0 ? `${(m.position / m.length) * 100}%` : "0%";
+  $("t-pos").textContent = fmt(m.position);
   $("t-len").textContent = fmt(m.length);
 
   if (playing && m.title && m.title !== lastTitle) {
@@ -1348,60 +1318,6 @@ const control = (action: string) => (ev: Event) => { ev.stopPropagation(); invok
 $("m-prev").addEventListener("click", control("prev"));
 $("m-toggle").addEventListener("click", control("toggle"));
 $("m-next").addEventListener("click", control("next"));
-
-// ---------- geser progress bar untuk pindah menit ----------
-const seekBar = document.querySelector<HTMLElement>(".m-time .bar");
-let seeking = false;
-let seekHoldUntil = 0; // setelah dilepas, abaikan posisi lama dari Rust sebentar
-let seekRatio = 0;
-const seekHeld = () => seeking || Date.now() < seekHoldUntil;
-
-function paintSeek(ratio: number) {
-  const prog = $("m-progress");
-  prog.style.transition = "none"; // ikut kursor tanpa jeda
-  prog.style.width = `${ratio * 100}%`;
-  if (clockLen > 0) $("t-pos").textContent = fmt(ratio * clockLen);
-}
-
-if (seekBar) {
-  const ratioAt = (clientX: number) => {
-    const r = seekBar.getBoundingClientRect();
-    return r.width > 0 ? clamp((clientX - r.left) / r.width, 0, 1) : 0;
-  };
-  const endSeek = (e: PointerEvent, commit: boolean) => {
-    if (!seeking) return;
-    seeking = false;
-    seekBar.classList.remove("seeking");
-    try { seekBar.releasePointerCapture(e.pointerId); } catch { }
-    $("m-progress").style.removeProperty("transition");
-    if (!commit || clockLen <= 0) return;
-    const target = seekRatio * clockLen;
-    seekHoldUntil = Date.now() + 1800;
-    clockPos = target; // lirik langsung ikut pindah
-    clockAt = performance.now();
-    tickLyrics(true);
-    invoke("media_seek", { position: target }).catch((err) => console.error("media_seek gagal:", err));
-    flash("happy", 800);
-  };
-  seekBar.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || clockLen <= 0) return;
-    e.stopPropagation(); // jangan memulai geser notch
-    e.preventDefault();
-    seeking = true;
-    seekBar.classList.add("seeking");
-    seekBar.setPointerCapture(e.pointerId);
-    seekRatio = ratioAt(e.clientX);
-    paintSeek(seekRatio);
-  });
-  seekBar.addEventListener("pointermove", (e) => {
-    if (!seeking) return;
-    seekRatio = ratioAt(e.clientX);
-    paintSeek(seekRatio);
-  });
-  seekBar.addEventListener("pointerup", (e) => endSeek(e, true));
-  seekBar.addEventListener("pointercancel", (e) => endSeek(e, false));
-  seekBar.addEventListener("click", (e) => e.stopPropagation());
-}
 
 // ---------- bluetooth ----------
 type BtDev = { name: string; battery: number | null };
@@ -1833,11 +1749,9 @@ let lyManualAt = 0; // waktu terakhir pengguna menggulir sendiri (auto-scroll be
 const nowPos = () => clockPos + (clockPlaying ? (performance.now() - clockAt) / 1000 : 0);
 
 function onMediaForLyrics(m: Media) {
-  if (!seekHeld()) { // posisi lama dari Rust jangan menimpa posisi hasil geser
-    clockPos = m.position;
-    clockAt = performance.now();
-  }
+  clockPos = m.position;
   clockLen = m.length;
+  clockAt = performance.now();
   clockPlaying = m.active && m.playing;
   // Pencarian lirik untuk compact view tetap aktif meskipun halaman Lyrics
   // tidak dimasukkan ke daftar halaman konfigurasi.
@@ -1929,7 +1843,6 @@ function updateCompactLyric() {
   if (!visible || !ly) {
     compactLyrics.textContent = "";
     compactLyrics.removeAttribute("title");
-    fitCompactLyricWidth("");
     return;
   }
 
@@ -1938,7 +1851,6 @@ function updateCompactLyric() {
   if (compactLyrics.textContent !== line) {
     compactLyrics.textContent = line;
     compactLyrics.title = line;
-    fitCompactLyricWidth(line);
     compactLyrics.classList.remove("lyric-change");
     // Paksa animasi transisi berjalan kembali setiap pergantian baris.
     void compactLyrics.offsetWidth;
@@ -2027,95 +1939,6 @@ const EXT_ICON: Record<string, string> = {
 const iconFor = (it: ShelfItem) =>
   it.dir ? "📁" : EXT_ICON[(it.name.split(".").pop() ?? "").toLowerCase()] ?? "📄";
 
-// ---- drag KELUAR: seret item shelf ke File Explorer / aplikasi lain ----
-// Memakai tauri-plugin-drag (drag native OS). Mode "copy": file asli di lokasi aslinya tidak
-// pernah dipindah atau dihapus, karena shelf hanya menyimpan referensi.
-let shelfNoClickUntil = 0;
-// jejak diagnostik -> terminal (tauri dev) lewat perintah shelf_log
-const slog = (m: string) => { invoke("shelf_log", { msg: m }).catch(() => { }); };
-
-// gambar kecil yang ikut kursor saat menyeret (PNG data URL, dibuat di canvas)
-function shelfDragIcon(it: ShelfItem): string {
-  const W = 230, H = 48, R = 12;
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const g = c.getContext("2d");
-  if (!g) return "";
-  g.fillStyle = "rgba(24,24,28,0.94)";
-  g.beginPath();
-  g.moveTo(R, 0);
-  g.arcTo(W, 0, W, H, R);
-  g.arcTo(W, H, 0, H, R);
-  g.arcTo(0, H, 0, 0, R);
-  g.arcTo(0, 0, W, 0, R);
-  g.closePath();
-  g.fill();
-  g.textBaseline = "middle";
-  g.font = '22px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji",sans-serif';
-  g.fillText(iconFor(it), 12, H / 2 + 1);
-  g.fillStyle = "#fff";
-  g.font = '600 14px system-ui,"Segoe UI",sans-serif';
-  let label = it.name;
-  const max = W - 48 - 12;
-  while (label.length > 1 && g.measureText(label).width > max) label = label.slice(0, -1);
-  if (label !== it.name) label = label.slice(0, -1) + "…";
-  g.fillText(label, 48, H / 2 + 1);
-  return c.toDataURL("image/png");
-}
-
-async function startShelfDrag(it: ShelfItem, row: HTMLElement) {
-  if (shelfDragging) return;
-  shelfDragging = true;
-  shelfNoClickUntil = Number.MAX_SAFE_INTEGER; // tahan klik sampai seretan selesai
-  clearTimeout(hideTimer); // hub tetap terbuka selama seretan
-  closeAt = 0;
-  row.classList.add("drag-src");
-
-  let finished = false;
-  let safety = 0;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    window.clearTimeout(safety);
-    shelfDragging = false;
-    shelfNoClickUntil = Date.now() + 250;
-    row.classList.remove("drag-src");
-    refreshShelf(); // aplikasi tujuan bisa saja memindahkan/menghapus file
-  };
-  safety = window.setTimeout(() => {
-    invoke("set_drag_out", { active: false }).catch(() => { }); // jangan biarkan DRAG_OUT tersangkut di Rust
-    finish();
-  }, 120_000); // jaring pengaman bila callback tak pernah datang
-
-  const onEvent = new Channel<{ result: string }>();
-  onEvent.onmessage = (m) => {
-    slog(`drag keluar selesai: ${JSON.stringify(m)}`);
-    invoke("set_drag_out", { active: false }).catch(() => { });
-    finish();
-    if (/drop/i.test(String(m.result))) flash("happy", 1200);
-  };
-
-  slog(`drag keluar mulai: ${it.path}`);
-  // jendela dijaga tetap interaktif & loop click-through dijeda selama seretan native berjalan
-  await invoke("set_drag_out", { active: true }).catch(() => { });
-  try {
-    await invoke("plugin:drag|start_drag", {
-      item: [it.path],            // harus path absolut
-      image: shelfDragIcon(it),   // "data:image/png;base64,..."
-      options: { mode: "copy" },
-      onEvent,
-    });
-    slog("start_drag: perintah diterima plugin");
-  } catch (err) {
-    console.error("shelf: gagal memulai drag keluar:", err);
-    slog(`start_drag GAGAL: ${String(err)}`);
-    invoke("set_drag_out", { active: false }).catch(() => { });
-    finish();
-    flash("sad", 1500);
-  }
-}
-
 function paintShelf(items: ShelfItem[]) {
   const list = document.getElementById("sh-list");
   if (!list) return; // halaman shelf dimatikan di config
@@ -2133,7 +1956,7 @@ function paintShelf(items: ShelfItem[]) {
   items.forEach((it) => {
     const b = document.createElement("button"); // button: tidak memicu geser halaman
     b.className = "sh-item";
-    b.title = `${it.path}\nKlik: buka · Klik kanan: tampilkan di folder · Seret: salin ke aplikasi lain`;
+    b.title = `${it.path}\nKlik: buka · Klik kanan: tampilkan di folder`;
 
     const ic = document.createElement("span");
     ic.className = "ic";
@@ -2148,7 +1971,6 @@ function paintShelf(items: ShelfItem[]) {
 
     b.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (Date.now() < shelfNoClickUntil) return; // klik "bayangan" setelah seretan
       if ((e.target as HTMLElement).closest(".x")) {
         invoke<ShelfItem[]>("shelf_remove", { path: it.path }).then(paintShelf).catch(() => { });
       } else {
@@ -2160,25 +1982,6 @@ function paintShelf(items: ShelfItem[]) {
       e.preventDefault();
       e.stopPropagation();
       invoke("shelf_reveal", { path: it.path });
-    });
-
-    // tahan lalu geser > 8px = seret item ini keluar notch (File Explorer, browser, chat, dll.)
-    b.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || (e.target as HTMLElement).closest(".x")) return;
-      const sx = e.clientX, sy = e.clientY;
-      const off = () => {
-        window.removeEventListener("pointermove", mv);
-        window.removeEventListener("pointerup", off);
-        window.removeEventListener("pointercancel", off);
-      };
-      const mv = (ev: PointerEvent) => {
-        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return;
-        off();
-        void startShelfDrag(it, b);
-      };
-      window.addEventListener("pointermove", mv);
-      window.addEventListener("pointerup", off);
-      window.addEventListener("pointercancel", off);
     });
     list.appendChild(b);
   });
@@ -2195,13 +1998,10 @@ document.getElementById("sh-clear")?.addEventListener("click", (e) => {
 });
 
 // file diseret dari aplikasi lain ke notch: buka halaman shelf saat masuk, simpan saat dilepas
-{
+if (names.includes("shelf")) {
   getCurrentWebview()
     .onDragDropEvent((ev) => {
-      if (!names.includes("shelf")) return; // dicek saat event: halaman bisa diaktifkan dari Settings
-      if (shelfDragging) return; // seretan dari shelf sendiri lewat di atas notch: abaikan
       const p = ev.payload;
-      if (p.type !== "over") slog(`drag masuk: ${p.type}${p.type === "drop" ? ` (${p.paths.length} path)` : ""}`);
       if (p.type === "enter") {
         notch.classList.add("dropping");
         hubByHover = false;
@@ -2222,7 +2022,7 @@ document.getElementById("sh-clear")?.addEventListener("click", (e) => {
           .catch(() => { });
       }
     })
-    .catch((err) => { console.error("onDragDropEvent gagal:", err); slog(`onDragDropEvent GAGAL: ${String(err)}`); });
+    .catch(() => { });
 }
 refreshShelf();
 
@@ -2445,18 +2245,33 @@ function paintPick() {
   $("pk-m").textContent = String(pk.getMinutes()).padStart(2, "0");
 }
 
-// Jaga ukuran panel hub ketika picker pengingat atau daftar catatan diperluas.
-// Window native tetap berukuran tetap; ukuran view dan hitbox disesuaikan di dalamnya.
+// Jaga ukuran panel hub ketika picker pengingat, daftar catatan, atau Currency diperluas.
+// Currency menggunakan jendela native yang lebih besar; halaman lainnya tetap compact.
 function syncHubDynamicHeight() {
   const reminderExpanded = notch.classList.contains("reminder-picking");
   const notesExpanded = notch.classList.contains("notes-expanded");
-  const height = reminderExpanded ? 230 : notesExpanded ? 300 : BASE_SIZES.hub[1];
-  const hitHeight = reminderExpanded ? 242 : notesExpanded ? 330 : BASE_HIT.hub[1];
+  const currencyExpanded = names[page] === "currency";
+  const width = currencyExpanded ? 780 : BASE_SIZES.hub[0];
+  const height = reminderExpanded ? 230 : notesExpanded ? 300 : currencyExpanded ? 520 : BASE_SIZES.hub[1];
+  const hitWidth = currencyExpanded ? 770 : BASE_HIT.hub[0];
+  const hitHeight = reminderExpanded ? 242 : notesExpanded ? 330 : currencyExpanded ? 560 : BASE_HIT.hub[1];
+
+  SIZES.hub[0] = Math.round(width * CFG.scale);
   SIZES.hub[1] = Math.round(height * CFG.scale);
+  HIT.hub[0] = Math.round(hitWidth * CFG.scale);
   HIT.hub[1] = Math.round(hitHeight * CFG.scale);
+
+  // Variabel CSS ditempatkan langsung pada notch supaya track, page, dan nav ikut melebar.
+  notch.classList.toggle("currency-expanded", currencyExpanded);
+  notch.style.setProperty("--hub-w", `${width}px`);
+  notch.style.setProperty("--hub-h", `${height}px`);
+
   if (notch.dataset.view === "hub") {
-    placeShell("hub");
-    setHit("hub");
+    void syncNativeWindowSize("hub").then(() => {
+      if (notch.dataset.view !== "hub") return;
+      placeShell("hub");
+      setHit("hub");
+    }).catch((error) => console.error("Gagal mengubah ukuran panel Currency:", error));
   }
 }
 
@@ -2823,10 +2638,23 @@ initNudge({
     hubByHover = false;
     expand("dev", ms);
   },
+  returnCard: (title, sub, ms) => {
+    // Sapaan saat pointer kembali tidak boleh menimpa kartu lain yang sedang dipakai.
+    const isIdleNudge = override === "dev" && $("dev-sub").textContent.startsWith("Pointer diam");
+    if (override !== null && !isIdleNudge) return;
+
+    $("dev-icon").classList.remove("off", "play");
+    $("dev-chip").classList.add("off");
+    $("dev-name").textContent = title;
+    $("dev-sub").textContent = sub;
+    hubByHover = false;
+    expand("dev", ms);
+  },
   mood: (m, ms) => flash(m as Mood, ms),
 });
 
-// Pengingat jadwal shalat. Mode Adzan mempertahankan kartu sampai audio benar-benar selesai.
+// Pengingat jadwal shalat memakai kartu khusus. Saat adzan diputar, kartu ditahan
+// sampai audio selesai dan media yang sebelumnya berjalan dilanjutkan kembali.
 initPrayer({
   card: (title, sub, ms) => {
     $("pr-alert-title").textContent = title;
@@ -2847,7 +2675,7 @@ initPrayer({
     $("pr-alert-status").textContent = "ADZAN";
     hubByHover = false;
     override = "prayerAlert";
-    render(); // ms = 0: alert tetap terbuka sampai callback adhanEnd
+    render(); // ms = 0: alert tetap terbuka hingga adhanEnd dipanggil.
 
     if (resumeMediaAfterAdhan) {
       void invoke("media_control", { action: "pause" }).catch((err) =>
@@ -2966,27 +2794,27 @@ void loadRemoteUpdateConfig()
   .catch((error: unknown) => {
     console.warn("[Firebase] Gagal memuat notch_config/update_config:", error);
   });
-// Gerakan lucu acak saat notch menempel di dasar layar. Bisa dimatikan di Pengaturan > Perilaku.
+// Animasi gerak acak saat Notch menempel di dasar/sisi layar.
+// Jangan hilangkan inisialisasi ini: bottom-play.ts tidak aktif tanpa hook dari main.ts.
 initBottomPlay({
   shell: $("shell"),
   notch,
-  busy: () => inside || override !== null || isDraggingWindow || shelfDragging || holdHover ||
-    notch.classList.contains("dropping"),
+  busy: () => inside || override !== null || isDraggingWindow || holdHover ||
+    notch.classList.contains("dropping") || notch.classList.contains("greeting-active") ||
+    notch.classList.contains("currency-expanded"),
   playing: () => playing,
   calm: () => sleeping || lowBattery,
   mood: (m, ms) => flash(m as Mood, ms),
   getCx: () => currentCx,
-  // geser jendela native ke cx tanpa menyimpan posisi (posisi tersimpan tidak berubah)
+  // Pindahkan jendela native tanpa mengubah posisi tersimpan pengguna.
   setCx: (cx) => {
     updatePositionUI(true, BOTTOM_TY, cx);
     return Promise.resolve(invoke("notch_move_to", { cx, ty: BOTTOM_TY }));
   },
-  // pil bisa mentok tepat di tepi kiri/kanan monitor
   range: () => {
     const [vw] = SIZES[notch.dataset.view ?? "bottomIdle"] ?? SIZES.bottomIdle;
     return [MON.x + vw / 2, MON.x + MON.w - vw / 2];
   },
-  // Mode gerak mengikuti orientasi docking: horizontal di bawah, vertikal di sisi.
   dock: () => {
     if (notch.classList.contains("is-bottom")) return "bottom";
     const view = notch.dataset.view;
@@ -3013,6 +2841,7 @@ initBottomPlay({
   },
   hit: () => setHit(notch.dataset.view ?? "idle"),
 });
+
 if (clockOn) startClock();
 void syncWindow(); // jendela native diset sekali ke ukuran tetap
 render();

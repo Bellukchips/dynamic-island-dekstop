@@ -1,3 +1,5 @@
+import { emit, listen } from "@tauri-apps/api/event";
+
 // Gerakan acak saat notch menempel di dasar layar (bentuk kubah "bottomIdle"/"bottomMedia").
 //
 // Mesin fisika kecil (pegas + gravitasi) yang berjalan tiap frame supaya badan notch terasa seperti
@@ -48,10 +50,14 @@ class Spring {
 const poke = (s: Spring, amount: number) => { s.v += amount * 18; };
 
 const G = 2600;                 // gravitasi (px/s²)
-const ACC = 700;                // percepatan/perlambatan saat berkeliling (px/s²), lembut
+const ACC = 320;                // percepatan/perlambatan rendah agar gerak meluncur pelan (px/s²)
 const CANCEL = Symbol("cancel");
 
 // [nama, bobot]
+// Pertahankan gerakan acak asli dari versi GitHub; liquid juga boleh terpilih secara acak.
+// Selain itu, ada burst liquid terjadwal setiap 3 menit sebanyak 3 rangkaian.
+const LIQUID_INTERVAL_MS = 3 * 60 * 1000;
+const LIQUID_REPETITIONS = 3;
 const NORMAL: [string, number][] = [["liquid", 6], ["roam", 3], ["wiggle", 2], ["squish", 2], ["sway", 2], ["dance", 1], ["yawn", 1]];
 const MUSIC: [string, number][] = [["liquid", 7], ["dance", 5], ["roam", 3], ["wiggle", 2], ["squish", 1]];
 const CALM: [string, number][] = [["yawn", 3], ["sway", 3], ["squish", 2], ["liquid", 1]];
@@ -70,7 +76,8 @@ function pick(list: [string, number][], avoid: string): string {
 }
 
 export function initBottomPlay(h: BottomPlayHooks) {
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    // Checklist Bottom Play adalah persetujuan eksplisit untuk animasi ini.
+    // Karena itu prefers-reduced-motion OS tidak boleh membatalkan fitur yang diaktifkan pengguna.
 
     // ---------- keadaan fisika ----------
     const y = new Spring(0, 0);          // vertikal (negatif = ke atas)
@@ -109,8 +116,10 @@ export function initBottomPlay(h: BottomPlayHooks) {
     let waits: { ok: () => boolean; res: () => void; rej: (e: unknown) => void }[] = [];
 
     let enabledAt = 0, enabledVal = true; // saklar dibaca tiap 300ms, bukan tiap frame
+    let runtimeEnabledOverride: boolean | null = null;
     const enabled = () => {
         const n = performance.now();
+        if (runtimeEnabledOverride !== null) return runtimeEnabledOverride;
         if (n - enabledAt > 300) { enabledAt = n; enabledVal = bottomPlayEnabled(); }
         return enabledVal;
     };
@@ -119,6 +128,12 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (h.dock) return h.dock();
         return h.notch.classList.contains("is-bottom") ? "bottom" : null;
     };
+    // Kunci orientasi sumbu selama satu rangkaian gerak. Saat mouse masuk, view berubah
+    // dari edgeIdle/edgeMedia menjadi hub dan currentDock() bisa menjadi null. Tanpa kunci ini,
+    // koordinat Y (gerak vertikal di sisi) bisa salah dikirim ke setCx(), yang memang menempelkan
+    // notch ke bawah layar.
+    let motionDock: Dock = null;
+    const axisDock = (): Dock => motionDock ?? currentDock();
     const isSideDock = (dock = currentDock()) => dock === "left" || dock === "right";
     const supportedDock = () => {
         const dock = currentDock();
@@ -127,19 +142,63 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (dock === "left" || dock === "right") return view === "edgeIdle" || view === "edgeMedia";
         return false;
     };
-    const allowed = () => enabled() && !reduced.matches && supportedDock() && !h.busy();
+    const blockedReason = (): string | null => {
+        if (!enabled()) return "Checklist animasi terbaca nonaktif.";
+        if (!supportedDock()) return `Notch tidak berada di posisi bawah/samping yang didukung (dock=${currentDock() ?? "lain"}, view=${h.notch.dataset.view ?? "?"}).`;
+        if (h.busy()) return "Notch sedang dipakai, panel terbuka, atau drag masih aktif.";
+        return null;
+    };
+    const allowed = () => blockedReason() === null;
+
+    let lastBlockedLog = "";
+    let manualLiquidRequested = false;
+    const reportTest = (payload: { requestId?: string; ok: boolean; message: string }) => {
+        void emit("bottom-play-test-result", payload).catch((error) => {
+            console.warn("[BottomPlay] Gagal mengirim status uji:", error);
+        });
+    };
+
+    // Settings memberi sinyal langsung ke jendela Notch, tidak hanya mengandalkan localStorage.
+    void listen<{ enabled?: boolean }>("bottom-play-setting-changed", ({ payload }) => {
+        if (typeof payload?.enabled !== "boolean") return;
+        runtimeEnabledOverride = payload.enabled;
+        enabledVal = payload.enabled;
+        enabledAt = performance.now();
+        try { localStorage.setItem(KEY, payload.enabled ? "1" : "0"); } catch { /* storage opsional */ }
+        if (!payload.enabled && active) abort();
+        if (payload.enabled) schedule(0);
+        console.info(`[BottomPlay] Saklar dari Settings: ${payload.enabled ? "aktif" : "nonaktif"}.`);
+    }).catch((error) => console.warn("[BottomPlay] Listener saklar gagal:", error));
+
+    // Tes manual langsung menjalankan liquid sehingga tidak perlu menunggu interval 3 menit.
+    void listen<{ requestId?: string }>("bottom-play-test", ({ payload }) => {
+        const requestId = payload?.requestId;
+        const reason = blockedReason();
+        if (reason) {
+            reportTest({ requestId, ok: false, message: `Animasi belum dapat berjalan: ${reason}` });
+            console.warn("[BottomPlay] Tes ditolak:", reason);
+            return;
+        }
+        manualLiquidRequested = true;
+        if (!active) schedule(0);
+        reportTest({ requestId, ok: true, message: active ? "Tes liquid masuk antrean; gerakan aktif saat ini selesai dahulu." : "Tes liquid dimulai." });
+        console.info("[BottomPlay] Tes liquid diminta dari Settings.");
+    }).catch((error) => console.warn("[BottomPlay] Listener tes gagal:", error));
     const axisRange = (): [number, number] => {
-        const dock = currentDock();
+        const dock = axisDock();
         if (isSideDock(dock) && h.verticalRange) return h.verticalRange();
         return h.range();
     };
     const axisPosition = (): number => {
-        const dock = currentDock();
+        const dock = axisDock();
         if (isSideDock(dock)) return h.getTy?.() ?? -1;
         return h.getCx();
     };
     const setAxisPosition = (value: number): Promise<unknown> => {
-        const dock = currentDock();
+        // Setelah hover/interaksi, jangan menyelesaikan gerakan lama memakai orientasi baru.
+        // Khusus gerak sisi, setCx akan mengatur ty=BOTTOM_TY; jadi stale Y tidak boleh masuk ke sana.
+        if (!active || !allowed()) return Promise.resolve();
+        const dock = axisDock();
         if (isSideDock(dock) && h.setTy) return h.setTy(value);
         return h.setCx(value);
     };
@@ -150,6 +209,14 @@ export function initBottomPlay(h: BottomPlayHooks) {
 
     // ---------- posisi native ----------
     function flush() {
+        // Batalkan target yang masih antre ketika hover/view mengubah dock. Sebelumnya flush()
+        // tetap berjalan setelah abort(), lalu currentDock() menjadi null dan sumbu Y dikirim
+        // sebagai X ke setCx() (yang menempelkan notch di bawah layar).
+        if (!active || !allowed()) {
+            if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
+            wanted = sent;
+            return;
+        }
         if (inflight || wanted < 0) return;
         if (wanted === sent) {
             if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
@@ -178,6 +245,9 @@ export function initBottomPlay(h: BottomPlayHooks) {
         });
     }
     function applyPosition() {
+        // frame() masih meredam pegas sesudah abort(). Itu hanya efek visual; jangan kirim
+        // koordinat native lagi setelah gerakan dibatalkan oleh hover atau interaksi.
+        if (!active || !allowed()) return;
         const [lo, hi] = axisRange();
         wanted = Math.round(clamp(px.x, lo, hi));
         flush();
@@ -223,7 +293,8 @@ export function initBottomPlay(h: BottomPlayHooks) {
     }
 
     function paint() {
-        const dock = currentDock();
+        // Pertahankan sumbu gerak sebelumnya selama efek pegas mereda setelah abort().
+        const dock = axisDock();
         const side = isSideDock(dock);
         const [lo, hi] = axisRange();
         // Pakai posisi native terbaru sebagai jangkar, lalu CSS mengisi gerakan subpiksel
@@ -248,6 +319,10 @@ export function initBottomPlay(h: BottomPlayHooks) {
         const style = h.shell.style;
         if (side) style.setProperty("--bp-y", `${resid.toFixed(2)}px`);
         else style.setProperty("--bp-x", `${resid.toFixed(2)}px`);
+        // Rotasi perlu ditulis setiap frame; sebelumnya --bp-r di-reset ke 0 saat mulai
+        // tetapi tidak pernah diperbarui, sehingga wiggle/sway/dance nyaris tidak terlihat.
+        const rotation = clamp(rot.x + wall.x * (side ? 5 : 4), -14, 14);
+        style.setProperty("--bp-r", `${rotation.toFixed(3)}deg`);
         style.setProperty("--bp-sx", sx.toFixed(4));
         style.setProperty("--bp-sy", sy.toFixed(4));
     }
@@ -315,11 +390,15 @@ export function initBottomPlay(h: BottomPlayHooks) {
         h.shell.removeAttribute("data-play-axis");
         for (const v of ["--bp-x", "--bp-y", "--bp-r", "--bp-sx", "--bp-sy"]) h.shell.style.removeProperty(v);
         resetTune(); rotT = 0;
+        motionDock = null;
         h.hit();
     }
 
     // dibatalkan (hover, kartu, seretan, saklar mati): berhenti mengerem halus di tempat
     function abort() {
+        // Batalkan semua koordinat yang belum sempat dikirim sebelum membiarkan pegas mereda.
+        if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
+        wanted = sent;
         const ws = waits; waits = [];
         ws.forEach((w) => w.rej(CANCEL));
         active = "";
@@ -333,7 +412,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
     }
 
     // ---------- gerakan ----------
-    const travelTo = (dest: number, edge: boolean, speed: [number, number] = [260, 420]) => {
+    const travelTo = (dest: number, edge: boolean, speed: [number, number] = [75, 135]) => {
         travel = { dest, carrot: px.x, cv: 0, speed: rand(speed[0], speed[1]), edge, bumped: false };
         return until(() => !travel);
     };
@@ -405,15 +484,15 @@ export function initBottomPlay(h: BottomPlayHooks) {
             }
 
             const calm = h.calm();
-            const strength = calm ? 0.55 : h.playing() ? 1.15 : 1;
-            const steps = Math.floor(rand(calm ? 2 : 3, calm ? 4 : 7));
+            const strength = calm ? 0.42 : h.playing() ? 0.78 : 0.68;
+            const steps = Math.floor(rand(calm ? 2 : 3, calm ? 4 : 6));
             let direction = Math.random() < 0.5 ? -1 : 1;
 
             for (let i = 0; i < steps; i++) {
                 const from = clamp(px.x, lo, hi);
                 if (Math.random() < (calm ? 0.22 : 0.38)) direction *= -1;
 
-                const distance = rand(span * (calm ? 0.045 : 0.085), span * (calm ? 0.13 : 0.23));
+                const distance = rand(span * (calm ? 0.035 : 0.055), span * (calm ? 0.10 : 0.15));
                 let dest = clamp(from + direction * distance + rand(-span * 0.035, span * 0.035), lo, hi);
                 if (Math.abs(dest - from) < Math.min(42, span * 0.06)) {
                     direction = from < (lo + hi) / 2 ? 1 : -1;
@@ -427,17 +506,18 @@ export function initBottomPlay(h: BottomPlayHooks) {
                     edge = false;
                 }
 
-                await travelTo(dest, edge, calm ? [95, 180] : [155, 320]);
+                const speed: [number, number] = calm ? [28, 48] : h.playing() ? [58, 98] : [42, 78];
+                await travelTo(dest, edge, speed);
                 poke(sq, rand(0.03, 0.085) * strength);
                 flow.t = rand(-2.8, 2.8) * strength;
                 float.t = rand(-1.1, 0.45) * strength;
                 if (Math.random() < (calm ? 0.12 : 0.34)) rotT = rand(-4.2, 4.2) * strength;
-                await wait(rand(calm ? 200 : 75, calm ? 380 : 245));
+                await wait(rand(calm ? 520 : 360, calm ? 950 : 720));
 
                 // Riak bentuk kecil ketika berhenti sejenak. Saat mode tenang tidak ada lompatan.
                 if (!calm && Math.random() < 0.34) {
                     sq.t = rand(0.035, 0.095);
-                    await wait(rand(85, 165));
+                    await wait(rand(180, 320));
                     sq.t = 0;
                 }
                 if (!calm && Math.random() < 0.22) {
@@ -445,7 +525,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
                     sq.t = rand(0.045, 0.095);
                     flow.t = rand(-2.2, 2.2) * strength;
                     poke(sq, rand(0.008, 0.025));
-                    await wait(rand(100, 180));
+                    await wait(rand(220, 380));
                     sq.t = 0;
                 }
             }
@@ -475,20 +555,81 @@ export function initBottomPlay(h: BottomPlayHooks) {
 
     function schedule(ms?: number) {
         window.clearTimeout(timer);
-        const delay = h.calm() ? rand(4800, 8500) : h.playing() ? rand(1350, 3300) : rand(2200, 6200);
+        // Gerakan biasa tidak terlalu rapat: beri jeda agar karakter terasa santai.
+        // Jadwal liquid 3 menit tetap dikelola timer terpisah di bawah.
+        const delay = h.calm() ? rand(10000, 18000) : h.playing() ? rand(5000, 9500) : rand(7000, 14000);
         timer = window.setTimeout(tick, ms ?? delay);
     }
+
+    // Jadwal liquid berjalan terpisah dari timer gerakan acak. Dengan begitu, timer gerakan
+    // biasa tidak bisa terus menggeser waktu liquid. Jika Notch sedang dipakai/di-hover,
+    // tiga gerakan tetap antre dan dijalankan ketika kondisi aman kembali.
+    let nextLiquidAt = performance.now() + LIQUID_INTERVAL_MS;
+    let liquidRepetitionsLeft = 0;
+    // Waktu acak untuk gerakan ke-2 dan ke-3 dalam satu siklus. Ini mencegah ketiga
+    // rangkaian bertumpuk rapat dan membuat pola tampak lebih alami.
+    let nextLiquidRunAt = 0;
 
     function tick() {
         if (active) { schedule(500); return; }
         if (!allowed()) { schedule(1500); return; }
-        run(pick(h.calm() ? CALM : h.playing() ? MUSIC : NORMAL, last));
+
+        // Tes manual dari Settings didahulukan, tanpa menunggu jadwal otomatis.
+        if (manualLiquidRequested) {
+            manualLiquidRequested = false;
+            void run("liquid", "manual");
+            return;
+        }
+
+        // Satu siklus berisi 3 rangkaian liquid. Antar-rangkaian diberi jeda acak,
+        // tetapi tetap harus selesai sebelum siklus 3 menit berikutnya dimulai.
+        if (liquidRepetitionsLeft > 0) {
+            const remaining = nextLiquidRunAt - performance.now();
+            if (remaining > 0) {
+                schedule(remaining);
+                return;
+            }
+            liquidRepetitionsLeft--;
+            void run("liquid", "scheduled");
+            return;
+        }
+
+        void run(pick(h.calm() ? CALM : h.playing() ? MUSIC : NORMAL, last), "random");
     }
 
-    async function run(name: string) {
+    function pollLiquidSchedule() {
+        const now = performance.now();
+        const reason = blockedReason();
+        const state = reason ?? "siap bergerak";
+        if (state !== lastBlockedLog) {
+            lastBlockedLog = state;
+            console.info(reason ? `[BottomPlay] Menunggu: ${reason}` : "[BottomPlay] Kondisi memenuhi syarat; animasi acak aktif.");
+        }
+        if (now >= nextLiquidAt) {
+            if (liquidRepetitionsLeft === 0) {
+                liquidRepetitionsLeft = LIQUID_REPETITIONS;
+                nextLiquidRunAt = now;
+                console.info("[BottomPlay] Jadwal liquid tiba: 3 rangkaian akan dijalankan dengan jeda acak.");
+            }
+            // Jangan membuat backlog besar ketika aplikasi ditangguhkan lama.
+            nextLiquidAt = now + LIQUID_INTERVAL_MS;
+        }
+
+        // Setelah waktunya tiba, dahulukan liquid dari timer gerakan acak. Jika masih
+        // ada interaksi/hover, tick() akan mencoba kembali tanpa membuang antrean.
+        const liquidRunDue = liquidRepetitionsLeft > 0 && now >= nextLiquidRunAt;
+        if ((liquidRunDue || manualLiquidRequested) && !active && allowed()) {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(tick, 0);
+        }
+        window.setTimeout(pollLiquidSchedule, 500);
+    }
+
+    async function run(name: string, source: "random" | "scheduled" | "manual" = "random") {
         last = active = name;
         grav = true; y.x = 0; y.v = 0; rotT = 0;
         const dock = currentDock();
+        motionDock = dock; // kunci bawah/kiri/kanan selama gerakan dan fase mereda
         const side = isSideDock(dock);
         const position = axisPosition();
         const [lo, hi] = axisRange();
@@ -499,8 +640,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
         h.shell.dataset.play = name;
         h.shell.dataset.playAxis = side ? "side" : "bottom";
-        // Masing-masing orientasi mengunci sumbu yang tidak digunakan, agar badan tidak terangkat
-        // dari bawah atau terlepas dari sisi saat melakukan efek liquid.
+        // Titik tumpu disetel untuk docking bawah atau samping saja.
         h.shell.style.setProperty("--bp-x", "0px");
         h.shell.style.setProperty("--bp-y", "0px");
         h.shell.style.setProperty("--bp-r", "0deg");
@@ -512,13 +652,35 @@ export function initBottomPlay(h: BottomPlayHooks) {
         try {
             await TRICKS[name]();
         } catch (e) {
-            if (e !== CANCEL) console.error(e);
-            return; // dibatalkan: abort() sudah merapikan dan menjadwalkan ulang
+            if (e === CANCEL) {
+                // Gerakan liquid yang terputus oleh hover/interaksi tetap harus melengkapi 3 putaran.
+                if (name === "liquid" && source === "scheduled") {
+                    liquidRepetitionsLeft = Math.min(LIQUID_REPETITIONS, liquidRepetitionsLeft + 1);
+                    nextLiquidRunAt = performance.now() + rand(2500, 6000);
+                } else if (name === "liquid" && source === "manual") {
+                    manualLiquidRequested = true;
+                }
+                return; // abort() sudah merapikan gerakan dan menjadwalkan ulang
+            }
+
+            // Kegagalan tak terduga tidak boleh meninggalkan `active` terisi selamanya,
+            // karena itu akan membuat seluruh gerakan berikutnya terblokir.
+            console.error("[BottomPlay] Animasi gagal:", name, e);
+            active = "";
+            travel = null;
+            sq.t = 0; wall.t = 0; rotT = 0; flow.t = 0; float.t = 0;
+            finish();
+            schedule(1000);
         }
         active = "";
         sq.t = 0; wall.t = 0; rotT = 0;
+        if (name === "liquid" && source === "scheduled" && liquidRepetitionsLeft > 0) {
+            nextLiquidRunAt = performance.now() + rand(7000, 22000);
+            console.info(`[BottomPlay] Liquid selesai; rangkaian berikutnya dijadwalkan dengan jeda acak ${Math.round((nextLiquidRunAt - performance.now()) / 1000)} detik.`);
+        }
         schedule();
     }
 
     schedule(4000);
+    window.setTimeout(pollLiquidSchedule, 500);
 }

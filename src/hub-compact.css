@@ -1,9 +1,9 @@
 /* ===== Hub compact: nav ikon di atas, konten di bawah ===== */
 :root {
   --hub-w: 580px;
-  --hub-h: 202px; /* 188 + ruang atas 14px */
+  --hub-h: 202px;
   --nav-h: 40px;
-  --nav-top: 14px; /* jarak ikon nav dari tepi atas notch */
+  --nav-top: 14px;
 }
 
 #notch[data-view="hub"] {
@@ -334,47 +334,63 @@
 }
 
 
-/* ===== Hub nav: seluruh ikon halaman aktif terlihat bersamaan ===== */
+/* ===== Hub nav responsif: semua halaman bisa dijangkau tanpa mengecilkan ikon ===== */
 #notch[data-view="hub"] .hub-nav {
-  gap: 7px;
+  gap: 6px;
   padding-left: 14px;
-  padding-right: 18px;
+  padding-right: 14px;
+  min-width: 0;
 }
 
 #notch[data-view="hub"] .nv-list {
   flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1px;
-  overflow: hidden;
+  justify-content: flex-start;
+  gap: 4px;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 2px 1px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  touch-action: pan-x;
 }
+#notch[data-view="hub"] .nv-list::-webkit-scrollbar { display: none; }
 
-#notch[data-view="hub"] .nv-list .nv {
-  box-sizing: border-box;
-  flex: 0 0 25px;
-  width: 25px;
-  min-width: 25px;
-  height: 28px;
+#notch[data-view="hub"] .nv-list .nv,
+#notch[data-view="hub"] .nv-list .nv.active {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   padding: 0;
   gap: 0;
+  border-radius: 10px;
 }
 
 #notch[data-view="hub"] .nv-list .nv svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 
-/* Label tetap tersedia sebagai title tooltip agar status aktif tidak mendorong ikon lain keluar. */
 #notch[data-view="hub"] .nv-list .nv span,
-#notch[data-view="hub"] .nv-list .nv.active span {
-  display: none !important;
-}
+#notch[data-view="hub"] .nv-list .nv.active span { display: none !important; }
 
 #notch[data-view="hub"] .nv-list .nv.active {
-  padding: 0;
-  background: rgba(var(--fg-rgb), 0.18);
+  background: rgba(var(--accent), .22);
   color: var(--fg);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent), .34);
 }
+#notch[data-view="hub"] .nv-list .nv:focus-visible {
+  outline: 2px solid rgba(var(--accent), .8);
+  outline-offset: 1px;
+}
+
+/* Sisakan lebar maksimum untuk area ikon; tanggal/jam tidak boleh menekan daftar ikon. */
+#notch[data-view="hub"] .nv-right { display: none !important; }

@@ -173,6 +173,88 @@ body {
   gap: 14px;
 }
 
+/* Greeting memakai ukuran kartu perangkat, tetapi mempunyai layer terpisah agar
+   teks greeting tidak mengubah isi notifikasi perangkat yang sedang berlangsung. */
+.l-greeting {
+  width: 340px;
+  height: 74px;
+  padding: 9px 18px;
+  gap: 12px;
+  justify-content: center;
+}
+.greeting-mark {
+  position: relative;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(var(--accent), .16);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent), .4);
+}
+.greeting-mark::before,
+.greeting-mark::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+}
+.greeting-mark::before { transform: translate(-7px, -7px); }
+.greeting-mark::after { transform: translate(7px, 7px); opacity: .65; }
+.greeting-mark span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  box-shadow: 0 0 12px rgba(var(--accent), .65);
+}
+.greeting-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+#greeting-text {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+#greeting-sub {
+  display: block;
+  max-width: 100%;
+  margin-top: 2px;
+  color: rgba(var(--fg-rgb), .56);
+  font-size: 10.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#notch[data-view="dev"].greeting-active .l-dev {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) scale(.94);
+  transition: opacity .12s ease, transform .12s ease, visibility 0s .12s;
+}
+#notch[data-view="dev"].greeting-active .l-greeting {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+  transition: opacity .18s ease, transform .3s cubic-bezier(.42, 0, .58, 1), visibility 0s;
+}
+
 /* ---------- hub: halaman geser ---------- */
 .pages {
   position: relative;

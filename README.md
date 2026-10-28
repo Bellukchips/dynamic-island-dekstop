@@ -1,54 +1,73 @@
 # Notch
 
-Aplikasi desktop bergaya *notch* untuk Windows dan Linux. Pil kecil di tepi layar membuka hub berisi media, lirik, cuaca, timer, pengingat, catatan, clipboard, shelf file, dan lainnya. Antarmukanya memakai TypeScript dan Vite, sisi sistemnya memakai Rust lewat Tauri 2.
+Notch adalah aplikasi pendamping desktop untuk Windows dan Linux. Sebuah pil kecil di tepi layar membuka hub berisi media, lirik, cuaca, timer, pengingat, catatan, riwayat clipboard, shelf file, dan berbagai kontrol harian.
 
-Situs fitur: `https://bellukchips.github.io/dynamic-island-dekstop/` (lihat [GitHub Pages](#github-pages)).
+- **Desktop shell:** Tauri 2
+- **Lapisan sistem:** Rust
+- **Antarmuka:** TypeScript, Vite, dan CSS
+- **Platform:** Windows dan Linux (X11 / Wayland, bergantung pada lingkungan)
+
+Situs proyek: [GitHub Pages](https://bellukchips.github.io/dynamic-island-dekstop/)  
+Repositori: [bellukchips/dynamic-island-dekstop](https://github.com/bellukchips/dynamic-island-dekstop)  
+Rilis: [Unduh versi aplikasi](https://github.com/bellukchips/dynamic-island-dekstop/releases)
 
 ## Fitur
 
+Halaman hub dapat diaktifkan, dinonaktifkan, dan diurutkan melalui Pengaturan atau `config.toml`.
+
 | Halaman / fitur | Keterangan |
 | --- | --- |
-| `media` | Judul, artis, cover, kontrol putar, dan geser progress. Aksen warna mengikuti cover. |
-| `lyrics` | Lirik bersinkron, juga tampil satu baris di notch ringkas. |
-| `clock` | Jam dan tanggal. Klik tanggal untuk kalender dengan hari libur Indonesia. |
-| `weather` | Suhu, kelembapan, dan peringatan hujan. |
-| `battery` | Persentase dan status mengisi. |
-| `timer` | Pomodoro: fokus, istirahat, istirahat panjang. |
-| `quick`, `tools` | Mic, Wi-Fi, Bluetooth, keep awake, tema gelap/terang. |
-| `stats` | CPU, RAM, kecepatan jaringan. |
-| `reminder` | Pengingat dengan tanggal, jam, ulang harian/bulanan, tunda, dan bunyi. |
-| `notes` | Catatan permanen dengan jendela detail. |
-| `clipboard` | Riwayat clipboard. |
-| `shelf` | Seret file masuk, seret keluar ke aplikasi lain. |
-| `prayer` | Jadwal dan pengingat waktu shalat. |
-| `privacy` | Indikator saat mic atau kamera dipakai. |
+| `media` | Menampilkan judul, artis, cover album, kontrol pemutaran, dan progress bar. Warna aksen dapat mengikuti cover album. |
+| `lyrics` | Lirik tersinkron dengan lagu; baris aktif juga tampil pada notch ringkas. |
+| `clock` | Jam dan tanggal. Klik tanggal untuk membuka kalender bulanan dengan hari libur Indonesia. |
+| `weather` | Menampilkan suhu, suhu terasa, kelembapan, dan peringatan hujan. |
+| `battery` | Menampilkan persentase baterai dan status pengisian, termasuk penanda saat baterai lemah. |
+| `timer` | Timer Pomodoro untuk fokus, istirahat singkat, dan istirahat panjang. Durasi dan jumlah ronde dapat diatur. |
+| `quick`, `tools` | Kontrol cepat untuk mikrofon, Wi-Fi, Bluetooth, keep-awake, serta tampilan terang/gelap jika didukung platform. |
+| `stats` | Pemantauan CPU, RAM, serta kecepatan unduh dan unggah jaringan. |
+| `reminder` | Pengingat dengan tanggal, jam, pengulangan harian/bulanan, suara, tunda, dan aksi selesai. |
+| `notes` | Catatan cepat permanen dengan jendela detail terpisah. |
+| `clipboard` | Riwayat clipboard dengan aksi salin ulang dan hapus. |
+| `shelf` | Shelf file sementara. Seret file ke notch, lalu seret kembali ke File Explorer atau aplikasi lain. |
+| `prayer` | Jadwal shalat harian, preferensi, kartu pengingat, dan pemutaran audio adzan saat pengingat diaktifkan. |
+| `privacy` | Indikator dan kartu ketika mikrofon atau kamera sedang digunakan. |
+| `currency` | Konversi Rupiah ke mata uang pilihan serta ringkasan performa bulanan saham pilihan di Bursa Efek Indonesia. Membutuhkan akses jaringan dan sumber data pasar yang tersedia. |
 
-Fitur lain yang selalu aktif:
+### Perilaku desktop tambahan
 
-- Kartu Bluetooth dan perangkat (USB, charger, keyboard, mouse) saat dicolok atau dicabut.
-- HUD volume dan kecerahan di notch.
-- Mata yang mengikuti kursor, 8 ekspresi, dan 10 tema mata.
-- Notch bisa digeser ke mana saja (berubah jadi bola), menempel ke tepi atas, bawah, kiri, atau kanan.
-- Ikon tray: Pengaturan, Pusatkan Notch, Keluar. Autostart saat login.
-- Banner pemberitahuan versi baru.
+- Kartu perangkat ketika Bluetooth, USB, charger, keyboard, atau mouse tersambung maupun dilepas.
+- HUD volume dan kecerahan di dalam notch, termasuk status mute.
+- Mata mengikuti kursor, berkedip, memiliki delapan ekspresi, dan sepuluh tema: `aurora`, `neon`, `pastel`, `pixel`, `holo`, `ember`, `ocean`, `sakura`, `cyber`, dan `monochrome`.
+- Notch dapat diseret ke posisi mana pun. Saat digeser, tampilannya dapat berubah menjadi bola dan menempel pada tepi atas, bawah, kiri, atau kanan layar.
+- Gerakan acak yang halus tersedia sebagai opsi ketika fitur gerak diaktifkan.
+- Menu tray berisi Pengaturan, Pusatkan Notch, dan Keluar.
+- Dukungan mulai otomatis saat login.
+- Banner pemberitahuan ketika versi baru tersedia.
+- Tema otomatis, terang, gelap, atau kustom; skala antarmuka dari 0,5× sampai 1,5×.
+- Navigasi hub dapat digulir secara horizontal ketika banyak halaman diaktifkan.
+
+Integrasi sistem seperti Bluetooth, deteksi perangkat, indikator mikrofon/kamera, dan kecerahan bergantung pada sistem operasi serta izin yang tersedia.
 
 ## Prasyarat
 
-| Alat | Keterangan |
+| Alat | Kebutuhan |
 | --- | --- |
-| [Rust](https://rustup.rs) (stable) | Pasang lewat `rustup`. |
-| [Node.js](https://nodejs.org) 18 atau lebih baru | Sudah termasuk `npm`. |
-| Git | Untuk mengunduh repositori. |
-
-Tauri juga membutuhkan pustaka bawaan tiap sistem operasi. Ikuti bagian sesuai sistem Anda, lalu lanjut ke [Instalasi](#instalasi).
+| Rust | Toolchain stable |
+| Node.js | Versi 18 atau lebih baru, termasuk npm |
+| Git | Untuk clone repositori |
+| Dependensi Tauri | Pustaka native yang diperlukan sistem operasi tujuan |
 
 ### Windows
 
-1. Pasang **Microsoft C++ Build Tools** dari [visualstudio.microsoft.com/visual-cpp-build-tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) dan centang **Desktop development with C++**.
-2. Pastikan **WebView2 Runtime** terpasang. Windows 10 (terbaru) dan Windows 11 sudah menyertakannya.
-3. Pasang Rust: `winget install --id Rustlang.Rustup`, atau jalankan `rustup-init.exe` dari [rustup.rs](https://rustup.rs).
+1. Pasang [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) dan pilih **Desktop development with C++**.
+2. Pastikan **Microsoft Edge WebView2 Runtime** sudah tersedia. Instalasi Windows 10 dan Windows 11 terkini umumnya sudah menyertakannya.
+3. Pasang Rust dengan `winget install --id Rustlang.Rustup`, atau gunakan [rustup.rs](https://rustup.rs).
 4. Buka terminal baru, lalu cek `rustc --version` dan `cargo --version`.
-5. Pastikan toolchain MSVC: `rustup default stable-msvc`.
+5. Pilih toolchain MSVC:
+
+   ```powershell
+   rustup default stable-msvc
+   ```
 
 ### Ubuntu / Debian
 
@@ -73,76 +92,74 @@ rustup default stable
 
 ### macOS
 
+Rust dapat dipasang, tetapi integrasi sistem saat ini difokuskan pada Windows dan Linux.
+
 ```bash
 xcode-select --install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 . "$HOME/.cargo/env"
 ```
 
-Fitur sistem (Bluetooth, perangkat, pemantau mic/kamera, kecerahan) saat ini ditulis untuk Windows dan Linux. Distribusi lain memakai nama paket berbeda, lihat [prasyarat Tauri](https://tauri.app/start/prerequisites/).
+Untuk distribusi lain dan prasyarat Tauri terbaru, lihat [panduan prasyarat Tauri](https://tauri.app/start/prerequisites/).
 
-## Instalasi
+## Instalasi dan menjalankan aplikasi
 
 ```bash
-git clone https://github.com/USERNAME/REPO.git
-cd REPO
+git clone https://github.com/bellukchips/dynamic-island-dekstop.git
+cd dynamic-island-dekstop
 npm install
-npm i -D @types/node
+npm install --save-dev @types/node
 ```
 
-Cargo mengunduh dependensi Rust otomatis saat build pertama, yang memakan waktu beberapa menit.
-
-## Menjalankan
+Cargo akan mengunduh dependensi Rust secara otomatis pada build pertama.
 
 ```bash
-npm run tauri dev      # mode pengembangan dengan hot reload
-npm run tauri build    # build rilis
+npm run tauri dev       # jalankan dengan Vite hot reload
+npm run tauri build     # buat paket rilis
 ```
 
-Hasil build ada di `src-tauri/target/release/`, installer di `src-tauri/target/release/bundle/`.
+Hasil build berada di `src-tauri/target/release/`. Installer biasanya tersedia di `src-tauri/target/release/bundle/`.
 
 ## Struktur proyek
 
-```
+```text
 .
-├── index.html            # jendela utama (notch)
-├── settings.html         # jendela pengaturan
-├── note-detail.html      # jendela detail catatan
+├── index.html                 # jendela notch utama
+├── settings.html              # jendela pengaturan
+├── note-detail.html           # jendela detail catatan
 ├── docs/
-│   └── index.html        # situs GitHub Pages (tidak ikut build aplikasi)
+│   └── index.html             # situs GitHub Pages; tidak masuk build aplikasi
 ├── vite.config.ts
 ├── package.json
-├── src/                  # main.ts, clock, calendar, prayer, nudge, hub-nav, firebase
+├── src/                       # antarmuka TypeScript dan modul fitur
 └── src-tauri/
     ├── Cargo.toml
     ├── tauri.conf.json
     ├── capabilities/
-    └── src/              # lib.rs + modul: media, battery, bluetooth, devices, hud,
-                          # weather, stats, clipboard, privacy, lyrics, shelf,
-                          # notes, reminder, prayer, quick, config, autostart
+    └── src/                   # command Rust dan integrasi sistem
 ```
 
-Vite hanya membangun halaman yang terdaftar di `build.rollupOptions.input` pada `vite.config.ts`, jadi `docs/` tidak ikut masuk aplikasi.
+Vite hanya membundel halaman yang terdaftar di `build.rollupOptions.input` dalam `vite.config.ts`. Situs di `docs/` dipublikasikan terpisah melalui GitHub Pages dan tidak ikut dalam build aplikasi desktop.
 
 ## Konfigurasi
 
-Rust membaca `config.toml` lalu menyuntikkannya ke antarmuka sebagai `window.__CFG__`. Kunci yang kosong memakai nilai bawaan di `main.ts`.
+Rust membaca `config.toml` lalu menyediakan pengaturan ke antarmuka melalui `window.__CFG__`. Nilai kosong menggunakan nilai bawaan di `main.ts`.
 
 ```toml
 scale = 1.0
 pages = ["media", "clock", "weather", "battery", "timer", "quick", "tools",
          "stats", "reminder", "notes", "clipboard", "shelf", "lyrics",
-         "privacy", "prayer"]
+         "privacy", "prayer", "currency"]
 
 [appearance]
-theme = "auto"          # "auto", "light", "dark", atau "custom"
-background = "#000000"  # dipakai saat theme = "custom"
-text = ""               # kosong = warna teks otomatis
+theme = "auto"             # auto, light, dark, custom
+background = "#000000"     # digunakan saat theme = "custom"
+text = ""                  # kosong = warna teks otomatis
 dark_bg = "#000000"
 light_bg = "#f5f5f7"
-accent = ""             # kosong = mengikuti cover album
-default_mood = "normal" # normal, happy, sleepy, surprised, angry, love, suspicious, sad
-eye_theme = "aurora"    # aurora, neon, pastel, pixel, holo, ember, ocean, sakura, cyber, monochrome
+accent = ""                # kosong = mengikuti cover album
+default_mood = "normal"    # normal, happy, sleepy, surprised, angry, love, suspicious, sad
+eye_theme = "aurora"       # aurora, neon, pastel, pixel, holo, ember, ocean, sakura, cyber, monochrome
 
 [timing]
 hub_auto_ms = 4000
@@ -159,13 +176,13 @@ long_break_min = 15
 rounds = 4
 ```
 
-Urutan `pages` menentukan urutan halaman di hub. Hapus namanya untuk menyembunyikan halaman, dan tambahkan `privacy` untuk menyalakan indikator mic/kamera. Perubahan dari Pengaturan langsung terlihat lewat event `config-changed`.
+Urutan `pages` menentukan urutan halaman di hub. Hapus ID halaman untuk menyembunyikannya atau tambahkan kembali untuk menampilkannya. Perubahan dari Pengaturan diteruskan melalui event `config-changed`. Posisi notch yang diseret disimpan di bagian `[position]` melalui `custom`, `x`, dan `y`.
 
-Posisi notch yang digeser disimpan di tabel `[position]` (`custom`, `x`, `y`).
+## Kontrak Rust dan antarmuka
 
-## Kontrak antara Rust dan antarmuka
+### Command
 
-**Command** (dipanggil dengan `invoke`):
+Command dipanggil dari TypeScript melalui Tauri `invoke`.
 
 | Kelompok | Command |
 | --- | --- |
@@ -179,50 +196,66 @@ Posisi notch yang digeser disimpan di tabel `[position]` (`custom`, `x`, `y`).
 | Pengingat | `reminders_list`, `reminders_add`, `reminders_toggle`, `reminders_remove`, `reminders_clear_done`, `reminders_stop`, `reminders_snooze` |
 | Shalat | `prayer_month`, `prayer_info`, `prayer_set_prefs` |
 | Konfigurasi | `cfg_get`, `cfg_preview`, `cfg_save`, `cfg_restart`, `nudge_test`, `autostart_get`, `autostart_set`, `bt_list` |
+| Currency / data saham | `fetch_yahoo_chart` |
 
-**Event** (didengarkan dengan `listen`):
+Command harus didaftarkan di `generate_handler![]`, dan jendela pemanggil harus memiliki izin yang sesuai di `src-tauri/capabilities/`.
 
-`cursor`, `media`, `media-art`, `bluetooth`, `battery`, `device`, `weather`, `hud`, `stats`, `clipboard`, `privacy`, `reminder-due`, `notes-changed`, `note-open`, `position-changed`, `config-changed`
+### Event
 
-Command harus terdaftar di `generate_handler!`, dan jendela yang memanggilnya perlu izin di `src-tauri/capabilities/`.
+Antarmuka mendengarkan event seperti:
 
-## Tes manual lewat keyboard
+`cursor`, `media`, `media-art`, `bluetooth`, `battery`, `device`, `weather`, `hud`, `stats`, `clipboard`, `privacy`, `reminder-due`, `notes-changed`, `note-open`, `position-changed`, dan `config-changed`.
+
+## Shortcut keyboard untuk pengujian manual
 
 | Tombol | Aksi |
 | --- | --- |
 | `1`–`7` | Ganti ekspresi mata |
-| `T` | Ganti wajah notch: mata atau jam |
+| `T` | Ganti tampilan notch antara mata dan jam |
 | `K` | Buka kalender |
-| `M` | Demo indikator mic/kamera |
-| `B` | Kartu Bluetooth |
-| `C` / `V` / `L` | Baterai normal / mengisi / rendah |
-| `D` | Kartu perangkat contoh |
-| `W` | Peringatan cuaca |
+| `M` | Demo indikator mikrofon/kamera |
+| `B` | Tampilkan kartu Bluetooth |
+| `C` / `V` / `L` | Demo status baterai normal / mengisi / lemah |
+| `D` | Tampilkan kartu perangkat contoh |
+| `W` | Tampilkan peringatan cuaca |
 | `H` | Buka hub |
-| `U` / `I` | HUD volume / kecerahan |
-| `P` | Timer 3 detik |
-| `←` `→` | Pindah halaman atau bulan |
-
+| `U` / `I` | Demo HUD volume / kecerahan |
+| `P` | Jalankan timer tiga detik |
+| `←` / `→` | Ganti halaman atau bulan |
 
 ## Pemecahan masalah
 
-**`Cannot find name 'path'` atau `'__dirname'` di `vite.config.ts`**
-Jalankan `npm i -D @types/node`, atau pakai path relatif pada `rollupOptions.input`.
+### `Cannot find name 'path'` atau `__dirname` di `vite.config.ts`
 
-**`Port 1420 is already in use`**
-Hentikan proses yang memakai port 1420, lalu jalankan ulang.
+Pasang tipe Node.js:
 
-**Build Rust pertama gagal di Linux**
-Ada pustaka sistem yang belum terpasang. Baca pesan error dan pasang paket yang disebut.
+```bash
+npm install --save-dev @types/node
+```
 
-**Jendela tidak merespons klik di Windows**
-Jendela *click-through* tidak menerima event mouse. Hover dihitung dari posisi kursor global dari event `cursor`, jadi pastikan event itu berjalan.
+### `Port 1420 is already in use`
 
-**Linux Wayland: posisi atau klik tidak berfungsi**
-Secara bawaan aplikasi berjalan lewat XWayland. Untuk mode native (layer-shell) jalankan dengan `NOTCH_NATIVE=1`.
+Hentikan proses yang sedang menggunakan port 1420, lalu jalankan kembali perintah dev.
 
-**Volume atau kecerahan bawaan Windows masih muncul**
-OSD Windows dimiliki Explorer dan tidak bisa disembunyikan dari dalam aplikasi ini. Pakai alat terpisah seperti HideVolumeOSD atau ModernFlyouts.
+### Build Rust pertama gagal di Linux
+
+Pasang paket sistem yang disebutkan dalam pesan error build. Tauri memerlukan WebKitGTK native dan pustaka pengembangan terkait.
+
+### Jendela tidak merespons klik di Windows
+
+Jendela compact dapat memakai perilaku click-through. Deteksi hover menggunakan event posisi kursor global, jadi pastikan event `cursor` dikirim dan diterima.
+
+### Posisi atau klik berbeda di Wayland
+
+Secara bawaan aplikasi berjalan melalui XWayland. Untuk mencoba jalur native layer-shell, jalankan:
+
+```bash
+NOTCH_NATIVE=1 npm run tauri dev
+```
+
+### OSD volume atau kecerahan Windows masih muncul
+
+OSD Windows dimiliki Explorer dan tidak dapat disembunyikan oleh aplikasi ini. Utilitas terpisah seperti HideVolumeOSD atau ModernFlyouts dapat membantu.
 
 ## Skrip yang berguna
 
@@ -234,4 +267,5 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Lisensi
-MIT LICENCE 
+
+MIT License.
