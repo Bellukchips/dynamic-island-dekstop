@@ -2,7 +2,7 @@
 
 Aplikasi desktop bergaya *notch* untuk Windows dan Linux. Pil kecil di tepi layar membuka hub berisi media, lirik, cuaca, timer, pengingat, catatan, clipboard, shelf file, dan lainnya. Antarmukanya memakai TypeScript dan Vite, sisi sistemnya memakai Rust lewat Tauri 2.
 
-Situs fitur: `https://USERNAME.github.io/REPO/` (lihat [GitHub Pages](#github-pages)).
+Situs fitur: `https://bellukchips.github.io/dynamic-island-dekstop/` (lihat [GitHub Pages](#github-pages)).
 
 ## Fitur
 
@@ -203,17 +203,6 @@ Command harus terdaftar di `generate_handler!`, dan jendela yang memanggilnya pe
 | `P` | Timer 3 detik |
 | `←` `→` | Pindah halaman atau bulan |
 
-## GitHub Pages
-
-Situs fitur ada di `docs/index.html`. Folder `docs/` dipakai karena `index.html` di akar repositori adalah jendela aplikasi, bukan situs.
-
-1. Ganti semua `USERNAME/REPO` di `docs/index.html` dan README ini dengan nama akun dan repositori Anda.
-2. Commit dan push ke branch `main`.
-3. Buka **Settings → Pages**. Pada **Source** pilih **Deploy from a branch**.
-4. Pada **Branch** pilih `main`, ubah folder dari `/ (root)` menjadi `/docs`, lalu klik **Save**.
-5. Tunggu 1–2 menit, lalu buka `https://USERNAME.github.io/REPO/`.
-
-Situs GitHub Pages bersifat publik meski kodenya Anda simpan di repositori privat. Visibilitas privat hanya tersedia di paket Enterprise.
 
 ## Pemecahan masalah
 
@@ -245,5 +234,4 @@ cargo clippy --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Lisensi
-
-Tambahkan lisensi proyek Anda di sini.
+MIT LICENCE 
