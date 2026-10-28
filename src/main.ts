@@ -90,6 +90,10 @@ let hideTimer: number | undefined;
 let lowBattery = false;
 let keepAwake = false;
 
+// Siklus adzan: tahan notifikasi sampai file selesai dan jeda media yang sebelumnya berjalan.
+let prayerAdhanActive = false;
+let resumeMediaAfterAdhan = false;
+
 let inside = false;
 let insideSince = 0;
 let hubByHover = false;
@@ -1037,6 +1041,8 @@ notch.addEventListener("click", (e) => {
   if (clicks.length >= 5) { flash("angry", 2000); clicks = []; }
   else flash("happy", 1200);
 
+  // Alert adzan tidak boleh ditutup sebelum audio selesai.
+  if (prayerAdhanActive && override === "prayerAlert") return;
   // kartu pengingat (rem) tidak ditutup lewat klik: hanya lewat tombol Tunda / Selesai
   if (override === "bt" || override === "dev" || override === "hud" || override === "prayerAlert") collapse();
   else if (!override) openHub(homePage());
@@ -1301,7 +1307,16 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 listen<Media>("media", (e) => {
   const m = e.payload;
   const wasPlaying = playing;
-  playing = m.active && m.playing;
+  const incomingPlaying = m.active && m.playing;
+  if (prayerAdhanActive && incomingPlaying) {
+    // Jika pengguna / player lain melanjutkan musik selama adzan, jeda lagi.
+    void invoke("media_control", { action: "pause" }).catch((err) =>
+      console.warn("Tidak bisa menjeda media selama adzan:", err)
+    );
+    playing = false;
+  } else {
+    playing = incomingPlaying;
+  }
 
   $("m-title").textContent = m.active ? m.title || "Tanpa judul" : "Tidak ada media";
   $("m-artist").textContent = m.active ? m.artist : "Putar musik untuk memulai";
@@ -2811,15 +2826,53 @@ initNudge({
   mood: (m, ms) => flash(m as Mood, ms),
 });
 
-// Pengingat jadwal shalat memakai kartu kecil tersendiri, tidak menimpa kartu perangkat.
+// Pengingat jadwal shalat. Mode Adzan mempertahankan kartu sampai audio benar-benar selesai.
 initPrayer({
   card: (title, sub, ms) => {
     $("pr-alert-title").textContent = title;
     $("pr-alert-sub").textContent = sub;
+    $("pr-alert-status").textContent = "PENGINGAT";
     hubByHover = false;
     expand("prayerAlert", ms);
   },
   mood: (m, ms) => flash(m as Mood, ms),
+  adhanStart: (prayerName, sub) => {
+    if (prayerAdhanActive) return;
+    prayerAdhanActive = true;
+    resumeMediaAfterAdhan = playing;
+
+    clearTimeout(hideTimer);
+    $("pr-alert-title").textContent = `Waktu ${prayerName}`;
+    $("pr-alert-sub").textContent = `${sub} · Adzan sedang diputar`;
+    $("pr-alert-status").textContent = "ADZAN";
+    hubByHover = false;
+    override = "prayerAlert";
+    render(); // ms = 0: alert tetap terbuka sampai callback adhanEnd
+
+    if (resumeMediaAfterAdhan) {
+      void invoke("media_control", { action: "pause" }).catch((err) =>
+        console.warn("Tidak bisa menjeda media saat adzan:", err)
+      );
+    }
+  },
+  adhanEnd: () => {
+    if (!prayerAdhanActive) return;
+    prayerAdhanActive = false;
+    clearTimeout(hideTimer);
+    if (override === "prayerAlert") {
+      override = null;
+      hubByHover = false;
+      render();
+    }
+
+    const resume = resumeMediaAfterAdhan;
+    resumeMediaAfterAdhan = false;
+    if (resume) {
+      void invoke("media_control", { action: "play" }).catch((err) =>
+        console.warn("Tidak bisa melanjutkan media setelah adzan:", err)
+      );
+    }
+  },
 });
 function safeUpdateUrl(raw: string): string | null {
   const value = raw.trim();
