@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+// Vite akan mengemas aset ini dari src/public/adzan.mp3 ke URL yang benar saat build.
+const ADZAN_URL = new URL("./public/adzan.mp3", import.meta.url).href;
+
 // Halaman jadwal shalat + pengingat. Data dari Rust (prayer_month), semua hitungan di sini.
 
 type Day = {
@@ -162,14 +165,41 @@ function tone(times: number) {
         }
     } catch { /* audio tidak tersedia: kartu tetap tampil */ }
 }
-// taruh file adzan di public/adzan.mp3; kalau tidak ada, otomatis jadi nada
+// File suara berada di src/public/adzan.mp3. ADZAN_URL diproses Vite agar
+// path tetap benar baik saat npm run dev maupun saat aplikasi dibuild.
+let adzanAudio: HTMLAudioElement | null = null;
 function adzan() {
+    let fallbackPlayed = false;
+    const fallbackTone = () => {
+        if (fallbackPlayed) return;
+        fallbackPlayed = true;
+        tone(3);
+    };
+
     try {
-        const a = new Audio("/adzan.mp3");
-        a.volume = 0.9;
-        a.onerror = () => tone(3);
-        a.play().catch(() => tone(3));
-    } catch { tone(3); }
+        const audio = adzanAudio ??= new Audio(ADZAN_URL);
+        audio.preload = "auto";
+        audio.volume = 0.9;
+        audio.onerror = () => {
+            console.error("[Prayer] Gagal memuat file adzan:", ADZAN_URL, audio.error);
+            fallbackTone();
+        };
+
+        // Mulai dari awal apabila pratinjau atau audio sebelumnya masih berjalan.
+        audio.pause();
+        try { audio.currentTime = 0; } catch { /* metadata mungkin belum dimuat */ }
+
+        const playback = audio.play();
+        if (playback) {
+            void playback.catch((error: unknown) => {
+                console.error("[Prayer] Gagal memutar suara adzan:", error, ADZAN_URL);
+                fallbackTone();
+            });
+        }
+    } catch (error) {
+        console.error("[Prayer] Audio adzan tidak tersedia:", error, ADZAN_URL);
+        fallbackTone();
+    }
 }
 
 // ---------- pengingat ----------
