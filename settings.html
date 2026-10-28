@@ -9,367 +9,246 @@
   <style>
     :root {
       color-scheme: light dark;
-      --page: #f4f6fb;
+      --page: #f3f5fa;
+      --side: #ebeef6;
       --surface: #ffffff;
-      --surface-alt: #f8f9fd;
-      --line: #e4e7f0;
+      --surface-alt: #f6f8fc;
+      --line: #e1e5ef;
       --text: #1c2334;
-      --muted: #737c90;
-      --accent: #536dfe;
-      --accent-hover: #4359e4;
-      --accent-soft: #edf0ff;
+      --muted: #6d768a;
+      --accent: #4a63f0;
+      --accent-hover: #3b52d9;
+      --accent-soft: #e8ecff;
       --good: #17844b;
       --bad: #c93737;
-      --shadow: 0 10px 30px rgba(29, 41, 72, .045);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 13px;
       line-height: 1.5;
       font-synthesis: none;
       text-rendering: optimizeLegibility;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
         --page: #101218;
+        --side: #14171f;
         --surface: #191c25;
         --surface-alt: #20242f;
-        --line: #2e3342;
+        --line: #2b3040;
         --text: #f1f3fa;
         --muted: #9aa3b6;
         --accent: #8494ff;
         --accent-hover: #9ba7ff;
-        --accent-soft: #292f50;
+        --accent-soft: #272d4d;
         --good: #55d692;
         --bad: #ff8888;
-        --shadow: 0 10px 32px rgba(0, 0, 0, .16);
       }
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 86px; }
-    body {
-      margin: 0 auto;
-      padding: 26px 28px 24px;
-      width: 100%;
-      max-width: 920px;
-      color: var(--text);
-      background: var(--page);
-    }
+    :root { --side-w: 196px; --foot-h: 58px; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: var(--page); }
 
-    header.topbar {
+    /* ---------- sidebar ---------- */
+    .side {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 30;
+      width: var(--side-w);
       display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 19px;
+      flex-direction: column;
+      gap: 18px;
+      padding: 20px 12px 16px;
+      background: var(--side);
+      border-right: 1px solid var(--line);
+      overflow-y: auto;
     }
-    .brand-mark {
-      position: relative;
-      display: grid;
-      place-items: center;
-      flex: 0 0 44px;
-      width: 44px;
-      height: 44px;
-      border-radius: 15px;
-      background: var(--text);
-      box-shadow: var(--shadow);
-    }
-    .brand-mark::before {
-      content: "";
-      width: 22px;
-      height: 12px;
-      border-radius: 0 0 8px 8px;
-      background: var(--page);
-      box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 78%, transparent);
-    }
-    .head-copy { flex: 1; min-width: 0; }
-    .eyebrow {
-      margin: 0 0 2px;
-      color: var(--accent);
-      font-size: 10px;
-      line-height: 1.3;
-      font-weight: 750;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-    }
-    h1 {
-      margin: 0;
-      font-size: 23px;
-      line-height: 1.25;
-      font-weight: 740;
-      letter-spacing: -.045em;
-    }
-    .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 12px; }
-    #status {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 1 auto;
-      max-width: 44%;
-      min-height: 30px;
-      padding: 6px 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      color: var(--muted);
-      background: var(--surface);
-      font-size: 11px;
-      text-align: right;
-      overflow-wrap: anywhere;
-      box-shadow: 0 2px 8px rgba(10, 20, 40, .025);
-    }
-    #status[data-kind="ok"] { color: var(--good); border-color: color-mix(in srgb, var(--good) 28%, var(--line)); }
-    #status[data-kind="err"] { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 28%, var(--line)); }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px; }
+    .brand-mark { position: relative; display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 11px; background: var(--text); }
+    .brand-mark::before { content: ""; width: 18px; height: 10px; border-radius: 0 0 7px 7px; background: var(--page); box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 78%, transparent); }
+    .brand b { display: block; font-size: 15px; line-height: 1.2; letter-spacing: -.02em; }
+    .brand small { color: var(--muted); font-size: 11px; }
 
-    .preview-card {
-      padding: 16px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: var(--surface);
-      box-shadow: var(--shadow);
+    .tabs { display: flex; flex-direction: column; gap: 2px; }
+    .tab {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; min-height: 36px; padding: 7px 10px;
+      border: 0; border-radius: 9px; background: transparent;
+      color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
+      transition: background .15s, color .15s;
     }
-    .preview-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 0 0 12px;
-    }
-    .preview-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .01em; }
-    .live-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: var(--surface-alt);
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-    }
-    .live-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #35bd7a; }
-    .stage {
-      margin: 0;
-      height: 100px;
-      border-radius: 13px;
-      background: linear-gradient(145deg, #768195 0%, #bac4d2 100%);
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      overflow: hidden;
-      isolation: isolate;
-    }
+    .tab svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .tab:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+    .tab[aria-selected="true"] { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px rgba(20, 30, 60, .1), inset 3px 0 0 var(--accent); }
+    .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+    /* ---------- area utama ---------- */
+    main { min-width: 0; margin-left: var(--side-w); padding-bottom: var(--foot-h); }
+    .inner { max-width: 940px; margin: 0 auto; padding: 22px 24px 28px; }
+    .panel[hidden] { display: none; }
+    .panel-head { margin: 0 0 14px; }
+    .panel-head h1 { margin: 0; font-size: 20px; line-height: 1.3; font-weight: 740; letter-spacing: -.03em; }
+    .panel-head p { margin: 3px 0 0; color: var(--muted); font-size: 12px; max-width: 70ch; }
+
+    /* pratinjau: menempel di atas saat daftar warna di-scroll */
+    .preview { display: none; position: sticky; top: 0; z-index: 5; margin: 0 -2px 14px; padding: 8px 2px 0; background: linear-gradient(var(--page) 80%, transparent); }
+    body[data-tab="appearance"] .preview, body[data-tab="mood-section"] .preview { display: block; }
+    .preview-card { display: flex; align-items: center; gap: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 8px 24px rgba(20, 30, 60, .08); }
+    .stage { flex: 1; min-width: 0; margin: 0; height: 84px; border-radius: 10px; background: linear-gradient(145deg, #768195 0%, #bac4d2 100%); display: flex; justify-content: center; align-items: flex-start; overflow: hidden; isolation: isolate; }
+    .preview-copy { flex: 0 0 190px; }
+    .preview-copy b { display: block; font-size: 12.5px; }
+    .preview-copy .hint { margin: 3px 0 0; }
     #pill {
-      --p-bg: #000;
-      --p-fg: #fff;
-      --p-fg-rgb: 255, 255, 255;
-      --p-accent: 120, 140, 255;
-      --p-scale: 1;
-      width: calc(210px * var(--p-scale));
-      height: calc(44px * var(--p-scale));
+      --p-bg: #000; --p-fg: #fff; --p-fg-rgb: 255, 255, 255; --p-accent: 120, 140, 255; --p-scale: 1;
+      width: calc(210px * var(--p-scale)); height: calc(44px * var(--p-scale));
       background: radial-gradient(130% 160% at 50% -30%, rgba(var(--p-accent), .25), transparent 60%), var(--p-bg);
       color: var(--p-fg);
       border-radius: 0 0 calc(18px * var(--p-scale)) calc(18px * var(--p-scale));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: calc(10px * var(--p-scale));
-      font-size: calc(12px * var(--p-scale));
-      position: relative;
-      overflow: hidden;
-      transition: background .15s, color .15s;
+      display: flex; align-items: center; justify-content: center; gap: calc(10px * var(--p-scale));
+      font-size: calc(12px * var(--p-scale)); position: relative; overflow: hidden; transition: background .15s, color .15s;
     }
     #pill i { width: calc(7px * var(--p-scale)); height: calc(7px * var(--p-scale)); border-radius: 50%; background: var(--p-fg); }
     #pill span { opacity: .85; }
     #pill::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: calc(5px * var(--p-scale)); height: 2px; border-radius: 2px; background: rgb(var(--p-accent)); opacity: .9; }
-    /* Pemilih skin mata: warna utama ada pada eye-themes.css */
-    .eye-theme-picker { margin-top: 14px; }
-    .eye-theme-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
-    .eye-theme-option { display:flex; flex-direction:column; align-items:stretch; gap:7px; min-width:0; padding:8px; border:1px solid var(--line); border-radius:13px; background:var(--surface); color:var(--text); text-align:left; cursor:pointer; transition:border-color .15s,background .15s,box-shadow .15s; }
-    .eye-theme-option:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); }
-    .eye-theme-option[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
-    .eye-theme-swatch { display:grid; place-items:center; min-height:62px; border-radius:9px; background:#0b0d14; overflow:hidden; }
-    .eye-theme-swatch .eyes { display:flex !important; align-items:center; justify-content:center; gap:10px; position:relative; width:100%; height:58px; margin:0; padding:0; transform:none !important; }
-    .eye-theme-swatch .eye { display:block; flex:0 0 13px; width:13px; height:21px; margin:0; padding:0; position:relative; overflow:hidden; border-radius:8px; transform:none; animation:none; }
-    .eye-theme-swatch .shine { display:block; position:absolute; top:4px; left:3px; width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.96); }
-    .eye-theme-swatch .lid-t, .eye-theme-swatch .lid-b { display:none; }
-    .eye-theme-swatch .eyes[data-mood="happy"] .eye { height:15px; margin-top:5px; border-radius:50%; }
-    .eye-theme-swatch .eyes[data-mood="sleepy"] .eye { height:12px; margin-top:6px; border-radius:7px 7px 4px 4px; }
-    .eye-theme-swatch .eyes[data-mood="surprised"] .eye { height:25px; border-radius:50%; }
-    .eye-theme-swatch .eyes[data-mood="angry"] .eye { transform:skewY(-10deg); }
-    .eye-theme-swatch .eyes[data-mood="love"] .eye { border-radius:50% 50% 40% 40%; }
-    .eye-theme-swatch .eyes[data-mood="suspicious"] .eye:first-child { height:13px; margin-top:7px; }
-    .eye-theme-swatch .eyes[data-mood="sad"] .eye { height:17px; margin-top:4px; border-radius:7px 7px 10px 10px; }
-    .eye-theme-name { display:flex; align-items:center; justify-content:space-between; gap:4px; font-size:11px; font-weight:720; }
-    .eye-theme-name small { color:var(--muted); font-size:9px; font-weight:600; }
-    .eye-theme-option[aria-pressed="true"] .eye-theme-name::after { content:"✓"; color:var(--accent); font-size:13px; }
-    @media (max-width:620px) { .eye-theme-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-    @media (max-width:390px) { .eye-theme-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 
-    .hint { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 8px 0 0; }
-    .preview-card > .hint { margin-top: 9px; }
+    /* ---------- kartu ---------- */
+    .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; align-items: start; }
+    .cols.wide-left { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+    .stack { display: grid; gap: 12px; min-width: 0; }
+    .card { min-width: 0; margin: 0; padding: 14px 16px 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .card.full { grid-column: 1 / -1; }
+    .card h2 { margin: 0 0 4px; font-size: 13px; line-height: 1.4; font-weight: 720; letter-spacing: -.01em; }
+    .hint { color: var(--muted); font-size: 11.5px; line-height: 1.55; margin: 0 0 8px; }
+    .card > .hint:last-child { margin: 8px 0 6px; }
+    small { font-size: inherit; }
 
-    .section-nav {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      overflow-x: auto;
-      padding: 13px 0 12px;
-      margin: 0 0 2px;
-      background: color-mix(in srgb, var(--page) 92%, transparent);
-      backdrop-filter: blur(16px);
-      scrollbar-width: none;
-    }
-    .section-nav::-webkit-scrollbar { display: none; }
-    .section-nav a {
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      min-height: 30px;
-      padding: 6px 11px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: var(--surface);
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 11px;
-      font-weight: 650;
-      transition: border-color .15s, color .15s, background .15s;
-    }
-    .section-nav a:hover, .section-nav a:focus-visible { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); outline: none; }
-
-    section {
-      margin: 11px 0;
-      padding: 17px 19px 16px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--surface);
-      box-shadow: var(--shadow);
-      scroll-margin-top: 76px;
-    }
-    section h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 7px; font-size: 14px; line-height: 1.4; font-weight: 730; letter-spacing: -.015em; }
-    section h2::before { content: ""; flex: 0 0 4px; width: 4px; height: 16px; border-radius: 3px; background: var(--accent); }
-    section > .hint { margin: 0 0 10px; }
-    h3 { margin: 11px 0 3px; }
-
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 10px 0;
-      min-height: 43px;
-      border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
-    }
-    section .row:last-child { border-bottom: 0; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 0; min-height: 42px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+    .card > .row:last-child, .card > .row:last-of-type { border-bottom: 0; }
     .row.off { opacity: .42; }
     .row > label:first-child, .row > span:first-child { flex: 1; min-width: 0; font-size: 12px; font-weight: 560; }
+    .row .note { display: block; color: var(--muted); font-size: 11px; font-weight: 450; }
     .ctl { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 0; }
     code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11px; color: var(--muted); min-width: 60px; text-align: right; }
 
-    .seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px; gap: 4px; margin: 10px 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-alt); }
+    .seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 3px; gap: 3px; margin: 6px 0 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-alt); }
     .seg label { position: relative; min-width: 0; }
     .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
-    .seg span { display: block; padding: 8px 4px; border-radius: 8px; cursor: pointer; text-align: center; color: var(--muted); font-size: 11px; font-weight: 620; transition: background .15s, color .15s, box-shadow .15s; }
-    .seg input:checked + span { color: var(--accent); background: var(--surface); box-shadow: 0 1px 4px rgba(16, 24, 48, .1); font-weight: 750; }
+    .seg span { display: block; padding: 7px 4px; border-radius: 8px; cursor: pointer; text-align: center; color: var(--muted); font-size: 11.5px; font-weight: 620; transition: background .15s, color .15s; }
+    .seg input:checked + span { color: var(--accent); background: var(--surface); box-shadow: 0 1px 3px rgba(16, 24, 48, .12); font-weight: 750; }
     .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-    input[type="color"] { -webkit-appearance: none; appearance: none; width: 32px; height: 32px; padding: 3px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-alt); cursor: pointer; }
+    input[type="color"] { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; padding: 3px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-alt); cursor: pointer; }
     input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
     input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
     input[type="color"]:disabled { cursor: not-allowed; }
-    input[type="range"] { width: 178px; max-width: 46vw; accent-color: var(--accent); cursor: pointer; }
+    input[type="range"] { width: 130px; max-width: 46vw; accent-color: var(--accent); cursor: pointer; }
     input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+
+    /* Switch khusus untuk animasi gerak otomatis */
+    .motion-switch { position: relative; display: inline-flex; flex: 0 0 42px; width: 42px; height: 24px; align-items: center; cursor: pointer; }
+    .motion-switch input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+    .motion-switch-track { position: relative; display: block; width: 42px; height: 24px; border-radius: 999px; background: var(--line); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent); transition: background .18s ease; }
+    .motion-switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.22); transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+    .motion-switch input:checked + .motion-switch-track { background: var(--accent); }
+    .motion-switch input:checked + .motion-switch-track::after { transform: translateX(18px); }
+    .motion-switch input:focus-visible + .motion-switch-track { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .motion-switch input:disabled + .motion-switch-track { opacity: .5; cursor: not-allowed; }
+    @media (prefers-reduced-motion: reduce) { .motion-switch-track, .motion-switch-track::after { transition: none; } }
     .auto { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
     input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     input[type="text"], input[type="search"], input[type="number"], select {
-      font: inherit;
-      min-width: 0;
-      max-width: 100%;
-      padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      background: var(--surface-alt);
-      color: var(--text);
-      transition: border-color .15s, box-shadow .15s, background .15s;
+      font: inherit; min-width: 0; max-width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--surface-alt); color: var(--text); transition: border-color .15s, box-shadow .15s;
     }
-    input[type="text"]:focus, input[type="search"]:focus, input[type="number"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
-    input[type="number"] { width: 120px; text-align: right; }
-    .row input[type="text"] { width: min(250px, 55%); }
-    .row input.wide { width: min(310px, 60%); }
+    input[type="text"]:focus, input[type="search"]:focus, input[type="number"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+    input[type="number"] { width: 110px; text-align: right; }
+    .row input[type="text"] { width: min(240px, 58%); }
+    .row input.wide { width: min(280px, 62%); }
     .row input.emoji { width: 64px; text-align: center; font-size: 18px; }
-    .row select { width: min(230px, 58%); }
-    .emojis { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0 8px; }
-    .emo-btn { padding: 6px 9px; font-size: 17px; line-height: 1.1; border-radius: 9px; background: var(--surface-alt); }
-    .search { display: flex; gap: 8px; margin: 8px 0; }
+    .row select { width: min(220px, 60%); }
+    .emojis { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+    .emo-btn { padding: 5px 8px; font-size: 16px; line-height: 1.1; border-radius: 9px; background: var(--surface-alt); }
+    .search { display: flex; gap: 8px; margin: 4px 0 8px; }
     .search input { flex: 1; width: 0; }
-    .results { list-style: none; margin: 6px 0 8px; padding: 0; display: grid; gap: 5px; }
-    .results button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 9px 11px; background: var(--surface-alt); }
+    .results { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 5px; }
+    .results:empty { display: none; }
+    .results button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 8px 11px; background: var(--surface-alt); }
     .results small { color: var(--muted); white-space: nowrap; font-size: 10px; }
 
-    .feat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 10px 0 2px; }
-    .feat label { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); cursor: pointer; font-size: 12px; transition: border-color .15s, background .15s; }
-    .feat label:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: var(--accent-soft); }
-    .feat h3 { grid-column: 1 / -1; margin: 8px 0 0; color: var(--muted); font-size: 10px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
+    /* skin mata */
+    .eye-theme-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin: 6px 0 10px; }
+    .eye-theme-option { display: flex; flex-direction: column; align-items: stretch; gap: 7px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+    .eye-theme-option:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); }
+    .eye-theme-option[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .eye-theme-swatch { display: grid; place-items: center; min-height: 62px; border-radius: 9px; background: #0b0d14; overflow: hidden; }
+    .eye-theme-swatch .eyes { display: flex !important; align-items: center; justify-content: center; gap: 10px; position: relative; width: 100%; height: 58px; margin: 0; padding: 0; transform: none !important; }
+    .eye-theme-swatch .eye { display: block; flex: 0 0 13px; width: 13px; height: 21px; margin: 0; padding: 0; position: relative; overflow: hidden; border-radius: 8px; transform: none; animation: none; }
+    .eye-theme-swatch .shine { display: block; position: absolute; top: 4px; left: 3px; width: 4px; height: 4px; border-radius: 50%; background: rgba(255, 255, 255, .96); }
+    .eye-theme-swatch .lid-t, .eye-theme-swatch .lid-b { display: none; }
+    .eye-theme-swatch .eyes[data-mood="happy"] .eye { height: 15px; margin-top: 5px; border-radius: 50%; }
+    .eye-theme-swatch .eyes[data-mood="sleepy"] .eye { height: 12px; margin-top: 6px; border-radius: 7px 7px 4px 4px; }
+    .eye-theme-swatch .eyes[data-mood="surprised"] .eye { height: 25px; border-radius: 50%; }
+    .eye-theme-swatch .eyes[data-mood="angry"] .eye { transform: skewY(-10deg); }
+    .eye-theme-swatch .eyes[data-mood="love"] .eye { border-radius: 50% 50% 40% 40%; }
+    .eye-theme-swatch .eyes[data-mood="suspicious"] .eye:first-child { height: 13px; margin-top: 7px; }
+    .eye-theme-swatch .eyes[data-mood="sad"] .eye { height: 17px; margin-top: 4px; border-radius: 7px 7px 10px 10px; }
+    .eye-theme-name { display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: 11px; font-weight: 720; }
+    .eye-theme-name small { color: var(--muted); font-size: 9px; font-weight: 600; }
+    .eye-theme-option[aria-pressed="true"] .eye-theme-name::after { content: "✓"; color: var(--accent); font-size: 13px; }
 
-    .actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
-    button { font: inherit; padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 650; transition: transform .12s, border-color .15s, background .15s; }
+    /* fitur */
+    .feat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 8px 0 8px; }
+    .feat label { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); cursor: pointer; font-size: 12px; transition: border-color .15s, background .15s; }
+    .feat label:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: var(--accent-soft); }
+    .feat label:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pair .row { flex-direction: column; align-items: stretch; gap: 6px; border-bottom: 0; }
+    .pair .row input[type="number"] { width: 100%; text-align: left; }
+
+    button { font: inherit; padding: 8px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-alt); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 650; transition: border-color .15s, background .15s; }
     button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
     button:active:not(:disabled) { transform: translateY(1px); }
     button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 750; }
     button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
     button:disabled { opacity: .48; cursor: progress; }
-    .action-bar {
-      position: sticky;
-      bottom: 0;
-      z-index: 15;
-      justify-content: flex-end;
-      margin: 20px -28px -24px;
-      padding: 13px 28px 18px;
-      border-top: 1px solid var(--line);
-      background: color-mix(in srgb, var(--page) 92%, transparent);
-      backdrop-filter: blur(16px);
-    }
-    .action-bar button { min-width: 135px; }
+    .card .btns { display: flex; gap: 8px; padding: 6px 0 10px; }
 
-    @media (max-width: 620px) {
-      body { padding: 18px 15px 18px; }
-      header.topbar { align-items: flex-start; gap: 10px; }
-      .brand-mark { width: 38px; height: 38px; flex-basis: 38px; border-radius: 12px; }
-      h1 { font-size: 20px; }
-      .subtitle { max-width: 270px; }
-      #status { max-width: 38%; font-size: 10px; padding: 5px 7px; }
-      .preview-card { padding: 12px; }
-      section { padding: 15px 13px 13px; border-radius: 14px; }
-      .row { gap: 10px; }
-      .row > label:first-child, .row > span:first-child { font-size: 11px; }
-      .ctl { gap: 6px; }
-      code { min-width: 46px; font-size: 10px; }
-      .seg span { font-size: 10px; }
-      .feat { gap: 6px; }
-      .feat label { padding: 9px 8px; gap: 6px; font-size: 11px; }
-      .row input.wide { width: 58%; }
-      .row input[type="text"] { width: 52%; }
-      .row select { width: 56%; }
-      .action-bar { margin: 20px -15px -18px; padding: 12px 15px 15px; }
+    /* ---------- bilah bawah ---------- */
+    .foot { position: fixed; left: var(--side-w); right: 0; bottom: 0; z-index: 25; height: var(--foot-h); display: flex; align-items: center; gap: 12px; padding: 0 24px; border-top: 1px solid var(--line); background: var(--surface); }
+    #status { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--line); vertical-align: 1px; }
+    #status[data-kind="ok"] { color: var(--good); }
+    #status[data-kind="ok"]::before { background: var(--good); }
+    #status[data-kind="err"] { color: var(--bad); white-space: normal; }
+    #status[data-kind="err"]::before { background: var(--bad); }
+    .foot button { min-width: 130px; }
+
+    /* ---------- layar sempit: sidebar tetap di kiri, hanya mengecil jadi ikon ---------- */
+    @media (max-width: 760px) {
+      :root { --side-w: 60px; }
+      .side { align-items: center; padding: 16px 8px; }
+      .brand { padding: 0; }
+      .brand > div:last-child, .tab span { display: none; }
+      .tabs { width: 100%; }
+      .tab { justify-content: center; padding: 0; min-height: 40px; }
+      .inner { padding: 16px 14px 20px; }
+      .cols.wide-left { grid-template-columns: minmax(0, 1fr); }
+      .preview-copy { display: none; }
+      .eye-theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .foot { padding: 0 14px; }
+      .foot button { min-width: 0; padding: 8px 10px; }
     }
-    @media (max-width: 430px) {
-      .brand-mark { display: none; }
-      .topbar { flex-wrap: wrap; }
-      #status { max-width: 100%; text-align: left; }
+    @media (max-width: 480px) {
+      .cols { grid-template-columns: minmax(0, 1fr); }
+      #status { display: none; }
+      .foot { justify-content: flex-end; }
+      .eye-theme-grid, .feat, .pair { grid-template-columns: 1fr 1fr; }
+      .feat { grid-template-columns: 1fr; }
       .row { flex-wrap: wrap; }
       .row > label:first-child, .row > span:first-child { flex-basis: 100%; }
       .row .ctl { width: 100%; justify-content: flex-start; }
       .row input[type="text"], .row input.wide, .row select { width: 100%; }
-      .row input[type="number"] { width: 100%; }
       .row .ctl input[type="range"] { max-width: none; flex: 1; }
-      .feat { grid-template-columns: 1fr; }
-      .actions.action-bar { justify-content: stretch; }
-      .action-bar button { flex: 1; min-width: 0; }
-      .results button { align-items: flex-start; flex-direction: column; gap: 3px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
@@ -377,106 +256,109 @@
   </style>
 </head>
 
-<body>
-  <header class="topbar">
-    <div class="brand-mark" aria-hidden="true"></div>
-    <div class="head-copy">
-      <p class="eyebrow">NOTCH DESKTOP</p>
-      <h1>Pengaturan</h1>
-      <p class="subtitle">Atur tampilan dan perilaku notch sesuai kebutuhanmu.</p>
+<body data-tab="appearance">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div><b>Notch</b><small>Pengaturan</small></div>
     </div>
-    <div id="status" role="status" aria-live="polite">Memuat pengaturan…</div>
-  </header>
+    <nav class="tabs" role="tablist" aria-label="Kategori pengaturan" aria-orientation="vertical">
+      <button type="button" class="tab" role="tab" id="tab-appearance" data-tab="appearance" aria-controls="appearance" aria-selected="false" tabindex="-1" title="Tampilan"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 0 0 12z" fill="currentColor"/></svg><span>Tampilan</span></button>
+      <button type="button" class="tab" role="tab" id="tab-mood-section" data-tab="mood-section" aria-controls="mood-section" aria-selected="false" tabindex="-1" title="Mata"><svg viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="5.2" cy="8" rx="1.8" ry="3"/><ellipse cx="10.8" cy="8" rx="1.8" ry="3"/></svg><span>Mata</span></button>
+      <button type="button" class="tab" role="tab" id="tab-features-section" data-tab="features-section" aria-controls="features-section" aria-selected="false" tabindex="-1" title="Fitur"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg><span>Fitur</span></button>
+      <button type="button" class="tab" role="tab" id="tab-nudge-section" data-tab="nudge-section" aria-controls="nudge-section" aria-selected="false" tabindex="-1" title="Pesan diam"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg><span>Pesan diam</span></button>
+      <button type="button" class="tab" role="tab" id="tab-weather-section" data-tab="weather-section" aria-controls="weather-section" aria-selected="false" tabindex="-1" title="Cuaca"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 12.5a3 3 0 0 1 .2-6 4 4 0 0 1 7.6 1 2.5 2.5 0 0 1-.3 5z"/></svg><span>Cuaca</span></button>
+      <button type="button" class="tab" role="tab" id="tab-behavior-section" data-tab="behavior-section" aria-controls="behavior-section" aria-selected="false" tabindex="-1" title="Perilaku & posisi"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/></svg><span>Perilaku & posisi</span></button>
+    </nav>
+  </aside>
 
-  <div class="preview-card">
-    <div class="preview-heading">
-      <p class="preview-title">Pratinjau tampilan</p>
-      <span class="live-chip">Live preview</span>
-    </div>
-    <div class="stage">
-      <div id="pill"><i></i><i></i><span>Notch</span></div>
-    </div>
-    <p class="hint">Perubahan tampilan langsung terlihat pada notch asli sebelum disimpan.</p>
-  </div>
-
-  <nav class="section-nav" aria-label="Navigasi pengaturan">
-    <a href="#appearance">Tampilan</a>
-    <a href="#scale-section">Ukuran</a>
-    <a href="#mood-section">Mood default</a>
-    <a href="#features-section">Fitur</a>
-    <a href="#nudge-section">Pesan diam</a>
-    <a href="#weather-section">Cuaca</a>
-    <a href="#behavior-section">Perilaku</a>
-    <a href="#position-section">Posisi</a>
-  </nav>
-
-  <section id="appearance">
-    <h2>Warna & tema</h2>
-    <div class="seg" role="radiogroup" aria-label="Mode warna">
-      <label><input type="radio" name="theme" value="auto" /><span>Ikuti OS</span></label>
-      <label><input type="radio" name="theme" value="dark" /><span>Gelap</span></label>
-      <label><input type="radio" name="theme" value="light" /><span>Terang</span></label>
-      <label><input type="radio" name="theme" value="custom" /><span>Kustom</span></label>
-    </div>
-
-    <div class="row" id="row-background">
-      <label for="background">Warna notch</label>
-      <div class="ctl"><code id="hex-background"></code><input type="color" id="background" /></div>
-    </div>
-    <div class="row" id="row-dark_bg">
-      <label for="dark_bg">Warna notch di tema gelap</label>
-      <div class="ctl"><code id="hex-dark_bg"></code><input type="color" id="dark_bg" /></div>
-    </div>
-    <div class="row" id="row-light_bg">
-      <label for="light_bg">Warna notch di tema terang</label>
-      <div class="ctl"><code id="hex-light_bg"></code><input type="color" id="light_bg" /></div>
-    </div>
-    <div class="row" id="row-text">
-      <label for="text">Warna teks</label>
-      <div class="ctl">
-        <label class="auto"><input type="checkbox" id="text_auto" /> otomatis</label>
-        <code id="hex-text"></code><input type="color" id="text" />
-      </div>
-    </div>
-    <div class="row" id="row-accent">
-      <label for="accent">Warna aksen</label>
-      <div class="ctl">
-        <label class="auto"><input type="checkbox" id="accent_auto" /> dari cover album</label>
-        <code id="hex-accent"></code><input type="color" id="accent" />
-      </div>
-    </div>
-  </section>
-
-  <section id="scale-section">
-    <h2>Ukuran</h2>
-    <div class="row">
-      <label for="scale">Skala notch</label>
-      <div class="ctl"><input type="range" id="scale" min="0.5" max="1.5" step="0.05" /><code id="scale_val"></code></div>
-    </div>
-  </section>
-
-  <section id="mood-section">
-    <h2>Mood default</h2>
-    <p class="hint" style="margin:6px 0">Ekspresi mata saat notch sedang diam. Pengaturan ini berbeda dari ekspresi ketika pesan pointer diam muncul.</p>
-    <div class="row">
-      <label for="default-mood">Ekspresi mata bawaan</label>
-      <select id="default-mood">
-        <option value="normal">Normal</option>
-        <option value="happy">Senang</option>
-        <option value="sleepy">Mengantuk</option>
-        <option value="surprised">Kaget</option>
-        <option value="angry">Marah</option>
-        <option value="love">Jatuh cinta</option>
-        <option value="suspicious">Curiga</option>
-        <option value="sad">Sedih</option>
-      </select>
-    </div>
-      <div class="eye-theme-picker">
-        <div class="row" style="padding-bottom:2px">
-          <span><b>Tema visual mata</b><br><small class="hint">Pilih satu dari 10 skin yang digunakan oleh semua mood. Setiap mood punya palet warna khusus.</small></span>
+  <main>
+    <div class="inner">
+      <div class="preview">
+        <div class="preview-card">
+          <div class="stage"><div id="pill"><i></i><i></i><span>Notch</span></div></div>
+          <div class="preview-copy">
+            <b>Pratinjau</b>
+            <p class="hint">Perubahan tampilan langsung terlihat pada notch asli sebelum disimpan.</p>
+          </div>
         </div>
-        <input type="hidden" id="eye-theme" value="aurora" />
-        <div class="eye-theme-grid" id="eye-theme-grid" aria-label="Pilihan tema visual mata">
+      </div>
+
+      <!-- ===== Tampilan ===== -->
+      <section class="panel" id="appearance" role="tabpanel" aria-labelledby="tab-appearance" data-panel>
+        <header class="panel-head"><h1>Tampilan</h1><p>Warna, tema, dan ukuran notch.</p></header>
+        <div class="cols wide-left">
+          <div class="card">
+            <h2>Warna &amp; tema</h2>
+            <div class="seg" role="radiogroup" aria-label="Mode warna">
+              <label><input type="radio" name="theme" value="auto" /><span>Ikuti OS</span></label>
+              <label><input type="radio" name="theme" value="dark" /><span>Gelap</span></label>
+              <label><input type="radio" name="theme" value="light" /><span>Terang</span></label>
+              <label><input type="radio" name="theme" value="custom" /><span>Kustom</span></label>
+            </div>
+            <div class="row" id="row-background">
+              <label for="background">Warna notch</label>
+              <div class="ctl"><code id="hex-background"></code><input type="color" id="background" /></div>
+            </div>
+            <div class="row" id="row-dark_bg">
+              <label for="dark_bg">Warna notch di tema gelap</label>
+              <div class="ctl"><code id="hex-dark_bg"></code><input type="color" id="dark_bg" /></div>
+            </div>
+            <div class="row" id="row-light_bg">
+              <label for="light_bg">Warna notch di tema terang</label>
+              <div class="ctl"><code id="hex-light_bg"></code><input type="color" id="light_bg" /></div>
+            </div>
+            <div class="row" id="row-text">
+              <label for="text">Warna teks</label>
+              <div class="ctl">
+                <label class="auto"><input type="checkbox" id="text_auto" /> otomatis</label>
+                <code id="hex-text"></code><input type="color" id="text" />
+              </div>
+            </div>
+            <div class="row" id="row-accent">
+              <label for="accent">Warna aksen</label>
+              <div class="ctl">
+                <label class="auto"><input type="checkbox" id="accent_auto" /> dari cover album</label>
+                <code id="hex-accent"></code><input type="color" id="accent" />
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card" id="scale-section">
+              <h2>Ukuran</h2>
+              <div class="row">
+                <label for="scale">Skala notch</label>
+                <div class="ctl"><input type="range" id="scale" min="0.5" max="1.5" step="0.05" /><code id="scale_val"></code></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Mata ===== -->
+      <section class="panel" id="mood-section" role="tabpanel" aria-labelledby="tab-mood-section" data-panel hidden>
+        <header class="panel-head"><h1>Mata</h1><p>Ekspresi mata saat notch diam dan skin yang dipakai semua mood.</p></header>
+        <div class="cols">
+          <div class="card full">
+            <div class="row">
+              <span>Ekspresi mata bawaan<span class="note">Berbeda dari ekspresi saat pesan pointer diam muncul.</span></span>
+              <select id="default-mood">
+                <option value="normal">Normal</option>
+                <option value="happy">Senang</option>
+                <option value="sleepy">Mengantuk</option>
+                <option value="surprised">Kaget</option>
+                <option value="angry">Marah</option>
+                <option value="love">Jatuh cinta</option>
+                <option value="suspicious">Curiga</option>
+                <option value="sad">Sedih</option>
+              </select>
+            </div>
+          </div>
+          <div class="card full">
+            <h2>Tema visual mata</h2>
+            <p class="hint">Pilih satu dari 10 skin. Setiap mood punya palet warna khusus.</p>
+            <input type="hidden" id="eye-theme" value="aurora" />
+            <div class="eye-theme-grid" id="eye-theme-grid" aria-label="Pilihan tema visual mata">
         <button type="button" class="eye-theme-option" data-eye-theme-option="aurora" aria-pressed="false">
           <span class="eye-theme-swatch"><span class="eyes" data-mood="normal" data-eye-theme="aurora"><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span><span class="eye"><span class="lid-t"></span><span class="lid-b"></span><span class="shine"></span></span></span></span>
           <span class="eye-theme-name">Aurora <small>Soft glow</small></span>
@@ -518,121 +400,159 @@
           <span class="eye-theme-name">Monochrome <small>Silver minimal</small></span>
         </button>
         </div>
-      </div>
-  </section>
+          </div>
+        </div>
+      </section>
 
-  <section id="features-section">
-    <h2>Fitur</h2>
-    <p class="hint" style="margin:6px 0">Centang halaman yang ingin ditampilkan. Perubahan daftar halaman langsung dipratinjau di Hub; tekan <b>Simpan</b> agar pilihan tersimpan permanen. Fitur tambahan tertentu mungkin memerlukan restart.</p>
-    <div class="feat" id="features">
-      <h3>Halaman</h3>
-      <label><input type="checkbox" id="f-media" data-feature="media" /> Musik</label>
-      <label><input type="checkbox" id="f-clock" data-feature="clock" /> Jam &amp; tanggal</label>
-      <label><input type="checkbox" id="f-weather" data-feature="weather" /> Cuaca</label>
-      <label><input type="checkbox" id="f-battery" data-feature="battery" /> Baterai</label>
-      <label><input type="checkbox" id="f-timer" data-feature="timer" /> Timer Pomodoro</label>
-      <label><input type="checkbox" id="f-quick" data-feature="quick" /> Kontrol cepat</label>
-      <label><input type="checkbox" id="f-tools" data-feature="tools" /> Alat</label>
-      <label><input type="checkbox" id="f-stats" data-feature="stats" /> Status sistem</label>
-      <label><input type="checkbox" id="f-clipboard" data-feature="clipboard" /> Riwayat clipboard</label>
-      <label><input type="checkbox" id="f-shelf" data-feature="shelf" /> Shelf file</label>
-      <label><input type="checkbox" id="f-reminder" data-feature="reminder" /> Pengingat</label>
-      <label><input type="checkbox" id="f-notes" data-feature="notes" /> Catatan</label>
-      <label><input type="checkbox" id="f-prayer" data-feature="prayer" /> Jadwal shalat</label>
-      <h3>Tambahan</h3>
-      <label><input type="checkbox" id="f-lyrics" data-feature="lyrics" /> Lirik lagu</label>
-      <label><input type="checkbox" id="f-privacy" data-feature="privacy" /> Indikator mic/kamera</label>
-    </div>
-  </section>
+      <!-- ===== Fitur ===== -->
+      <section class="panel" id="features-section" role="tabpanel" aria-labelledby="tab-features-section" data-panel hidden>
+        <header class="panel-head"><h1>Fitur</h1><p>Centang halaman yang ingin ditampilkan. Daftar halaman langsung dipratinjau di Hub; tekan Simpan agar permanen. Fitur tambahan tertentu mungkin memerlukan restart.</p></header>
+        <div class="cols wide-left">
+          <div class="card" id="features">
+            <h2>Halaman</h2>
+            <div class="feat">
+              <label><input type="checkbox" id="f-media" data-feature="media" /> Musik</label>
+              <label><input type="checkbox" id="f-clock" data-feature="clock" /> Jam &amp; tanggal</label>
+              <label><input type="checkbox" id="f-weather" data-feature="weather" /> Cuaca</label>
+              <label><input type="checkbox" id="f-battery" data-feature="battery" /> Baterai</label>
+              <label><input type="checkbox" id="f-timer" data-feature="timer" /> Timer Pomodoro</label>
+              <label><input type="checkbox" id="f-quick" data-feature="quick" /> Kontrol cepat</label>
+              <label><input type="checkbox" id="f-tools" data-feature="tools" /> Alat</label>
+              <label><input type="checkbox" id="f-stats" data-feature="stats" /> Status sistem</label>
+              <label><input type="checkbox" id="f-clipboard" data-feature="clipboard" /> Riwayat clipboard</label>
+              <label><input type="checkbox" id="f-shelf" data-feature="shelf" /> Shelf file</label>
+              <label><input type="checkbox" id="f-reminder" data-feature="reminder" /> Pengingat</label>
+              <label><input type="checkbox" id="f-notes" data-feature="notes" /> Catatan</label>
+              <label><input type="checkbox" id="f-prayer" data-feature="prayer" /> Jadwal shalat</label>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Tambahan</h2>
+            <div class="feat" style="grid-template-columns:1fr">
+              <label><input type="checkbox" id="f-lyrics" data-feature="lyrics" /> Lirik lagu</label>
+              <label><input type="checkbox" id="f-privacy" data-feature="privacy" /> Indikator mic/kamera</label>
+            </div>
+          </div>
+        </div>
+      </section>
 
-  <section id="nudge-section">
-    <h2>Pesan saat pointer diam</h2>
-    <p class="hint" style="margin:6px 0">Kalau pointer tidak bergerak cukup lama, notch menyapa dengan pesan imut. Muncul sekali untuk tiap periode diam. Perubahan di sini langsung berlaku.</p>
-    <div class="row">
-      <label for="n-enabled">Aktifkan</label>
-      <input type="checkbox" id="n-enabled" />
-    </div>
-    <div class="row">
-      <label for="n-min">Muncul setelah diam (menit)</label>
-      <input type="number" id="n-min" min="1" max="240" step="1" />
-    </div>
-    <div class="row">
-      <label for="n-msg">Pesan</label>
-      <input type="text" id="n-msg" class="wide" maxlength="80" placeholder="Kamu kemana, kok diam saja?" />
-    </div>
-    <div class="row">
-      <label for="n-emoji">Emoji</label>
-      <input type="text" id="n-emoji" class="emoji" maxlength="12" />
-    </div>
-    <div class="emojis" id="n-presets" aria-label="Pilihan emoji"></div>
-    <div class="row">
-      <label for="n-mood">Ekspresi mata</label>
-      <select id="n-mood">
-        <option value="sad">Sedih</option>
-        <option value="normal">Normal</option>
-        <option value="happy">Senang</option>
-        <option value="sleepy">Mengantuk</option>
-        <option value="surprised">Kaget</option>
-        <option value="angry">Marah</option>
-        <option value="love">Jatuh cinta</option>
-        <option value="suspicious">Curiga</option>
-      </select>
-    </div>
-    <div class="row">
-      <label for="n-sec">Lama tampil (detik)</label>
-      <input type="number" id="n-sec" min="2" max="30" step="1" />
-    </div>
-    <div class="row">
-      <label for="n-silent">Jangan muncul saat musik/video diputar</label>
-      <input type="checkbox" id="n-silent" />
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button type="button" id="n-test">Coba tampilkan</button>
-    </div>
-  </section>
+      <!-- ===== Pesan diam ===== -->
+      <section class="panel" id="nudge-section" role="tabpanel" aria-labelledby="tab-nudge-section" data-panel hidden>
+        <header class="panel-head"><h1>Pesan saat pointer diam</h1><p>Kalau pointer tidak bergerak cukup lama, notch menyapa dengan pesan imut. Muncul sekali untuk tiap periode diam. Perubahan langsung berlaku.</p></header>
+        <div class="cols">
+          <div class="card">
+            <h2>Isi pesan</h2>
+            <div class="row">
+              <label for="n-msg">Pesan</label>
+              <input type="text" id="n-msg" class="wide" maxlength="80" placeholder="Kamu kemana, kok diam saja?" />
+            </div>
+            <div class="row">
+              <label for="n-emoji">Emoji</label>
+              <input type="text" id="n-emoji" class="emoji" maxlength="12" />
+            </div>
+            <div class="emojis" id="n-presets" aria-label="Pilihan emoji"></div>
+            <div class="row">
+              <label for="n-mood">Ekspresi mata</label>
+              <select id="n-mood">
+                <option value="sad">Sedih</option>
+                <option value="normal">Normal</option>
+                <option value="happy">Senang</option>
+                <option value="sleepy">Mengantuk</option>
+                <option value="surprised">Kaget</option>
+                <option value="angry">Marah</option>
+                <option value="love">Jatuh cinta</option>
+                <option value="suspicious">Curiga</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Kapan muncul</h2>
+            <div class="row">
+              <label for="n-enabled">Aktifkan</label>
+              <input type="checkbox" id="n-enabled" />
+            </div>
+            <div class="row">
+              <label for="n-min">Muncul setelah diam (menit)</label>
+              <input type="number" id="n-min" min="1" max="240" step="1" />
+            </div>
+            <div class="row">
+              <label for="n-sec">Lama tampil (detik)</label>
+              <input type="number" id="n-sec" min="2" max="30" step="1" />
+            </div>
+            <div class="row">
+              <label for="n-silent">Jangan muncul saat musik/video diputar</label>
+              <input type="checkbox" id="n-silent" />
+            </div>
+            <div class="btns"><button type="button" id="n-test">Coba tampilkan</button></div>
+          </div>
+        </div>
+      </section>
 
-  <section id="weather-section">
-    <h2>Cuaca</h2>
-    <p class="hint" style="margin:6px 0">Lokasi saat ini: <b id="w-current">…</b></p>
-    <div class="search">
-      <input type="search" id="w-q" placeholder="Cari kota, mis. Surabaya" autocomplete="off" data-weather />
-      <button type="button" id="w-search">Cari</button>
-    </div>
-    <ul class="results" id="w-results"></ul>
-    <div class="row"><label for="w-city">Nama lokasi</label><input type="text" id="w-city" data-weather /></div>
-    <div class="row"><label for="w-lat">Lintang</label><input type="number" id="w-lat" step="0.0001" min="-90" max="90" data-weather /></div>
-    <div class="row"><label for="w-lon">Bujur</label><input type="number" id="w-lon" step="0.0001" min="-180" max="180" data-weather /></div>
-    <p class="hint">Berlaku langsung setelah Simpan, tanpa restart.</p>
-  </section>
+      <!-- ===== Cuaca ===== -->
+      <section class="panel" id="weather-section" role="tabpanel" aria-labelledby="tab-weather-section" data-panel hidden>
+        <header class="panel-head"><h1>Cuaca</h1><p>Lokasi saat ini: <b id="w-current">…</b>. Berlaku langsung setelah Simpan, tanpa restart.</p></header>
+        <div class="cols">
+          <div class="card">
+            <h2>Cari kota</h2>
+            <div class="search">
+              <input type="search" id="w-q" placeholder="Cari kota, mis. Surabaya" autocomplete="off" data-weather />
+              <button type="button" id="w-search">Cari</button>
+            </div>
+            <ul class="results" id="w-results"></ul>
+            <p class="hint">Pilih hasil pencarian untuk mengisi koordinat otomatis.</p>
+          </div>
+          <div class="card">
+            <h2>Koordinat</h2>
+            <div class="row"><label for="w-city">Nama lokasi</label><input type="text" id="w-city" data-weather /></div>
+            <div class="pair">
+              <div class="row"><label for="w-lat">Lintang</label><input type="number" id="w-lat" step="0.0001" min="-90" max="90" data-weather /></div>
+              <div class="row"><label for="w-lon">Bujur</label><input type="number" id="w-lon" step="0.0001" min="-180" max="180" data-weather /></div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-  <section id="behavior-section">
-    <h2>Perilaku</h2>
-    <div class="row">
-      <label for="hide_fullscreen">Sembunyikan notch saat layar penuh <small style="color:var(--muted)">(butuh restart)</small></label>
-      <input type="checkbox" id="hide_fullscreen" />
+      <!-- ===== Perilaku & posisi ===== -->
+      <section class="panel" id="behavior-section" role="tabpanel" aria-labelledby="tab-behavior-section" data-panel hidden>
+        <header class="panel-head"><h1>Perilaku &amp; posisi</h1><p>Cara notch bersikap dan di mana ia berada.</p></header>
+        <div class="cols">
+          <div class="card">
+            <h2>Perilaku</h2>
+            <div class="row">
+              <label for="hide_fullscreen">Sembunyikan notch saat layar penuh<span class="note">Butuh restart</span></label>
+              <input type="checkbox" id="hide_fullscreen" />
+            </div>
+            <div class="row">
+              <label for="autostart">Jalankan otomatis saat komputer menyala<span class="note">Build release</span></label>
+              <input type="checkbox" id="autostart" data-os />
+            </div>
+            <div class="row">
+              <label for="bottom_play">Animasi gerak otomatis<span class="note">Efek liquid saat notch menempel di bawah, kiri, atau kanan layar. Matikan untuk menghentikan gerakan acak. Langsung berlaku.</span></label>
+              <label class="motion-switch" title="Aktifkan atau matikan animasi gerak otomatis">
+                <input type="checkbox" id="bottom_play" aria-label="Aktifkan animasi gerak otomatis" />
+                <span class="motion-switch-track" aria-hidden="true"></span>
+              </label>
+            </div>
+          </div>
+          <div class="card" id="position-section">
+            <h2>Posisi</h2>
+            <p class="hint">Klik dan seret notch saat diam, atau seret pegangan di bawah hub, untuk memindahkannya.</p>
+            <div class="row">
+              <label>Posisi saat ini</label>
+              <span id="pos-status" style="color:var(--muted)">Tengah atas (bawaan)</span>
+            </div>
+            <div class="btns"><button type="button" id="pos-reset">Pusatkan ke tengah lagi</button></div>
+          </div>
+        </div>
+      </section>
     </div>
-    <div class="row">
-      <label for="autostart">Jalankan otomatis saat komputer menyala <small style="color:var(--muted)">(build release)</small></label>
-      <input type="checkbox" id="autostart" data-os />
-    </div>
-  </section>
+  </main>
 
-  <section id="position-section">
-    <h2>Posisi</h2>
-    <p class="hint" style="margin:6px 0">Notch bisa langsung digeser sesuka hati dengan mouse (klik dan seret notch saat diam, atau seret pegangan di bawah hub).</p>
-    <div class="row">
-      <label>Posisi saat ini</label>
-      <span id="pos-status" style="font-size:13px; color:var(--muted)">Tengah atas (bawaan)</span>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button type="button" id="pos-reset">Pusatkan ke tengah lagi</button>
-    </div>
-  </section>
-
-  <div class="actions action-bar">
-    <button class="primary" id="save">Simpan perubahan</button>
+  <footer class="foot">
+    <div id="status" role="status" aria-live="polite">Memuat pengaturan…</div>
     <button id="restart">Simpan &amp; mulai ulang</button>
-  </div>
+    <button class="primary" id="save">Simpan perubahan</button>
+  </footer>
 
   <script>
     const T = window.__TAURI__;
@@ -1014,6 +934,22 @@
       } catch {}
     }
 
+    // Animasi gerak otomatis (bawah + sisi) memakai saklar bersama yang dibaca modul bottom-play.ts.
+    // Perubahan langsung berlaku tanpa tombol Simpan; modul animasi membaca nilai ini secara berkala.
+    (() => {
+      const KEY = "notch.bottomPlay"; // nama key dipertahankan agar cocok dengan versi aplikasi sebelumnya
+      const box = inp("bottom_play");
+      try { box.checked = localStorage.getItem(KEY) !== "0"; } catch { box.checked = true; }
+      box.addEventListener("change", () => {
+        try {
+          localStorage.setItem(KEY, box.checked ? "1" : "0");
+          say(box.checked ? "Animasi gerak otomatis diaktifkan." : "Animasi gerak otomatis dimatikan.", "ok");
+        } catch {
+          say("Tidak dapat menyimpan pilihan animasi pada penyimpanan lokal.", "err");
+        }
+      });
+    })();
+
     inp("autostart").addEventListener("change", async () => {
       const want = inp("autostart").checked;
       inp("autostart").disabled = true;
@@ -1121,6 +1057,36 @@
       } catch (e) {
         say(`Gagal membaca pengaturan: ${e}`, "err");
       }
+    })();
+  </script>
+
+  <script>
+    // Navigasi tab: satu panel tampil sekali, mendukung panah atas/bawah/kiri/kanan dan #hash.
+    (() => {
+      const tabs = [...document.querySelectorAll(".tab")];
+      const panels = [...document.querySelectorAll("[data-panel]")];
+      function show(id, focus) {
+        if (!panels.some((p) => p.id === id)) id = panels[0].id;
+        document.body.dataset.tab = id;
+        panels.forEach((p) => { p.hidden = p.id !== id; });
+        tabs.forEach((t) => {
+          const on = t.dataset.tab === id;
+          t.setAttribute("aria-selected", String(on));
+          t.tabIndex = on ? 0 : -1;
+          if (on && focus) t.focus();
+        });
+        window.scrollTo(0, 0);
+      }
+      tabs.forEach((t, i) => {
+        t.addEventListener("click", () => show(t.dataset.tab));
+        t.addEventListener("keydown", (e) => {
+          const k = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+          if (!k) return;
+          e.preventDefault();
+          show(tabs[(i + k + tabs.length) % tabs.length].dataset.tab, true);
+        });
+      });
+      show(location.hash.slice(1));
     })();
   </script>
 </body>

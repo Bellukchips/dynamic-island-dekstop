@@ -6,6 +6,7 @@ import { loadFace, saveFace, startClock, type Face } from "./clock";
 import { initCalendar, goToday, shiftMonth } from "./calendar";
 import { initHubNav } from "./hub-nav";
 import { initPrayer } from "./prayer";
+import { initBottomPlay } from "./bottom-play";
 import { getVersion } from "@tauri-apps/api/app";
 import { loadRemoteUpdateConfig, type RemoteUpdateConfig } from "./firebase";
 declare global {
@@ -2912,6 +2913,53 @@ void loadRemoteUpdateConfig()
   .catch((error: unknown) => {
     console.warn("[Firebase] Gagal memuat notch_config/update_config:", error);
   });
+// Gerakan lucu acak saat notch menempel di dasar layar. Bisa dimatikan di Pengaturan > Perilaku.
+initBottomPlay({
+  shell: $("shell"),
+  notch,
+  busy: () => inside || override !== null || isDraggingWindow || shelfDragging || holdHover ||
+    notch.classList.contains("dropping"),
+  playing: () => playing,
+  calm: () => sleeping || lowBattery,
+  mood: (m, ms) => flash(m as Mood, ms),
+  getCx: () => currentCx,
+  // geser jendela native ke cx tanpa menyimpan posisi (posisi tersimpan tidak berubah)
+  setCx: (cx) => {
+    updatePositionUI(true, BOTTOM_TY, cx);
+    return Promise.resolve(invoke("notch_move_to", { cx, ty: BOTTOM_TY }));
+  },
+  // pil bisa mentok tepat di tepi kiri/kanan monitor
+  range: () => {
+    const [vw] = SIZES[notch.dataset.view ?? "bottomIdle"] ?? SIZES.bottomIdle;
+    return [MON.x + vw / 2, MON.x + MON.w - vw / 2];
+  },
+  // Mode gerak mengikuti orientasi docking: horizontal di bawah, vertikal di sisi.
+  dock: () => {
+    if (notch.classList.contains("is-bottom")) return "bottom";
+    const view = notch.dataset.view;
+    if (view === "edgeIdle" || view === "edgeMedia") {
+      if (notch.classList.contains("is-edge-left")) return "left";
+      if (notch.classList.contains("is-edge-right")) return "right";
+    }
+    return null;
+  },
+  getTy: () => currentTy,
+  setTy: (ty) => {
+    const left = notch.classList.contains("is-edge-left");
+    const right = notch.classList.contains("is-edge-right");
+    const cx = left ? MON.x + 30 * CFG.scale
+      : right ? MON.x + MON.w - 30 * CFG.scale
+        : currentCx;
+    updatePositionUI(true, ty, cx);
+    return Promise.resolve(invoke("notch_move_to", { cx, ty }));
+  },
+  verticalRange: () => {
+    const [, vh] = SIZES[notch.dataset.view ?? "edgeIdle"] ?? SIZES.edgeIdle;
+    const margin = Math.round(18 * CFG.scale);
+    return [MON.y + margin, MON.y + MON.h - vh - margin];
+  },
+  hit: () => setHit(notch.dataset.view ?? "idle"),
+});
 if (clockOn) startClock();
 void syncWindow(); // jendela native diset sekali ke ukuran tetap
 render();

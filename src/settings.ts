@@ -71,6 +71,11 @@ function fill(c: Cfg) {
     if (moodEl) moodEl.value = a.default_mood || "normal";
     inp("scale").value = String(c.scale);
     inp("hide_fullscreen").checked = c.hide_fullscreen;
+    const motionToggle = document.getElementById("bottom_play") as HTMLInputElement | null;
+    if (motionToggle) {
+        try { motionToggle.checked = localStorage.getItem("notch.bottomPlay") !== "0"; }
+        catch { motionToggle.checked = true; }
+    }
     sync();
 }
 
@@ -148,6 +153,22 @@ document.getElementById("default_mood")?.addEventListener("change", () => {
     sync();
     preview();
 });
+
+// Saklar gerakan otomatis dibagikan oleh mode bawah dan sisi; berlaku langsung tanpa Simpan.
+(() => {
+    const box = document.getElementById("bottom_play") as HTMLInputElement | null;
+    if (!box) return;
+    const key = "notch.bottomPlay";
+    try { box.checked = localStorage.getItem(key) !== "0"; } catch { box.checked = true; }
+    box.addEventListener("change", () => {
+        try {
+            localStorage.setItem(key, box.checked ? "1" : "0");
+            say(box.checked ? "Animasi gerak otomatis diaktifkan." : "Animasi gerak otomatis dimatikan.", "ok");
+        } catch {
+            say("Tidak dapat menyimpan pilihan animasi pada penyimpanan lokal.", "err");
+        }
+    });
+})();
 
 // ---------- simpan ----------
 const buttons = [$<HTMLButtonElement>("save"), $<HTMLButtonElement>("restart")];

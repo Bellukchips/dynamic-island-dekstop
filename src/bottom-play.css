@@ -1,0 +1,33 @@
+/* Bottom Play / Side Play — transform ringan, gerak native dikoreksi CSS tiap frame. */
+#shell[data-play] {
+  translate: var(--bp-x, 0px) var(--bp-y, 0px);
+  rotate: var(--bp-r, 0deg);
+  scale: var(--bp-sx, 1) var(--bp-sy, 1);
+  will-change: translate, rotate, scale;
+  transition: none !important;
+}
+
+/* Di bawah, pusat transform ada di alas agar tidak terlihat terangkat. */
+#shell[data-play-axis="bottom"] {
+  transform-origin: 50% 100%;
+}
+
+/* Di samping, gerak menyusuri tepi secara vertikal dan sisi luar menjadi jangkar. */
+#shell[data-play-axis="side"] {
+  transform-origin: 50% 50%;
+}
+#shell.is-edge-left[data-play-axis="side"] {
+  transform-origin: 0% 50%;
+}
+#shell.is-edge-right[data-play-axis="side"] {
+  transform-origin: 100% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #shell[data-play] {
+    translate: none;
+    rotate: none;
+    scale: none;
+    will-change: auto;
+  }
+}
