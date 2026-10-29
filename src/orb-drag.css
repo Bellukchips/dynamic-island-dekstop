@@ -58,6 +58,27 @@
   pointer-events: none !important;
   transition: opacity 0.1s ease !important;
 }
+/* PENGECUALIAN: mata tetap tampil & dipusatkan ulang ke tengah bola 48px (berapa pun
+   ukuran layer idle di tampilan asalnya), supaya arah liriknya kelihatan selama digeser
+   (lihat orbLook() di main.ts: mata mengarah sesuai arah bola bergerak, kiri/kanan/atas/
+   bawah). Isi lain di layer idle (mis. mulut mood) tetap disembunyikan di mode bola. */
+#shell #notch#notch#notch.is-orb > .l-idle {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 4; /* di atas pusaran (::after, z-index 1) & kilau (::before, z-index 2) bola */
+  transition: opacity 0.1s ease !important;
+}
+#shell #notch#notch#notch.is-orb > .l-idle > *:not(.eyes) {
+  opacity: 0 !important;
+}
 
 /* ---------- permukaan bola ---------- */
 /* ::after = pusaran cahaya berputar (di bawah), ::before = kilau kaca (di atas).

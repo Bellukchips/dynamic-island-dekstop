@@ -6,9 +6,10 @@ import { emit, listen } from "@tauri-apps/api/event";
 // cairan/jelly: tidak ada perubahan bentuk yang meloncat, semuanya diberi "dorongan" (impuls) lalu
 // dibiarkan bergoyang kembali oleh pegas yang redamannya rendah.
 //
-// Berkeliling: yang bergerak adalah jendela native (lewat setCx) sampai mentok di tepi layar.
-// Perintah geser dikirim satu per satu (tidak menumpuk), dan sisa pecahan piksel ditutup oleh
-// translate CSS supaya gerakan tidak patah-patah.
+// Berkeliling: yang bergerak murni translate CSS di dalam jendela (compositor, subpiksel mulus).
+// Jendela native TIDAK digeser selama animasi karena memindahkan jendela OS berkali-kali per detik
+// tidak pernah sinkron dengan repaint webview dan itulah sumber getaran. Jangkauan jalan dibatasi
+// oleh ruang kosong di dalam jendela, dan setiap gerakan berakhir dengan kembali ke posisi asal.
 //
 // Gaya dasar di bottom-play.css (membaca --bp-x/--bp-y/--bp-r/--bp-sx/--bp-sy).
 // Saklar di Pengaturan > Perilaku (localStorage "notch.bottomPlay").
@@ -27,7 +28,7 @@ export type BottomPlayHooks = {
     getTy?: () => number;                   // koordinat atas jendela saat menempel di samping
     setTy?: (ty: number) => Promise<unknown>;
     verticalRange?: () => [number, number];  // rentang Y saat menempel di samping
-    hit: () => void;                        // perbarui area klik
+    hit: (dx?: number, dy?: number) => void; // perbarui area klik (dx/dy = geseran CSS notch dari posisi asalnya)
 };
 
 const KEY = "notch.bottomPlay";
@@ -58,13 +59,13 @@ const CANCEL = Symbol("cancel");
 // Selain itu, ada burst liquid terjadwal setiap 3 menit sebanyak 3 rangkaian.
 const LIQUID_INTERVAL_MS = 3 * 60 * 1000;
 const LIQUID_REPETITIONS = 3;
-const NORMAL: [string, number][] = [["liquid", 6], ["roam", 3], ["wiggle", 2], ["squish", 2], ["sway", 2], ["dance", 1], ["yawn", 1]];
-const MUSIC: [string, number][] = [["liquid", 7], ["dance", 5], ["roam", 3], ["wiggle", 2], ["squish", 1]];
+const NORMAL: [string, number][] = [["liquid", 6], ["ghost", 4], ["roam", 3], ["wiggle", 2], ["squish", 2], ["sway", 2], ["dance", 1], ["yawn", 1]];
+const MUSIC: [string, number][] = [["liquid", 7], ["dance", 5], ["ghost", 3], ["roam", 3], ["wiggle", 2], ["squish", 1]];
 const CALM: [string, number][] = [["yawn", 3], ["sway", 3], ["squish", 2], ["liquid", 1]];
 
 const MOOD: Record<string, [string, number]> = {
     hop: ["happy", 1400], peek: ["surprised", 1200], wiggle: ["happy", 1200], roam: ["happy", 2600],
-    squish: ["surprised", 900], sway: ["suspicious", 2200], dance: ["love", 1800], yawn: ["sleepy", 2400], liquid: ["happy", 1900],
+    squish: ["surprised", 900], sway: ["suspicious", 2200], dance: ["love", 1800], yawn: ["sleepy", 2400], liquid: ["happy", 1900], ghost: ["surprised", 2600],
 };
 
 function pick(list: [string, number][], avoid: string): string {
@@ -88,24 +89,21 @@ export function initBottomPlay(h: BottomPlayHooks) {
     const px = new Spring(38, 11);       // posisi x visual notch di layar (mengikuti "wortel")
     const flow = new Spring(18, 8);      // rotasi organik yang berubah perlahan
     const float = new Spring(24, 9);     // gerak naik-turun halus seperti cairan
+    const tall = new Spring(150, 13);    // memanjang ala hantu: + meninggi (sy naik, sx menyempit), - gepeng saat mendarat
     let rotT = 0;                        // kemiringan yang diminta gerakan (di luar kemiringan inersia)
     let nextRippleAt = 0;                // waktu impuls cairan berikutnya
     const resetTune = () => {
         sq.tune(220, 9); wall.tune(220, 9); rot.tune(100, 9); px.tune(38, 11);
         flow.tune(18, 8); float.tune(24, 9); flow.t = 0; float.t = 0; y.tune(0, 0);
+        tall.tune(150, 13); tall.t = 0;
     };
     resetTune();
 
-    let travel: null | { dest: number; carrot: number; cv: number; speed: number; edge: boolean; bumped: boolean } = null;
+    let travel: null | { dest: number; carrot: number; cv: number; speed: number; edge: boolean; bumped: boolean; acc?: number } = null;
     let prevV = 0, axS = 0;              // percepatan halus (untuk memiringkan badan karena inersia)
 
-    // Pengiriman posisi native dibatasi 30 fps. RAF tetap berjalan pada refresh rate layar,
-    // sedangkan posisi visual dihaluskan lewat translate CSS di antara perpindahan native.
-    // Target selalu di-coalesce: ketika IPC sibuk, hanya koordinat terbaru yang dikirim.
-    const NATIVE_MIN_INTERVAL = 1000 / 30;
-    let sent = -1, wanted = -1, inflight = false;
-    let lastNativeAt = -Infinity;
-    let flushTimer = 0;
+    // Posisi asal notch (sumbu aktif) dan ruang geser CSS di dalam jendela pada kedua arah.
+    let anchor0 = 0, slackLo = 0, slackHi = 0;
     let lastHit = 0;
 
     let active = "";
@@ -184,74 +182,17 @@ export function initBottomPlay(h: BottomPlayHooks) {
         reportTest({ requestId, ok: true, message: active ? "Tes liquid masuk antrean; gerakan aktif saat ini selesai dahulu." : "Tes liquid dimulai." });
         console.info("[BottomPlay] Tes liquid diminta dari Settings.");
     }).catch((error) => console.warn("[BottomPlay] Listener tes gagal:", error));
-    const axisRange = (): [number, number] => {
-        const dock = axisDock();
-        if (isSideDock(dock) && h.verticalRange) return h.verticalRange();
-        return h.range();
-    };
+    const MAX_WALK = 380; // batas jalan dari posisi asal (px)
+    const axisRange = (): [number, number] =>
+        [anchor0 - Math.min(slackLo, MAX_WALK), anchor0 + Math.min(slackHi, MAX_WALK)];
     const axisPosition = (): number => {
         const dock = axisDock();
         if (isSideDock(dock)) return h.getTy?.() ?? -1;
         return h.getCx();
     };
-    const setAxisPosition = (value: number): Promise<unknown> => {
-        // Setelah hover/interaksi, jangan menyelesaikan gerakan lama memakai orientasi baru.
-        // Khusus gerak sisi, setCx akan mengatur ty=BOTTOM_TY; jadi stale Y tidak boleh masuk ke sana.
-        if (!active || !allowed()) return Promise.resolve();
-        const dock = axisDock();
-        if (isSideDock(dock) && h.setTy) return h.setTy(value);
-        return h.setCx(value);
-    };
-
     // ---------- menunggu (digerakkan frame, bisa dibatalkan) ----------
     const until = (ok: () => boolean) => new Promise<void>((res, rej) => { waits.push({ ok, res, rej }); });
     const wait = (ms: number) => { const t = performance.now() + ms; return until(() => performance.now() >= t); };
-
-    // ---------- posisi native ----------
-    function flush() {
-        // Batalkan target yang masih antre ketika hover/view mengubah dock. Sebelumnya flush()
-        // tetap berjalan setelah abort(), lalu currentDock() menjadi null dan sumbu Y dikirim
-        // sebagai X ke setCx() (yang menempelkan notch di bawah layar).
-        if (!active || !allowed()) {
-            if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
-            wanted = sent;
-            return;
-        }
-        if (inflight || wanted < 0) return;
-        if (wanted === sent) {
-            if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
-            return;
-        }
-
-        const remaining = NATIVE_MIN_INTERVAL - (performance.now() - lastNativeAt);
-        if (remaining > 0) {
-            if (!flushTimer) {
-                flushTimer = window.setTimeout(() => {
-                    flushTimer = 0;
-                    flush();
-                }, remaining);
-            }
-            return;
-        }
-
-        if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
-        inflight = true;
-        const target = wanted; // ambil hanya target paling baru; target yang tertinggal tidak diantrikan
-        sent = target;
-        lastNativeAt = performance.now();
-        setAxisPosition(target).catch(() => { }).finally(() => {
-            inflight = false;
-            if (wanted !== sent) flush();
-        });
-    }
-    function applyPosition() {
-        // frame() masih meredam pegas sesudah abort(). Itu hanya efek visual; jangan kirim
-        // koordinat native lagi setelah gerakan dibatalkan oleh hover atau interaksi.
-        if (!active || !allowed()) return;
-        const [lo, hi] = axisRange();
-        wanted = Math.round(clamp(px.x, lo, hi));
-        flush();
-    }
 
     // ---------- fisika ----------
 
@@ -267,7 +208,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
         } else {
             y.step(dt);
         }
-        sq.step(dt); wall.step(dt); rot.step(dt); px.step(dt); flow.step(dt); float.step(dt);
+        sq.step(dt); wall.step(dt); rot.step(dt); px.step(dt); flow.step(dt); float.step(dt); tall.step(dt);
     }
 
     function stepTravel(dt: number) {
@@ -276,8 +217,9 @@ export function initBottomPlay(h: BottomPlayHooks) {
         const [lo, hi] = axisRange();
         T.dest = clamp(T.dest, lo, hi);
         const d = T.dest - T.carrot;
-        const vd = Math.sign(d) * Math.min(T.speed, Math.sqrt(2 * ACC * Math.abs(d)));
-        T.cv += clamp(vd - T.cv, -ACC * dt, ACC * dt);
+        const A = T.acc ?? ACC;
+        const vd = Math.sign(d) * Math.min(T.speed, Math.sqrt(2 * A * Math.abs(d)));
+        T.cv += clamp(vd - T.cv, -A * dt, A * dt);
         T.carrot += T.cv * dt;
         if (Math.abs(d) < 0.5 && Math.abs(T.cv) < 8) { T.carrot = T.dest; T.cv = 0; }
         px.t = T.carrot;
@@ -296,12 +238,8 @@ export function initBottomPlay(h: BottomPlayHooks) {
         // Pertahankan sumbu gerak sebelumnya selama efek pegas mereda setelah abort().
         const dock = axisDock();
         const side = isSideDock(dock);
-        const [lo, hi] = axisRange();
-        // Pakai posisi native terbaru sebagai jangkar, lalu CSS mengisi gerakan subpiksel
-        // di antara update native. Pada sisi, sumbu gerak menjadi Y, bukan X.
-        const anchor = axisPosition();
-        const base = clamp(anchor < 0 ? (sent < 0 ? px.x : sent) : anchor, lo, hi);
-        const resid = clamp(px.x - base, -22, 22);
+        // Seluruh perpindahan = translate CSS dari posisi asal (jendela native tidak bergerak).
+        const resid = clamp(px.x - anchor0, -slackLo - 4, slackHi + 4);
         const speedStretch = Math.min(0.13, Math.abs(px.v) * 0.00022);
         const ripple = flow.x;
         const pulse = clamp(float.x * 0.012, -0.025, 0.025);
@@ -310,26 +248,33 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (side) {
             // Di sisi, peregangan mengikuti gerak vertikal. Sisi luar tetap menjadi titik tumpu.
             sx = clamp(1 + sq.x * 0.60 - wall.x * 0.70 - pulse * 0.20 - speedStretch * 0.35 - ripple * 0.0015, 0.90, 1.10);
-            sy = clamp(1 - sq.x * 0.72 + wall.x * 0.25 + pulse + speedStretch + ripple * 0.003, 0.90, 1.12);
+            sy = clamp(1 - sq.x * 0.72 + wall.x * 0.25 + pulse + speedStretch + ripple * 0.003 + rot.x * 0.005, 0.90, 1.12);
         } else {
             // Di bawah, peregangan mengikuti gerak horizontal dan titik bawah tetap terkunci.
-            sx = clamp(1 + sq.x * 0.72 - wall.x * 0.72 - pulse * 0.25 + speedStretch - ripple * 0.0015, 0.92, 1.12);
+            sx = clamp(1 + sq.x * 0.72 - wall.x * 0.72 - pulse * 0.25 + speedStretch - ripple * 0.0015 + rot.x * 0.005, 0.92, 1.12);
             sy = clamp(1 - sq.x + wall.x * 0.5 + pulse - speedStretch * 0.3 + ripple * 0.003, 0.90, 1.10);
         }
+        // Efek hantu: hanya memakai scale (compositor), jadi tetap ringan dan tidak bergetar.
+        // Saat meninggi badan sedikit menyempit; saat menyusut ada sedikit gepeng lalu kembali 1.
+        const lift = clamp(tall.x, -0.25, 1.1);
+        sx = clamp(sx - lift * 0.30, 0.68, 1.12);
+        sy = clamp(sy + lift, 0.75, 2.1);
         const style = h.shell.style;
         if (side) style.setProperty("--bp-y", `${resid.toFixed(2)}px`);
         else style.setProperty("--bp-x", `${resid.toFixed(2)}px`);
         // Rotasi perlu ditulis setiap frame; sebelumnya --bp-r di-reset ke 0 saat mulai
         // tetapi tidak pernah diperbarui, sehingga wiggle/sway/dance nyaris tidak terlihat.
-        const rotation = clamp(rot.x + wall.x * (side ? 5 : 4), -14, 14);
-        style.setProperty("--bp-r", `${rotation.toFixed(3)}deg`);
+        // TIDAK ada rotasi nyata: memutar badan di atas tepi layar mengangkat salah satu sudutnya
+        // sehingga notch terlepas dari dasar/sisi. Kemiringan diterjemahkan jadi goyangan lebar/tinggi
+        // saja, sedangkan sisi yang menempel tidak pernah bergeser.
+        style.setProperty("--bp-r", "0deg");
         style.setProperty("--bp-sx", sx.toFixed(4));
         style.setProperty("--bp-sy", sy.toFixed(4));
     }
 
     const settled = () =>
-        !active && !travel && !inflight && !flushTimer && wanted === sent &&
-        rot.rest && sq.rest && wall.rest && flow.rest && float.rest && grav &&
+        !active && !travel &&
+        rot.rest && sq.rest && wall.rest && flow.rest && float.rest && tall.rest && grav &&
         y.x === 0 && y.v === 0 && Math.abs(px.v) < 0.5 && Math.abs(rotT) < 0.02 && Math.abs(rot.x) < 0.02;
 
     function frame(ts: number) {
@@ -344,11 +289,12 @@ export function initBottomPlay(h: BottomPlayHooks) {
         if (active && now >= nextRippleAt) {
             const calm = h.calm();
             const strength = calm ? 0.34 : h.playing() ? 1.12 : 0.82;
-            nextRippleAt = now + (calm ? rand(620, 1150) : h.playing() ? rand(180, 390) : rand(260, 650));
+            // Riak lebih jarang dan lebih halus supaya tubuh tidak terlihat bergetar terus-menerus.
+            nextRippleAt = now + (calm ? rand(1000, 1700) : h.playing() ? rand(380, 760) : rand(520, 1150));
             flow.t = rand(-2.5, 2.5) * strength;
             float.t = rand(-1.25, 0.55) * strength;
-            poke(sq, rand(-0.035, 0.05) * strength);
-            if (Math.random() < 0.18) poke(wall, rand(-0.022, 0.028) * strength);
+            poke(sq, rand(-0.018, 0.026) * strength);
+            if (Math.random() < 0.08) poke(wall, rand(-0.012, 0.015) * strength);
         } else if (!active) {
             flow.t = 0;
             float.t = 0;
@@ -358,16 +304,19 @@ export function initBottomPlay(h: BottomPlayHooks) {
         // inersia: badan condong ke belakang saat melaju, ke depan saat mengerem
         const ax = (px.v - prevV) / dt; prevV = px.v;
         axS += (ax - axS) * 0.25;
-        rot.t = rotT + clamp(-axS * 0.0035 + px.v * 0.005, -10, 10);
+        rot.t = rotT; // tanpa kemiringan inersia: sumber goyangan acak yang terlihat seperti getar
 
         // Substep 12 ms cukup stabil untuk pegas yang dipakai di sini dan mengurangi kerja CPU.
         const n = Math.ceil(dt / 0.012), sub = dt / n;
         for (let i = 0; i < n; i++) physics(sub);
         if (!grav && !active && Math.abs(y.x) < 0.5 && Math.abs(y.v) < 20) { grav = true; y.x = 0; y.v = 0; }
 
-        if (travel || Math.abs(px.v) > 0.3 || wanted !== Math.round(px.x)) applyPosition();
-        // Hitbox tidak perlu diperbarui tiap frame; 4x/detik cukup untuk pergerakan horizontal.
-        if (travel && now - lastHit > 250) { lastHit = now; h.hit(); }
+        // Area klik native mengikuti notch yang bergeser (10x/detik cukup, tanpa menggeser jendela).
+        if ((travel || Math.abs(px.v) > 0.5) && now - lastHit > 100) {
+            lastHit = now;
+            const d = px.x - anchor0;
+            if (isSideDock(axisDock())) h.hit(0, d); else h.hit(d, 0);
+        }
         paint();
 
         const ready = waits.filter((w) => w.ok());
@@ -385,7 +334,6 @@ export function initBottomPlay(h: BottomPlayHooks) {
 
     function finish() {
         raf = 0;
-        if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
         h.shell.removeAttribute("data-play");
         h.shell.removeAttribute("data-play-axis");
         for (const v of ["--bp-x", "--bp-y", "--bp-r", "--bp-sx", "--bp-sy"]) h.shell.style.removeProperty(v);
@@ -396,16 +344,18 @@ export function initBottomPlay(h: BottomPlayHooks) {
 
     // dibatalkan (hover, kartu, seretan, saklar mati): berhenti mengerem halus di tempat
     function abort() {
-        // Batalkan semua koordinat yang belum sempat dikirim sebelum membiarkan pegas mereda.
-        if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
-        wanted = sent;
         const ws = waits; waits = [];
         ws.forEach((w) => w.rej(CANCEL));
         active = "";
-        travel = null;
+        // Bila notch sedang jauh dari asalnya, luncurkan cepat dan halus kembali supaya hub/kartu
+        // yang terbuka karena interaksi muncul di posisi yang benar.
+        travel = Math.abs(px.x - anchor0) > 1.5
+            ? { dest: anchor0, carrot: px.x, cv: px.v, speed: 700, edge: false, bumped: false, acc: 2600 }
+            : null;
         px.t = px.x; px.tune(90, 22);
         sq.t = 0; wall.t = 0; rotT = 0;
         sq.tune(220, 12); rot.tune(160, 16);
+        tall.t = 0; tall.tune(220, 18); // hantu yang terputus menyusut cepat tapi halus
         if (!grav) { y.tune(160, 20); y.t = 0; }
         flow.t = 0; float.t = 0;
         schedule(1500);
@@ -533,6 +483,49 @@ export function initBottomPlay(h: BottomPlayHooks) {
             rotT = 0;
             sq.t = 0;
         },
+        // Berjalan pelan lalu TIBA-TIBA meninggi seperti hantu, tetap berjalan sambil menjulang,
+        // kemudian menyusut kembali ke ukuran semula. Murni scale CSS, tanpa mengubah ukuran jendela.
+        async ghost() {
+            const [lo, hi] = axisRange();
+            const span = hi - lo;
+            if (axisPosition() < 0 || span < 140) { await TRICKS.sway(); return; }
+
+            const side = isSideDock(axisDock());
+            const from = clamp(px.x, lo, hi);
+            const mid = (lo + hi) / 2;
+            // Selalu berjalan menuju sisi yang lebih lapang (di samping: badan memanjang ke bawah).
+            let dir = side ? (from > mid ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1);
+            const dist = clamp(rand(span * 0.2, span * 0.34), 120, span * 0.45);
+            if (from + dir * dist < lo || from + dir * dist > hi) dir = -dir;
+            const dest = clamp(from + dir * dist, lo, hi);
+
+            const moving = travelTo(dest, false, [40, 66]);
+            moving.catch(() => { }); // pembatalan ditangani oleh wait() di bawah
+            const vh = h.shell.offsetHeight || 60;
+
+            const bursts = Math.random() < 0.35 ? 2 : 1;
+            for (let i = 0; i < bursts; i++) {
+                await wait(rand(650, 1500));
+                // Tinggi dibatasi ruang yang tersisa di sisi layar supaya tidak terpotong.
+                let height = rand(0.7, 1.0) * (i ? 0.75 : 1);
+                if (side) height = Math.min(height, Math.max(0, (hi - Math.max(px.x, dest) + 12) / vh));
+                if (height < 0.3) break;
+
+                // MENINGGI mendadak: target naik + dorongan kecepatan awal agar terasa tiba-tiba.
+                tall.tune(150, 12); tall.t = height; poke(tall, 0.35);
+                h.mood("surprised", 1500);
+                rotT = rand(-2.5, 2.5);               // sedikit meliuk saat menjulang
+                flow.t = rand(-2, 2);
+                await wait(rand(1000, 1700));         // tetap berjalan sambil tinggi
+
+                // MENYUSUT ke ukuran semula, sedikit gepeng saat mendarat lalu pulih
+                tall.tune(130, 11); tall.t = 0; rotT = 0; flow.t = 0;
+                await wait(rand(450, 650));
+            }
+            await moving;
+            poke(sq, 0.05);
+            await wait(350);
+        },
         // meluncur ke posisi acak (kadang sampai mentok di tepi layar), lalu pulang
         async roam() {
             const [lo, hi] = axisRange();
@@ -632,12 +625,15 @@ export function initBottomPlay(h: BottomPlayHooks) {
         motionDock = dock; // kunci bawah/kiri/kanan selama gerakan dan fase mereda
         const side = isSideDock(dock);
         const position = axisPosition();
-        const [lo, hi] = axisRange();
-        px.x = px.t = position < 0 ? 0 : clamp(position, lo, hi);
+        // Ukur ruang kosong di dalam jendela sebelum transform animasi dipasang.
+        const rect = h.shell.getBoundingClientRect();
+        const margin = 8;
+        anchor0 = position < 0 ? 0 : position;
+        if (side) { slackLo = Math.max(0, rect.top - margin); slackHi = Math.max(0, window.innerHeight - rect.bottom - margin); }
+        else { slackLo = Math.max(0, rect.left - margin); slackHi = Math.max(0, window.innerWidth - rect.right - margin); }
+        if (position < 0) { slackLo = 0; slackHi = 0; }
+        px.x = px.t = anchor0;
         px.v = 0;
-        sent = wanted = position < 0 ? -1 : Math.round(position);
-        lastNativeAt = -Infinity;
-        if (flushTimer) { window.clearTimeout(flushTimer); flushTimer = 0; }
         h.shell.dataset.play = name;
         h.shell.dataset.playAxis = side ? "side" : "bottom";
         // Titik tumpu disetel untuk docking bawah atau samping saja.
@@ -651,6 +647,8 @@ export function initBottomPlay(h: BottomPlayHooks) {
         startLoop();
         try {
             await TRICKS[name]();
+            // Selalu pulang ke posisi asal dengan luncuran halus (jendela tidak dipindah).
+            if (Math.abs(px.x - anchor0) > 1.5) { await travelTo(anchor0, false, [55, 95]); await wait(250); }
         } catch (e) {
             if (e === CANCEL) {
                 // Gerakan liquid yang terputus oleh hover/interaksi tetap harus melengkapi 3 putaran.
@@ -668,7 +666,7 @@ export function initBottomPlay(h: BottomPlayHooks) {
             console.error("[BottomPlay] Animasi gagal:", name, e);
             active = "";
             travel = null;
-            sq.t = 0; wall.t = 0; rotT = 0; flow.t = 0; float.t = 0;
+            sq.t = 0; wall.t = 0; rotT = 0; flow.t = 0; float.t = 0; tall.t = 0;
             finish();
             schedule(1000);
         }

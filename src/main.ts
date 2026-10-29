@@ -7,8 +7,11 @@ import { initMoments, noteMedia, noteWeather, noteBattery, noteActivity, focusSt
 import { loadFace, saveFace, startClock, type Face } from "./clock";
 import { initCalendar, goToday, shiftMonth } from "./calendar";
 import { initHubNav } from "./hub-nav";
-import { initPrayer } from "./prayer";
+import { initPrayer, testAdhan } from "./prayer";
+import { initAdhanFace } from "./adhan-face";
+import { initMoodMouth } from "./mood-mouth";
 import { initBottomPlay } from "./bottom-play";
+import { initMomentBubble } from "./moment-bubble";
 import { getVersion } from "@tauri-apps/api/app";
 import { loadRemoteUpdateConfig, type RemoteUpdateConfig } from "./firebase";
 declare global {
@@ -77,6 +80,10 @@ const notch = $("notch");
 notch.addEventListener("scroll", () => { notch.scrollTop = 0; notch.scrollLeft = 0; });
 const eyes = document.querySelector<HTMLElement>(".eyes")!;
 const eyeEls = document.querySelectorAll<HTMLElement>(".eye");
+// Animasi mulut adzan (notch kiri/bawah: mulut di bawah mata; notch atas: wajah di ikon kartu).
+const adhanFace = initAdhanFace(notch, eyes);
+// Mulut mood (diam, ikut data-mood): tampil saat notch jadi bubble di samping/bawah layar.
+initMoodMouth(eyes);
 const isWin = navigator.userAgent.includes("Windows");
 
 // ---------- state bersama ----------
@@ -90,6 +97,7 @@ let keepAwake = false;
 // Siklus adzan: pertahankan notifikasi sampai audio selesai dan lanjutkan media jika sebelumnya berjalan.
 let prayerAdhanActive = false;
 let resumeMediaAfterAdhan = false;
+let adhanBubble = false; // adzan tampil sebagai awan (notch di kiri/bawah), bukan kartu
 
 let inside = false;
 let insideSince = 0;
@@ -426,11 +434,13 @@ function render() {
   // Saat pointer baru masuk, tahan state mini sampai hover delay terpenuhi.
   // Dengan begitu expand langsung ke hub, bukan lewat tampilan horizontal perantara.
   const hoverPending = inside && Date.now() - insideSince < T.hover_open_ms;
+  // Saat adzan tampil sebagai awan, notch tetap berbentuk bubble (kiri/kanan/bawah) walau kursor di atasnya.
   const bubble = (atSide || atBottom) && !override && !isDraggingWindow &&
-    (!inside || hoverPending || holdHover);
+    (!inside || hoverPending || holdHover || adhanBubble);
   const view = override ?? (
     bubble
-      ? (atSide ? (playing ? "edgeMedia" : "edgeIdle") : (playing ? "bottomMedia" : "bottomIdle"))
+      // selama adzan: selalu bentuk "idle" (ada mata + mulut), bukan piringan media yang sedang dijeda
+      ? (atSide ? (playing && !adhanBubble ? "edgeMedia" : "edgeIdle") : (playing && !adhanBubble ? "bottomMedia" : "bottomIdle"))
       : playing ? (hasCompactLyrics ? "compactLyrics" : "compact")
         : idleFace === "clock" ? "clock" : "idle"
   );
@@ -495,6 +505,7 @@ notch.addEventListener("change", (e) => {
 
 function expand(view: View, ms = 3000) {
   if (override === "rem" && view !== "rem") return; // pengingat aktif tidak boleh tertimpa
+  if (prayerAdhanActive && view !== "prayerAlert") return; // adzan sedang berbunyi: jangan ditimpa
   override = view;
   render();
   clearTimeout(hideTimer);
@@ -646,6 +657,7 @@ function setPage(i: number) {
 
 function openHub(p: number, ms = 0) {
   if (override === "rem") return; // pengingat aktif tidak boleh tertimpa hub
+  if (prayerAdhanActive) return; // adzan sedang berbunyi: jangan ditimpa hub
   setPage(p);
   hubByHover = ms === 0;
   closeAt = 0;
@@ -684,6 +696,9 @@ notch.addEventListener("wheel", (e) => {
   if (notch.dataset.view !== "hub") return;
   if ((e.target as HTMLElement).closest(".clip-list, .nt-pv-body, .nt-list, .cu-fx-list")) return; // biarkan daftar/preview di-scroll
   if ((e.target as HTMLElement).closest(".nv-list")) return; // nav ikon boleh di-scroll sendiri
+  // Currency saat jendela kecil: halamannya sendiri bisa di-scroll vertikal, jangan pindah menu.
+  const cuScroll = (e.target as HTMLElement).closest<HTMLElement>(".p-currency .cu-body-grid, .p-currency .cu-fx");
+  if (cuScroll && cuScroll.scrollHeight > cuScroll.clientHeight + 1 && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) return;
   const sh = (e.target as HTMLElement).closest<HTMLElement>(".sh-list"); // shelf: scroll mendatar
   if (sh && sh.scrollWidth > sh.clientWidth) { sh.scrollLeft += e.deltaY || e.deltaX; return; }
   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
@@ -960,6 +975,10 @@ function orbFrame() {
 function applyDrag() {
   const dx = lastPtr.x - startScreenX;
   const dy = lastPtr.y - startScreenY;
+  // Arah mata dari dx/dy yang SAMA dipakai untuk menggeser jendela (bukan orbVx/orbVy
+  // yang di-smoothing tiap frame) — dx/dy ini sudah pasti benar arahnya karena dx/dy
+  // jugalah yang membuat notch bergerak ke arah yang tepat (lihat rawCx/rawTy di bawah).
+  orbLook(dx, dy);
   let rawCx = startCx + dx;
   let rawTy = startTy + dy;
   if (orbOn) {
@@ -1095,7 +1114,7 @@ notch.addEventListener("click", (e) => {
   else flash("happy", 1200);
 
   // kartu pengingat (rem) tidak ditutup lewat klik: hanya lewat tombol Tunda / Selesai
-  if (override === "bt" || override === "dev" || override === "hud" || override === "prayerAlert") collapse();
+  if (override === "bt" || override === "dev" || override === "hud" || (override === "prayerAlert" && !prayerAdhanActive)) collapse();
   else if (!override) openHub(homePage());
 });
 notch.addEventListener("dblclick", () => flash("love", 2500));
@@ -1120,6 +1139,18 @@ function look(dx: number, dy: number) {
   eyes.style.setProperty("--lx", `${(dx / dist) * max * k}px`);
   eyes.style.setProperty("--ly", `${Math.max(-1, Math.min(1, (dy / dist) * max * k))}px`);
 }
+// Dipanggil tiap applyDrag() (lihat di atas): mata menghadap arah notch SUDAH BERGESER
+// dari titik awal pegang — dx/dy > 0 berarti sudah bergeser ke kanan/bawah, dst.
+// Sengaja pakai dx/dy total (bukan kecepatan per-frame orbVx/orbVy) supaya tidak ada
+// jeda/smoothing yang bisa membuat arah mata tertinggal / terasa "nyangkut".
+function orbLook(dx: number, dy: number) {
+  const max = 6;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return; // belum bergeser sama sekali: biarkan arah mata terakhir
+  const k = Math.min(1, dist / 40); // 40px geseran sudah cukup untuk lirikan penuh
+  eyes.style.setProperty("--lx", `${(dx / dist) * max * k}px`);
+  eyes.style.setProperty("--ly", `${Math.max(-1, Math.min(1, (dy / dist) * max * k))}px`);
+}
 let lastPos = { dx: 0, dy: 0 };
 listen<{ dx: number; dy: number }>("cursor", (e) => {
   const { dx, dy } = e.payload;
@@ -1132,7 +1163,9 @@ listen<{ dx: number; dy: number }>("cursor", (e) => {
   const v = notch.dataset.view ?? "idle";
   const hr = hitRect(v);
   const [WW] = winLogical();
-  look(dx - (hr.x + hr.w / 2 - WW / 2), dy - hr.y); // mata menghadap kursor dari tengah notch, bukan tengah jendela
+  // Selama notch digeser (orb), arah mata mengikuti arah geseran (orbLook di orbFrame),
+  // bukan posisi kursor relatif terhadap notch — jadi look() kursor dilewati dulu.
+  if (!orbOn) look(dx - (hr.x + hr.w / 2 - WW / 2), dy - hr.y); // mata menghadap kursor dari tengah notch, bukan tengah jendela
 
   // Windows: hover dihitung dari posisi global (jendela click-through tidak menerima event mouse)
   if (isWin) {
@@ -1338,7 +1371,7 @@ listen<Media>("media", (e) => {
   $("t-pos").textContent = fmt(m.position);
   $("t-len").textContent = fmt(m.length);
 
-  if (playing && m.title && m.title !== lastTitle) {
+  if (playing && m.title && m.title !== lastTitle && !prayerAdhanActive) {
     if (!inside) openHub(pageOf("media"), T.hub_auto_ms);
     if (lastTitle) flash("surprised", 900);
   } else render();
@@ -2710,7 +2743,7 @@ document.getElementById("nt-input")?.addEventListener("keydown", (e) => {
 refreshNotes();
 
 // ---------- tes manual lewat keyboard ----------
-// T ganti mata <-> jam | M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
+// A uji adzan penuh (tekan lagi untuk berhenti) | T ganti mata <-> jam | M indikator mic/kamera (demo) | 1-7 mood | B bluetooth | C/V/L baterai | D perangkat | W cuaca | H hub | U/I HUD | P timer | ← → halaman
 const keyMoods: Mood[] = ["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious"];
 const demo = Object.keys(ICONS);
 let demoI = 0;
@@ -2721,6 +2754,7 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   const i = Number(e.key) - 1;
   if (i >= 0 && i < keyMoods.length) flash(keyMoods[i], 3000);
+  if (k === "a" && !e.ctrlKey && !e.metaKey && !e.altKey) testAdhan(); // uji siklus adzan penuh: notch + mulut + jeda/lanjut media
   if (k === "b") { void openBtManual(); }
   if (k === "c") handleBattery(80, false);
   if (k === "v") handleBattery(80, true);
@@ -2780,17 +2814,29 @@ initNudge({
   mood: (m, ms) => flash(m as Mood, ms),
 });
 // Sapaan saat aplikasi dijalankan (juga setelah komputer restart) + penerima event tombol "Coba ucapkan" di Pengaturan.
+// Di sisi kiri / dasar layar sapaan dan komentar tampil sebagai awan percakapan yang mengarah ke notch
+// (moment-bubble.ts), bukan kartu lebar; di posisi lain tetap memakai kartu seperti biasa.
+const momentBubble = initMomentBubble({ shell: $("shell"), notch });
 const greetingApi = initGreeting({
-  canShow: () => override === null && !isDraggingWindow && !holdHover,
+  canShow: () => override === null && !prayerAdhanActive && !isDraggingWindow && !holdHover,
   isCard: () => override === "dev",
-  show: (ms) => { hubByHover = false; expand("dev", ms); },
+  show: (ms) => {
+    // greeting.ts sudah mengisi teksnya ke layer kartu; ambil dari sana untuk awan.
+    const text = $("greeting-text").textContent ?? "";
+    const sub = $("greeting-sub").textContent ?? "";
+    if (momentBubble.show(text, sub, ms)) { notch.classList.remove("greeting-active"); return; }
+    hubByHover = false; expand("dev", ms);
+  },
   mood: (m, ms) => flash(m as Mood, ms),
 });
 // Conversation Moments + Focus Companion: komentar teks memakai kartu yang sama, tidak pernah menimpa
 // adzan, pengingat, greeting, hub, atau kartu perangkat (menunggu antrean sampai notch bebas).
 initMoments({
   canShow: () => override === null && !prayerAdhanActive && !isDraggingWindow && !holdHover && !inside,
-  say: (text, sub, ms) => { greetingApi?.say(text, sub, ms); },
+  say: (text, sub, ms) => {
+    if (momentBubble.show(text, sub, ms)) { flash("happy", ms); return; }
+    greetingApi?.say(text, sub, ms);
+  },
 });
 
 // Pengingat jadwal shalat memakai kartu khusus. Saat adzan diputar, kartu ditahan
@@ -2804,21 +2850,40 @@ initPrayer({
     expand("prayerAlert", ms);
   },
   mood: (m, ms) => flash(m as Mood, ms),
-  adhanStart: (prayerName, sub) => {
+  adhanStart: async (prayerName, sub) => {
     if (prayerAdhanActive) return;
     prayerAdhanActive = true;
     resumeMediaAfterAdhan = playing;
 
     clearTimeout(hideTimer);
-    $("pr-alert-title").textContent = `Waktu ${prayerName}`;
-    $("pr-alert-sub").textContent = `${sub} · Adzan sedang diputar`;
-    $("pr-alert-status").textContent = "ADZAN";
-    hubByHover = false;
-    override = "prayerAlert";
-    render(); // ms = 0: alert tetap terbuka hingga adhanEnd dipanggil.
+    // Notch di kiri/kanan/bawah: awan percakapan yang menempel sampai adzan selesai.
+    // Posisi atas/melayang: kartu prayerAlert seperti sebelumnya.
+    adhanFace.start(); // mulut bergerak selama adzan berbunyi (awan maupun kartu)
 
+    // Notch menempel di kiri/kanan/bawah: pakai awan (bukan kartu). Tutup hub/kartu lain yang sedang terbuka
+    // (kecuali pengingat) lalu paksa bentuk bubble sebelum awan dipasang.
+    const docked = notch.classList.contains("is-bottom") ||
+      notch.classList.contains("is-edge-left") || notch.classList.contains("is-edge-right");
+    adhanBubble = docked;
+    if (docked) {
+      if (override !== null && override !== "rem") { override = null; hubByHover = false; }
+      render();
+    }
+    if (docked && override === null && momentBubble.showSticky(`Waktu ${prayerName}`, "Adzan sedang diputar")) {
+      // awan tampil
+    } else {
+      adhanBubble = false;
+      $("pr-alert-title").textContent = `Waktu ${prayerName}`;
+      $("pr-alert-sub").textContent = `${sub} · Adzan sedang diputar`;
+      $("pr-alert-status").textContent = "ADZAN";
+      hubByHover = false;
+      override = "prayerAlert";
+      render(); // ms = 0: alert tetap terbuka hingga adhanEnd dipanggil.
+    }
+
+    // Jeda semua pemutar yang sedang berjalan; prayer.ts menunggu ini selesai sebelum adzan diputar.
     if (resumeMediaAfterAdhan) {
-      void invoke("media_control", { action: "pause" }).catch((err) =>
+      await invoke("media_pause_all").catch((err) =>
         console.warn("Tidak bisa menjeda media saat adzan:", err)
       );
     }
@@ -2827,7 +2892,12 @@ initPrayer({
     if (!prayerAdhanActive) return;
     prayerAdhanActive = false;
     clearTimeout(hideTimer);
-    if (override === "prayerAlert") {
+    adhanFace.stop();
+    if (adhanBubble) {
+      adhanBubble = false;
+      momentBubble.hideSticky();
+      render(); // kembali ke tampilan media/idle biasa
+    } else if (override === "prayerAlert") {
       override = null;
       hubByHover = false;
       render();
@@ -2836,11 +2906,12 @@ initPrayer({
     const resume = resumeMediaAfterAdhan;
     resumeMediaAfterAdhan = false;
     if (resume) {
-      void invoke("media_control", { action: "play" }).catch((err) =>
+      void invoke("media_resume").catch((err) =>
         console.warn("Tidak bisa melanjutkan media setelah adzan:", err)
       );
     }
   },
+  adhanError: (message) => console.warn("Adzan gagal diputar:", message),
 });
 function safeUpdateUrl(raw: string): string | null {
   const value = raw.trim();
@@ -2941,6 +3012,7 @@ initBottomPlay({
   notch,
   busy: () => inside || override !== null || isDraggingWindow || holdHover ||
     notch.classList.contains("dropping") || notch.classList.contains("greeting-active") ||
+    momentBubble.active() || // awan percakapan tampil: notch diam supaya awan tidak ikut miring/melar
     // kelas "currency-expanded" bisa tertinggal setelah hub menutup di halaman Currency, sehingga
     // animasi bottom-play terblokir selamanya; cukup cek hub Currency yang benar-benar terbuka.
     isCurrencyHub(),
@@ -2981,7 +3053,10 @@ initBottomPlay({
     const margin = Math.round(18 * CFG.scale);
     return [MON.y + margin, MON.y + MON.h - vh - margin];
   },
-  hit: () => setHit(notch.dataset.view ?? "idle"),
+  hit: (dx = 0, dy = 0) => {
+    const r = hitRect(notch.dataset.view ?? "idle");
+    invoke("set_hit_area", { x: r.x + Math.round(dx), y: r.y + Math.round(dy), w: r.w, h: r.h });
+  },
 });
 
 if (clockOn) startClock();

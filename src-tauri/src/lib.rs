@@ -588,6 +588,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             media::media_control,
+            media::media_pause_all,
+            media::media_resume,
             media::media_seek,
             set_size,
             set_hit_area,

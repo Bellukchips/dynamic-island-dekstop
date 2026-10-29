@@ -13,7 +13,7 @@ type Entry = { key: string; name: string; at: Date };
 type Hooks = {
     card: (title: string, sub: string, ms: number) => void;
     mood: (m: string, ms: number) => void;
-    adhanStart: (prayerName: string, sub: string) => void;
+    adhanStart: (prayerName: string, sub: string) => void | Promise<void>;
     adhanEnd: () => void;
     adhanError?: (message: string) => void;
 };
@@ -179,7 +179,7 @@ let activeAdhanFinish: (() => void) | null = null;
 /** Putar MP3 adzan dan coba jalur aset alternatif bila salah satu URL tidak tersedia.
  * Alert hanya ditutup oleh event `ended`, bukan oleh fallback nada singkat.
  */
-function adzan(prayerName = "Adzan", showNotch = true) {
+async function adzan(prayerName = "Adzan", showNotch = true) {
     // Hentikan siklus lama dengan rapi sebelum memulai tes/siklus baru.
     if (activeAdhanFinish) {
         const stopPrevious = activeAdhanFinish;
@@ -210,7 +210,14 @@ function adzan(prayerName = "Adzan", showNotch = true) {
 
     if (showNotch) {
         const sub = `${hhmm(new Date())} · ${prefs?.kabkota ?? "Lokasi shalat"}`;
-        hooks.adhanStart(prayerName, sub);
+        // Tunggu media dijeda dulu (maks. 2 dtk) supaya adzan tidak bertumpuk dengan musik.
+        try {
+            await Promise.race([
+                Promise.resolve(hooks.adhanStart(prayerName, sub)),
+                new Promise<void>((r) => setTimeout(r, 2000)),
+            ]);
+        } catch (e) { console.warn("[Prayer] adhanStart gagal:", e); }
+        if (finished) return; // siklus ini sudah dihentikan oleh pemanggilan adzan yang baru
     }
 
     const failAllSources = () => {
@@ -222,7 +229,8 @@ function adzan(prayerName = "Adzan", showNotch = true) {
         const message = `File adzan.mp3 tidak dapat dimuat. Pastikan file tersedia di src/public/adzan.mp3 atau public/adzan.mp3.${detail}`;
         console.error("[Prayer] Semua jalur audio adzan gagal:", ADZAN_URLS, failDetails);
         // Jangan putar beep pendek lalu menutup alert seolah adzan selesai.
-        if (showNotch) hooks.adhanError?.(message);
+        // Akhiri siklus juga: alert tidak boleh tertahan dan media harus dilanjutkan.
+        if (showNotch) { hooks.adhanError?.(message); hooks.adhanEnd(); }
     };
 
     const tryNextSource = (reason: unknown) => {
@@ -272,6 +280,22 @@ function adzan(prayerName = "Adzan", showNotch = true) {
 
     // Pemanggilan ini dimulai sebagai kandidat pertama; bila gagal, URL berikutnya dicoba.
     tryNextSource("Memulai pemutaran");
+}
+
+/** Uji siklus adzan PENUH (notch/awan + mulut + jeda & lanjut media) tanpa menunggu waktu shalat.
+ * Dipanggil lagi saat adzan berbunyi = hentikan. Tombol "Tes adzan" di halaman ini tetap hanya memutar suara. */
+export function testAdhan() {
+    if (activeAdhanFinish) {
+        const stop = activeAdhanFinish;
+        activeAdhanFinish = null;
+        if (activeAdhanAudio) {
+            activeAdhanAudio.pause();
+            try { activeAdhanAudio.currentTime = 0; } catch { /* abaikan */ }
+        }
+        stop();
+        return;
+    }
+    void adzan("Tes adzan", true);
 }
 
 // ---------- pengingat ----------

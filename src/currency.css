@@ -257,11 +257,37 @@
 
 @media (max-width: 680px) {
   .p-currency { padding: 12px; gap: 10px; }
-  .cu-body-grid { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
-  .cu-convert-panel, .cu-markets { padding: 13px; }
+  /* Satu kolom: tiap panel setinggi isinya (tidak lagi dipaksa menyusut), lalu area ini yang di-scroll. */
+  .cu-body-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    align-items: start;
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--fg-rgb), .22) transparent;
+  }
+  .cu-convert-panel, .cu-markets { min-height: auto; padding: 13px; overflow: visible; }
+  .cu-convert-panel > .cu-converter { flex: 0 0 auto; }
+  .cu-converter { grid-template-rows: auto auto auto; }
+  .cu-result { min-height: 86px; flex: 0 0 auto; }
+  .cu-result strong { font-size: clamp(22px, 6vw, 30px); }
+  .cu-markets { flex: 0 0 auto; }
+  .cu-stock-columns { flex: 0 0 auto; }
   .cu-head strong { font-size: 15px; }
+  .cu-head small { max-width: 180px; }
+  #cu-refresh, #cu-expand { padding: 0 9px; }
   .cu-stock-group { padding: 9px 7px; }
   .cu-quick button:nth-child(n+5) { display: none; }
+}
+/* Jendela pendek (skala notch kecil): jangan biarkan panel saling menimpa. */
+@media (max-height: 470px) {
+  .cu-body-grid { overflow-y: auto; }
+  .cu-convert-panel, .cu-markets { min-height: auto; }
+  .cu-result { min-height: 86px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #cu-refresh, #cu-expand, .cu-input-group, #cu-target, .cu-quick button, .cu-fx-row { transition: none; }
@@ -387,6 +413,40 @@
 .cu-fx-status { margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(var(--fg-rgb), .075); }
 
 @media (max-width: 680px) {
-  .p-currency.cu-expanded .cu-fx { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
-  .cu-fx-list { max-height: 180px; }
+  .p-currency.cu-expanded .cu-fx { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; overflow-y: auto; }
+  .cu-fx-side, .cu-fx-main { min-height: auto; }
+  .cu-fx-list { flex: 0 0 auto; max-height: 180px; }
+  .cu-fx-chart { flex: 0 0 auto; height: 160px; }
 }
+
+
+/* ---------- Scrollbar kustom (semua area scroll di Currency) ---------- */
+.p-currency .cu-body-grid,
+.p-currency .cu-fx,
+.p-currency .cu-fx-list {
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--fg-rgb), .26) transparent;
+}
+.p-currency .cu-body-grid::-webkit-scrollbar,
+.p-currency .cu-fx::-webkit-scrollbar,
+.p-currency .cu-fx-list::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+.p-currency .cu-body-grid::-webkit-scrollbar-track,
+.p-currency .cu-fx::-webkit-scrollbar-track,
+.p-currency .cu-fx-list::-webkit-scrollbar-track { margin: 6px 0; border-radius: 99px; background: rgba(var(--fg-rgb), .04); }
+.p-currency .cu-body-grid::-webkit-scrollbar-thumb,
+.p-currency .cu-fx::-webkit-scrollbar-thumb,
+.p-currency .cu-fx-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: rgba(var(--fg-rgb), .26) padding-box;
+  transition: background .15s ease;
+}
+.p-currency .cu-body-grid::-webkit-scrollbar-thumb:hover,
+.p-currency .cu-fx::-webkit-scrollbar-thumb:hover,
+.p-currency .cu-fx-list::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent), .75) padding-box; }
+.p-currency .cu-body-grid::-webkit-scrollbar-thumb:active,
+.p-currency .cu-fx::-webkit-scrollbar-thumb:active,
+.p-currency .cu-fx-list::-webkit-scrollbar-thumb:active { background: rgb(var(--accent)) padding-box; }
+.p-currency ::-webkit-scrollbar-corner { background: transparent; }
+.p-currency ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
