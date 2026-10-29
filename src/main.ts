@@ -1671,32 +1671,60 @@ function refreshQuick() {
   });
 });
 
-// ---------- status sistem (CPU / RAM / jaringan) ----------
+// ---------- status sistem ----------
 type Stats = {
-  cpu: number; ram: number; ram_used: number; ram_total: number; down: number; up: number;
+  cpu: number; cpu_cores: number; cpu_freq_mhz: number; cpu_name: string;
+  ram: number; ram_used: number; ram_total: number;
+  swap: number; swap_used: number; swap_total: number;
+  disk: number; disk_used: number; disk_total: number; disk_label: string;
+  down: number; up: number;
+  processes: number; uptime_secs: number;
+  host_name: string; os_name: string; os_version: string; kernel_version: string;
 };
 const fmtSpeed = (b: number) =>
   b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB/s` : `${Math.round(b / 1024)} KB/s`;
-const GB = 1024 ** 3;
+const GIB = 1024 ** 3;
+const gib = (b: number) => (b / GIB).toFixed(1);
+const fmtUptime = (s: number) => {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? `Aktif ${d}h ${h}j` : h ? `Aktif ${h}j ${m}m` : `Aktif ${m}m`;
+};
+
+function setBar(barId: string, valId: string, pct: number, hotAt: number) {
+  const p = Math.round(pct);
+  const bar = $(barId);
+  bar.style.width = `${p}%`;
+  bar.classList.toggle("hot", p >= hotAt);
+  $(valId).textContent = `${p}%`;
+}
 
 listen<Stats>("stats", (e) => {
   const s = e.payload;
-  const cpu = Math.round(s.cpu), ram = Math.round(s.ram);
+  if (!document.getElementById("st-cpu")) return; // halaman stats dimatikan di config
 
-  const cpuBar = document.getElementById("st-cpu");
-  if (!cpuBar) return; // halaman stats dimatikan di config
-  cpuBar.style.width = `${cpu}%`;
-  cpuBar.classList.toggle("hot", cpu >= 85);
-  $("st-cpu-v").textContent = `${cpu}%`;
+  setBar("st-cpu", "st-cpu-v", s.cpu, 85);
+  const cpuMeta = [s.cpu_name, `${s.cpu_cores} thread`];
+  if (s.cpu_freq_mhz > 0) cpuMeta.push(`${(s.cpu_freq_mhz / 1000).toFixed(1)} GHz`);
+  $("st-cpu-meta").textContent = cpuMeta.join(" · ");
 
-  const ramBar = $("st-ram");
-  ramBar.style.width = `${ram}%`;
-  ramBar.classList.toggle("hot", ram >= 90);
-  $("st-ram-v").textContent = `${ram}%`;
+  setBar("st-ram", "st-ram-v", s.ram, 90);
+  $("st-ram-meta").textContent = `${gib(s.ram_used)} / ${gib(s.ram_total)} GiB digunakan`;
 
-  $("st-ram-gb").textContent = `${(s.ram_used / GB).toFixed(1)} / ${(s.ram_total / GB).toFixed(0)} GB`;
+  setBar("st-swap", "st-swap-v", s.swap, 90);
+  $("st-swap-meta").textContent = `${gib(s.swap_used)} / ${gib(s.swap_total)} GiB digunakan`;
+
+  setBar("st-disk", "st-disk-v", s.disk, 90);
+  $("st-disk-meta").textContent = s.disk_total
+    ? `${s.disk_label} · ${gib(s.disk_used)} / ${gib(s.disk_total)} GiB`
+    : "Penyimpanan N/A";
+
   $("st-down").textContent = `↓ ${fmtSpeed(s.down)}`;
   $("st-up").textContent = `↑ ${fmtSpeed(s.up)}`;
+  $("st-processes").textContent = `${s.processes} proses`;
+  $("st-uptime").textContent = fmtUptime(s.uptime_secs);
+  $("st-host").textContent = s.host_name;
+  $("st-os").textContent = `${s.os_name} ${s.os_version}`.trim();
+  $("st-kernel").textContent = s.kernel_version;
 });
 
 // ---------- riwayat clipboard ----------
