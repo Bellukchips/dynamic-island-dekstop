@@ -23,6 +23,7 @@ type Appearance = {
   light_bg: string;
   accent: string;     // kosong = otomatis dari cover album
   default_mood: string; // ekspresi mata bawaan saat idle
+  eye_theme?: string;   // skin mata: aurora | neon | ... | kawaii | boba | galaxy | frost
 };
 type Cfg = {
   scale: number;
@@ -39,7 +40,7 @@ const FALLBACK: Cfg = {
   pages: ["media", "clock", "weather", "battery", "timer", "quick", "tools", "stats", "reminder", "notes", "clipboard", "shelf", "lyrics", "privacy", "prayer"],
   timing: { hub_auto_ms: 4000, card_ms: 3500, hud_ms: 1500, hover_open_ms: 150, hover_close_ms: 450, sleep_after_s: 60 },
   pomodoro: { focus_min: 25, break_min: 5, long_break_min: 15, rounds: 4 },
-  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal" },
+  appearance: { theme: "auto", background: "#000000", text: "", dark_bg: "#000000", light_bg: "#f5f5f7", accent: "", default_mood: "normal", eye_theme: "aurora" },
 };
 const CFG: Cfg = { ...FALLBACK, ...((window as any).__CFG__ ?? {}) };
 const T = CFG.timing;
@@ -92,6 +93,10 @@ let inside = false;
 let insideSince = 0;
 let hubByHover = false;
 let closeAt = 0;
+// dropdown native (mis. mata uang tujuan): popup-nya terbuka di luar jendela notch, jadi kursor
+// "keluar" dari notch. Selama dropdown terbuka (dan sebentar setelah memilih) hub jangan menutup.
+let selectHoldUntil = 0;
+let selectChosen = false;
 let settleUntil = 0;
 let holdHover = false; // setelah drop, jangan langsung buka hub selama kursor masih di atas notch
 
@@ -183,6 +188,7 @@ function applyTheme() {
   const acc = hexRgb(a.accent);
   if (acc) st.setProperty("--accent", acc.join(", "));
   else st.removeProperty("--accent");
+  eyes.dataset.eyeTheme = a.eye_theme || "aurora"; // skin mata dari Pengaturan
 }
 applyTheme();
 osLight.addEventListener("change", applyTheme); // ikut berubah saat tema OS diganti
@@ -456,6 +462,34 @@ function typing(): boolean {
     (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
 }
 
+// Dropdown dianggap "masih terbuka" selama kursor masih bergerak (memilih di popup); begitu kursor diam
+// > SELECT_IDLE_MS, atau sesaat setelah memilih, hub kembali menutup normal. Ini juga menutup kasus
+// popup dibatalkan / memilih opsi yang sama (tidak ada event "change").
+const SELECT_IDLE_MS = 2500;
+const SELECT_GRACE_MS = 1500; // waktu melihat hasil setelah memilih opsi
+let selectOpenedAt = 0;
+const selectHeld = () => {
+  const now = Date.now();
+  if (selectHoldUntil <= now) return false;
+  if (selectChosen) return true;
+  return now - Math.max(selectOpenedAt, lastCursorMove) < SELECT_IDLE_MS;
+};
+// tahan hub tetap terbuka: sedang mengetik ATAU dropdown native sedang dipakai
+const holdOpen = () => typing() || selectHeld();
+const holdSelect = () => { selectChosen = false; selectOpenedAt = Date.now(); selectHoldUntil = selectOpenedAt + 20000; closeAt = 0; };
+notch.addEventListener("mousedown", (e) => {
+  if ((e.target as HTMLElement).closest?.("select")) holdSelect();
+}, true);
+notch.addEventListener("keydown", (e) => {
+  if (!(e.target instanceof HTMLSelectElement)) return;
+  if (e.key === "Escape") { selectHoldUntil = 0; selectChosen = false; } else holdSelect();
+}, true);
+notch.addEventListener("change", (e) => {
+  if (!(e.target instanceof HTMLSelectElement)) return;
+  // pilihan dibuat: beri waktu singkat melihat hasil; dilepas lebih awal jika kursor kembali ke notch
+  selectChosen = true; selectHoldUntil = Date.now() + SELECT_GRACE_MS; closeAt = 0;
+}, true);
+
 function expand(view: View, ms = 3000) {
   if (override === "rem" && view !== "rem") return; // pengingat aktif tidak boleh tertimpa
   override = view;
@@ -463,7 +497,7 @@ function expand(view: View, ms = 3000) {
   clearTimeout(hideTimer);
   if (ms > 0) {
     hideTimer = window.setTimeout(() => {
-      if (view === "hub" && (inside || typing())) return;
+      if (view === "hub" && (inside || holdOpen())) return;
       override = null;
       hubByHover = false;
       render();
@@ -694,6 +728,7 @@ function setInside(v: boolean) {
   if (!v) holdHover = false;
   inside = v;
   insideSince = v ? Date.now() : 0;
+  if (v && selectChosen) { selectHoldUntil = 0; selectChosen = false; }
   syncPosBar();
   if (v) flash("surprised", 900);
   render();
@@ -723,7 +758,7 @@ setInterval(() => {
       if (!hubByHover) { clearTimeout(hideTimer); hubByHover = true; }
       closeAt = 0;
     } else if (hubByHover) {
-      if (typing()) { closeAt = 0; } // sedang mengetik: jangan tutup
+      if (holdOpen()) { closeAt = 0; } // sedang mengetik / dropdown terbuka: jangan tutup
       else if (!closeAt) closeAt = now + T.hover_close_ms;
       else if (now >= closeAt) { closeAt = 0; collapse(); }
     }
@@ -2593,6 +2628,8 @@ const demo = Object.keys(ICONS);
 let demoI = 0;
 
 document.addEventListener("keydown", (e) => {
+  // jangan jalankan pintasan demo saat mengetik (mis. angka di kolom Currency)
+  if (typing() || e.target instanceof HTMLSelectElement) return;
   const k = e.key.toLowerCase();
   const i = Number(e.key) - 1;
   if (i >= 0 && i < keyMoods.length) flash(keyMoods[i], 3000);
@@ -2801,7 +2838,9 @@ initBottomPlay({
   notch,
   busy: () => inside || override !== null || isDraggingWindow || holdHover ||
     notch.classList.contains("dropping") || notch.classList.contains("greeting-active") ||
-    notch.classList.contains("currency-expanded"),
+    // kelas "currency-expanded" bisa tertinggal setelah hub menutup di halaman Currency, sehingga
+    // animasi bottom-play terblokir selamanya; cukup cek hub Currency yang benar-benar terbuka.
+    isCurrencyHub(),
   playing: () => playing,
   calm: () => sleeping || lowBattery,
   mood: (m, ms) => flash(m as Mood, ms),

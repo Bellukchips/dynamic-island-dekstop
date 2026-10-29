@@ -34,6 +34,8 @@ export function initCurrencyPage(): () => void {
   const losersEl = document.getElementById("cu-losers");
   const stockStatusEl = document.getElementById("cu-stock-status");
   const stockPeriodEl = document.getElementById("cu-stock-period");
+  const badgeEl = document.getElementById("cu-badge");
+  const quickEl = document.querySelector<HTMLElement>(".cu-quick");
   if (!amountEl || !targetEl || !resultEl || !rateEl || !updatedEl || !refreshEl || !gainersEl || !losersEl || !stockStatusEl || !stockPeriodEl) {
     return () => {};
   }
@@ -50,6 +52,7 @@ export function initCurrencyPage(): () => void {
   const losersElement = losersEl as HTMLElement;
   const stockStatusElement = stockStatusEl as HTMLElement;
   const stockPeriodElement = stockPeriodEl as HTMLElement;
+  const MAX_DIGITS = 15;
 
   let rates: Record<string, number> | null = null;
   let ratesDate = "";
@@ -58,24 +61,48 @@ export function initCurrencyPage(): () => void {
   let stockSnapshot: StockPoint[] | null = null;
   let stockLoadedAt = 0;
 
+  const NO_DECIMALS = new Set(["IDR", "JPY", "KRW"]);
   const fmt = (value: number, currency: string) => new Intl.NumberFormat("id-ID", {
-    style: "currency", currency, maximumFractionDigits: currency === "IDR" ? 0 : 2,
+    style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: NO_DECIMALS.has(currency) ? 0 : 2,
   }).format(value);
-  const fmtRate = (value: number) => new Intl.NumberFormat("id-ID", { maximumSignificantDigits: 6 }).format(value);
+  // Format Rupiah: 1234567 -> "1.234.567"
+  const groupDigits = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const fmtIdr = (value: number) => `Rp ${new Intl.NumberFormat("id-ID", { maximumFractionDigits: value < 100 ? 2 : 0 }).format(value)}`;
+  const digitsOf = (raw: string) => raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, MAX_DIGITS);
+  // Tempel angka bergaya Indonesia ("1.500.000,50") atau internasional ("1,500,000.50"): pecahan dibuang.
+  const pastedDigits = (raw: string) => {
+    let s = raw.replace(/rp\.?/i, "").replace(/\s/g, "");
+    if (/[.,]\d{1,2}$/.test(s) && (s.match(/[.,]/g) || []).length >= 1) {
+      const last = Math.max(s.lastIndexOf("."), s.lastIndexOf(","));
+      const before = s.slice(0, last);
+      const sepsBefore = (before.match(/[.,]/g) || []).length;
+      const isDecimal = s[last] === "," ? true : (sepsBefore === 0 || /,/.test(before));
+      if (isDecimal) s = before;
+    }
+    return digitsOf(s);
+  };
+  const prettyDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v)
+    ? new Date(`${v}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+    : v;
+  const currentAmount = () => Number(digitsOf(amountInputEl.value) || "0");
   const safeText = (el: Element, text: string) => { el.textContent = text; };
 
   function paintConversion() {
     const target = targetSelectEl.value || "USD";
-    const parsedAmount = Number(amountInputEl.value);
-    const amount = Number.isFinite(parsedAmount) ? Math.max(0, parsedAmount) : 0;
+    const amount = currentAmount();
     const rate = rates?.[target];
+    const opt = targetSelectEl.selectedOptions[0];
+    if (badgeEl) badgeEl.textContent = (opt?.textContent || target).split("·")[0].trim();
+    quickEl?.querySelectorAll<HTMLButtonElement>("button[data-amt]").forEach(b => {
+      b.classList.toggle("on", Number(b.dataset.amt) === amount);
+    });
     if (!Number.isFinite(rate) || rate === undefined || rate <= 0) {
       safeText(resultElement, rates ? "Kurs tidak tersedia" : "Memuat kurs…");
       safeText(rateElement, "Periksa koneksi lalu tekan ↻");
       return;
     }
     safeText(resultElement, fmt(amount * rate, target));
-    safeText(rateElement, `1 IDR = ${fmtRate(rate)} ${target} · ${ratesDate || "kurs referensi"}`);
+    safeText(rateElement, `1 ${target} = ${fmtIdr(1 / rate)} · ${ratesDate || "kurs referensi"}`);
   }
 
   async function fetchJson(url: string): Promise<any> {
@@ -131,7 +158,7 @@ export function initCurrencyPage(): () => void {
 
       if (!Object.keys(merged).length) throw lastError || new Error("Sumber kurs tidak tersedia");
       rates = merged;
-      ratesDate = firstDate;
+      ratesDate = prettyDate(firstDate);
       lastLoadedAt = Date.now();
       paintConversion();
       safeText(updatedElement, `Kurs referensi ${ratesDate || "terbaru"}`);
@@ -183,11 +210,14 @@ export function initCurrencyPage(): () => void {
     for (const item of items.slice(0, 3)) {
       const row = document.createElement("div");
       row.className = "cu-stock-row";
+      const who = document.createElement("div"); who.className = "cu-stock-who";
       const name = document.createElement("b"); name.textContent = item.name;
+      const price = document.createElement("em"); price.textContent = fmtIdr(item.last);
+      who.append(name, price);
       const change = document.createElement("span");
-      change.className = positive ? "cu-positive" : "cu-negative";
+      change.className = `cu-chg ${positive ? "cu-positive" : "cu-negative"}`;
       change.textContent = `${item.change > 0 ? "+" : ""}${item.change.toLocaleString("id-ID", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}%`;
-      row.append(name, change); el.appendChild(row);
+      row.append(who, change); el.appendChild(row);
     }
   }
 
@@ -233,7 +263,34 @@ export function initCurrencyPage(): () => void {
     return loading;
   }
 
-  amountInputEl.addEventListener("input", paintConversion);
+  // Input Rupiah: hanya angka, otomatis berpemisah titik ("1234567" -> "1.234.567"), posisi kursor dijaga.
+  const setAmount = (digits: string) => { amountInputEl.value = groupDigits(digits); paintConversion(); };
+  amountInputEl.addEventListener("input", () => {
+    const raw = amountInputEl.value;
+    const caret = amountInputEl.selectionStart ?? raw.length;
+    const digitsBeforeCaret = raw.slice(0, caret).replace(/\D/g, "").length;
+    const digits = digitsOf(raw);
+    const formatted = groupDigits(digits);
+    amountInputEl.value = formatted;
+    let seen = 0, pos = 0;
+    while (pos < formatted.length && seen < Math.min(digitsBeforeCaret, digits.length)) { if (/\d/.test(formatted[pos])) seen++; pos++; }
+    amountInputEl.setSelectionRange(pos, pos);
+    paintConversion();
+  });
+  amountInputEl.addEventListener("paste", (event) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData("text") ?? "";
+    setAmount(pastedDigits(text));
+  });
+  amountInputEl.addEventListener("focus", () => amountInputEl.select());
+  amountInputEl.addEventListener("blur", () => { if (!digitsOf(amountInputEl.value)) setAmount("0"); });
+  quickEl?.addEventListener("click", (event) => {
+    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-amt]");
+    if (!btn) return;
+    event.preventDefault(); event.stopPropagation();
+    setAmount(String(btn.dataset.amt || "0"));
+  });
+  amountInputEl.value = groupDigits(digitsOf(amountInputEl.value) || "0");
   targetSelectEl.addEventListener("change", paintConversion);
   refreshButton.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); void refresh(true); });
   activeCurrencyRefresh = () => { void refresh(); };

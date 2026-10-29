@@ -61,7 +61,7 @@ pub struct Appearance {
     pub light_bg: String,   // warna notch saat tema terang
     pub accent: String,     // kosong = otomatis dari cover album
     pub default_mood: String, // ekspresi mata bawaan saat idle (tidak tidur/tidak memutar lagu)
-    pub eye_theme: String, // aurora | neon | pastel | pixel | holo | ember | ocean | sakura | cyber | monochrome
+    pub eye_theme: String, // lihat EYE_THEMES di bawah untuk daftar lengkap (20 skin)
 }
 impl Default for Appearance {
     fn default() -> Self {
@@ -81,7 +81,8 @@ impl Default for Appearance {
 // dipakai bersama oleh Appearance::sanitize dan Nudge::sanitize
 const MOODS: &[&str] =
     &["normal", "happy", "sleepy", "surprised", "angry", "love", "suspicious", "sad"];
-const EYE_THEMES: &[&str] = &["aurora", "neon", "pastel", "pixel", "holo", "ember", "ocean", "sakura", "cyber", "monochrome"];
+const EYE_THEMES: &[&str] = &["aurora", "neon", "pastel", "pixel", "holo", "ember", "ocean", "sakura", "cyber", "monochrome",
+    "kawaii", "boba", "galaxy", "matcha", "candy", "synthwave", "slime", "cotton", "pumpkin", "frost"];
 
 impl Appearance {
     fn sanitize(&mut self) {
@@ -300,6 +301,7 @@ dark_bg = "#000000"
 light_bg = "#f5f5f7"
 accent = ""             # kosong = otomatis dari cover album, contoh: "#ff6b6b"
 eye_theme = "aurora"  # aurora | neon | pastel | pixel | holo | ember | ocean | sakura | cyber | monochrome
+                      # kawaii | boba | galaxy | matcha | candy | synthwave | slime | cotton | pumpkin | frost
 "##;
 
 // ditambahkan ke config.toml lama maupun template bawaan yang belum punya section [prayer]

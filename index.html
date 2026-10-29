@@ -533,63 +533,49 @@
               </div>
 
               <!-- Halaman: Currency (kurs rupiah dan ringkasan saham IDX) -->
-              <div class="page p-currency" data-page="currency" aria-label="Kurs mata uang dan saham">
+              <div class="page p-currency" data-page="currency" aria-label="Konversi mata uang dan ringkasan saham">
                 <div class="cu-head">
-                  <div>
-                    <strong>Currency</strong>
-                    <small id="cu-updated">Kurs &amp; saham · bulan ini</small>
-                  </div>
-                  <button type="button" id="cu-refresh" title="Perbarui kurs dan saham" aria-label="Perbarui data">↻</button>
-                </div>
-
-                <div class="cu-converter">
-                  <label class="cu-amount-wrap">
-                    <span>Rupiah (IDR)</span>
-                    <input id="cu-amount" type="number" min="0" step="any" value="100000" inputmode="decimal" aria-label="Jumlah rupiah" />
-                  </label>
-                  <span class="cu-equals" aria-hidden="true">≈</span>
-                  <label class="cu-target-wrap">
-                    <span>Konversi ke</span>
-                    <select id="cu-target" aria-label="Pilih mata uang tujuan">
-                      <option value="USD">USD · Dolar AS</option>
-                      <option value="SGD">SGD · Dolar Singapura</option>
-                      <option value="EUR">EUR · Euro</option>
-                      <option value="JPY">JPY · Yen Jepang</option>
-                      <option value="MYR">MYR · Ringgit</option>
-                      <option value="CNY">CNY · Yuan</option>
-                      <option value="GBP">GBP · Pound</option>
-                      <option value="AUD">AUD · Dolar Australia</option>
-                      <option value="SAR">SAR · Riyal Saudi</option>
-                      <option value="KRW">KRW · Won Korea</option>
-                      <option value="THB">THB · Baht Thailand</option>
-                      <option value="INR">INR · Rupee India</option>
-                      <option value="CHF">CHF · Franc Swiss</option>
-                      <option value="HKD">HKD · Dolar Hong Kong</option>
-                      <option value="CAD">CAD · Dolar Kanada</option>
-                    </select>
-                  </label>
-                  <div class="cu-result">
-                    <strong id="cu-result">Memuat kurs…</strong>
-                    <small id="cu-rate">1 IDR = —</small>
-                  </div>
-                </div>
-
-                <div class="cu-markets">
-                  <div class="cu-market-head">
-                    <strong>📈 Saham IDX</strong>
-                    <span id="cu-stock-period">Bulan berjalan</span>
-                  </div>
-                  <div class="cu-stock-columns">
-                    <div class="cu-stock-group">
-                      <small>Naik tertinggi</small>
-                      <div id="cu-gainers" class="cu-stock-list"><span class="cu-muted">Memuat data…</span></div>
-                    </div>
-                    <div class="cu-stock-group">
-                      <small>Turun terdalam</small>
-                      <div id="cu-losers" class="cu-stock-list"><span class="cu-muted">Memuat data…</span></div>
+                  <div class="cu-brand">
+                    <span class="cu-brand-mark" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M7 7h13l-3-3M20 7l-3 3M17 17H4l3 3M4 17l3-3"/><path d="M12 3v18"/></svg>
+                    </span>
+                    <div class="cu-head-copy">
+                      <strong>Currency</strong>
+                      <small id="cu-updated">Menyiapkan kurs referensi…</small>
                     </div>
                   </div>
-                  <div id="cu-stock-status" class="cu-footnote">Pantauan saham pilihan IDX, bukan seluruh bursa.</div>
+                  <button type="button" id="cu-refresh" title="Perbarui kurs dan data saham" aria-label="Perbarui data">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 17.5 6L20 12M4 12l2.5 6A7 7 0 0 0 18.4 15"/></svg><span>Perbarui</span>
+                  </button>
+                </div>
+
+                <div class="cu-body-grid">
+                  <section class="cu-convert-panel" aria-label="Konverter mata uang">
+                    <div class="cu-section-head">
+                      <div><strong>Konversi mata uang</strong><small>Hitung nilai Rupiah ke mata uang pilihan.</small></div>
+                      <span class="cu-live-pill"><i aria-hidden="true"></i>Kurs referensi</span>
+                    </div>
+                    <div class="cu-converter">
+                      <label class="cu-amount-wrap" for="cu-amount"><span class="cu-label">Jumlah Rupiah (IDR)</span><span class="cu-input-group"><b class="cu-prefix" aria-hidden="true">Rp</b><input id="cu-amount" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="19" value="100.000" aria-label="Jumlah rupiah" /></span></label>
+                      <label class="cu-target-wrap"><span class="cu-label">Mata uang tujuan</span><select id="cu-target" aria-label="Pilih mata uang tujuan">
+                        <option value="USD">USD · Dolar AS</option><option value="SGD">SGD · Dolar Singapura</option><option value="EUR">EUR · Euro</option><option value="JPY">JPY · Yen Jepang</option><option value="MYR">MYR · Ringgit</option><option value="CNY">CNY · Yuan</option><option value="GBP">GBP · Pound</option><option value="AUD">AUD · Dolar Australia</option><option value="SAR">SAR · Riyal Saudi</option><option value="KRW">KRW · Won Korea</option><option value="THB">THB · Baht Thailand</option><option value="INR">INR · Rupee India</option><option value="CHF">CHF · Franc Swiss</option><option value="HKD">HKD · Dolar Hong Kong</option><option value="CAD">CAD · Dolar Kanada</option>
+                      </select></label>
+                      <div class="cu-quick" role="group" aria-label="Nominal cepat"><button type="button" data-amt="10000">10 rb</button><button type="button" data-amt="50000">50 rb</button><button type="button" data-amt="100000">100 rb</button><button type="button" data-amt="500000">500 rb</button><button type="button" data-amt="1000000">1 jt</button><button type="button" data-amt="10000000">10 jt</button></div><span class="cu-equals" aria-hidden="true">≈</span><div class="cu-result"><div class="cu-result-top"><span class="cu-result-label">Perkiraan nilai konversi</span><span class="cu-target-badge" id="cu-badge">USD</span></div><strong id="cu-result" aria-live="polite">Memuat kurs…</strong><small id="cu-rate">1 USD = —</small></div>
+                    </div>
+                    <div class="cu-convert-foot"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7h.01"/></svg><span>Kurs referensi dapat berbeda dari kurs bank atau money changer.</span></div>
+                  </section>
+
+                  <section class="cu-markets" aria-label="Ringkasan saham IDX">
+                    <div class="cu-market-head">
+                      <div class="cu-market-title"><span class="cu-market-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 3 7-8M14 6h6v6"/></svg></span><div class="cu-market-copy"><strong>Pasar saham IDX</strong><span>Perubahan sejak awal bulan</span></div></div>
+                      <span id="cu-stock-period" class="cu-market-period">Bulan ini</span>
+                    </div>
+                    <div class="cu-stock-columns">
+                      <div class="cu-stock-group"><small>Performa terbaik</small><div id="cu-gainers" class="cu-stock-list"><span class="cu-muted">Memuat data…</span></div></div>
+                      <div class="cu-stock-group"><small>Performa terendah</small><div id="cu-losers" class="cu-stock-list"><span class="cu-muted">Memuat data…</span></div></div>
+                    </div>
+                    <div id="cu-stock-status" class="cu-footnote cu-stock-status">Pantauan saham pilihan IDX, bukan seluruh bursa.</div>
+                  </section>
                 </div>
               </div>
             </div>
