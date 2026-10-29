@@ -200,6 +200,7 @@ function applyScale(v: number) {
   CFG.scale = Math.min(1.5, Math.max(0.5, v));
   Object.assign(SIZES, scaleMap(BASE_SIZES));
   Object.assign(HIT, scaleMap(BASE_HIT));
+  applyRemSize(); // lebar kartu pengingat dinamis ikut skala baru
   syncHubDynamicHeight();
   document.documentElement.style.setProperty("--s", String(CFG.scale));
   lastView = ""; // paksa ukuran jendela & area klik dihitung ulang
@@ -2152,6 +2153,48 @@ function beep() {
   } catch { /* audio tidak tersedia: kartu tetap tampil */ }
 }
 
+// ---------- lebar kartu pengingat mengikuti panjang teks ----------
+// Satuan di sini adalah px dasar (sebelum skala), sama seperti BASE_SIZES.
+const REM_MIN_W = 340;  // lebar minimum = ukuran lama
+const REM_MAX_W = 560;  // batas atas; teks yang lebih panjang dipotong dengan "…"
+const REM_CHROME_W = 32 + 42 + 3 * 12 + 4; // padding kiri-kanan + ikon + 3 gap + cadangan
+const REM_BTN_PAD = 22; // padding horizontal .rem-btn (11px x 2)
+let remCardW = 0;       // lebar kartu aktif (px dasar); 0 = belum pernah ditampilkan
+let remMeasureCtx: CanvasRenderingContext2D | null = null;
+
+function measureText(el: HTMLElement, text: string): number {
+  remMeasureCtx ??= document.createElement("canvas").getContext("2d");
+  if (!remMeasureCtx) return text.length * 8; // fallback kasar
+  const cs = getComputedStyle(el);
+  remMeasureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  return remMeasureCtx.measureText(text).width;
+}
+
+// terapkan lebar kartu ke CSS, ukuran jendela logis, dan area klik
+function applyRemSize() {
+  if (!remCardW) return;
+  notch.style.setProperty("--rem-w", `${remCardW}px`);
+  SIZES.rem[0] = Math.round((remCardW + 20) * CFG.scale); // +10px telinga tiap sisi
+  HIT.rem[0] = Math.round(remCardW * CFG.scale);
+  // kartu sudah tampil dan lebarnya berubah (mis. pindah ke pengingat berikutnya)
+  if (lastView === "rem") {
+    placeShell("rem");
+    setHit("rem");
+  }
+}
+
+function fitRemCard(title: string, sub: string) {
+  const textW = Math.max(
+    measureText($("rem-text"), title),
+    measureText($("rem-sub"), sub),
+  );
+  const btnW =
+    measureText($("rem-snooze"), $("rem-snooze").textContent ?? "") + REM_BTN_PAD +
+    measureText($("rem-stop"), $("rem-stop").textContent ?? "") + REM_BTN_PAD;
+  remCardW = clamp(Math.ceil(REM_CHROME_W + textW + btnW), REM_MIN_W, REM_MAX_W);
+  applyRemSize();
+}
+
 function showRing() {
   const list = [...ringing.values()];
   if (list.length === 0) {
@@ -2159,11 +2202,13 @@ function showRing() {
     return;
   }
   const r = list[0];
-  $("rem-text").textContent = r.text;
-  $("rem-sub").textContent =
+  const sub =
     list.length > 1
       ? `Pengingat · +${list.length - 1} lagi`
       : `Pengingat${r.due_at ? " · " + fmtDue(r.due_at) : ""}`;
+  $("rem-text").textContent = r.text;
+  $("rem-sub").textContent = sub;
+  fitRemCard(r.text, sub); // sebelum expand: ukuran harus siap saat view berganti
   hubByHover = false;
   expand("rem", 0); // tanpa timer: tidak hilang sendiri
 }

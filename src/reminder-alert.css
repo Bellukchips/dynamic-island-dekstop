@@ -1,11 +1,12 @@
 /* ---------- kartu pengingat aktif ---------- */
 #notch[data-view="rem"] {
-  width: 340px;
+  /* --rem-w diatur dari main.ts (fitRemCard) sesuai panjang teks pengingat */
+  width: var(--rem-w, 340px);
   height: 74px;
   border-radius: 0 0 37px 37px;
 }
 .l-rem {
-  width: 340px;
+  width: var(--rem-w, 340px);
   height: 74px;
   padding: 0 16px;
   gap: 12px;
