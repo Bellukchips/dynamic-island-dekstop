@@ -1454,7 +1454,7 @@ function showDevice(kind: string, name: string, connected: boolean, sub?: string
   $("dev-chip").classList.toggle("off", !connected);
   $("dev-chip").innerHTML = connected
     ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l18 18M18 6 6 18"/></svg>`;
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6L18 18M18 6L6 18"/></svg>`;
   $("dev-name").textContent = name;
   $("dev-sub").textContent = sub ?? `${LABELS[kind] ?? "Perangkat"} · ${connected ? "Terhubung" : "Dilepas"}`;
 
