@@ -53,8 +53,8 @@ fn set_drag_out(window: tauri::WebviewWindow, active: bool) {
 // Nomor generasi membatalkan animasi resize sebelumnya saat target mode berubah lagi.
 // static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-// Area kerja monitor (di luar taskbar) dalam piksel fisik: (x, y, lebar, tinggi).
-// Di Windows memakai rcWork dari GetMonitorInfoW; platform lain memakai seluruh monitor.
+// Area pakai monitor dalam piksel fisik: (x, y, lebar, tinggi). Lebar = monitor penuh; y/tinggi = area kerja
+// (di luar taskbar) dari rcWork GetMonitorInfoW. Platform lain memakai seluruh monitor.
 fn monitor_work_area(m: &tauri::Monitor) -> (i32, i32, i32, i32) {
     let pos = m.position();
     let size = m.size();
@@ -76,9 +76,11 @@ fn monitor_work_area(m: &tauri::Monitor) -> (i32, i32, i32, i32) {
             };
             if GetMonitorInfoW(hmon, &mut mi).as_bool() {
                 let r = mi.rcWork;
-                let (w, h) = (r.right - r.left, r.bottom - r.top);
-                if w > 0 && h > 0 {
-                    return (r.left, r.top, w, h);
+                let h = r.bottom - r.top;
+                if h > 0 {
+                    // Horizontal tetap lebar monitor penuh (titik tengah layar tidak bergeser oleh taskbar
+                    // di kiri/kanan); hanya vertikal yang mengikuti area kerja (di luar taskbar).
+                    return (pos.x, r.top, size.width as i32, h);
                 }
             }
         }
