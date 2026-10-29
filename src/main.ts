@@ -679,7 +679,7 @@ pagesEl.addEventListener("click", (e) => { if (moved) e.stopPropagation(); }, tr
 let wheelLock = false;
 notch.addEventListener("wheel", (e) => {
   if (notch.dataset.view !== "hub") return;
-  if ((e.target as HTMLElement).closest(".clip-list, .nt-pv-body, .nt-list")) return; // biarkan daftar/preview di-scroll
+  if ((e.target as HTMLElement).closest(".clip-list, .nt-pv-body, .nt-list, .cu-fx-list")) return; // biarkan daftar/preview di-scroll
   if ((e.target as HTMLElement).closest(".nv-list")) return; // nav ikon boleh di-scroll sendiri
   const sh = (e.target as HTMLElement).closest<HTMLElement>(".sh-list"); // shelf: scroll mendatar
   if (sh && sh.scrollWidth > sh.clientWidth) { sh.scrollLeft += e.deltaY || e.deltaX; return; }

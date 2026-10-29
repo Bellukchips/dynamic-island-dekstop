@@ -544,9 +544,12 @@
                       <small id="cu-updated">Menyiapkan kurs referensi…</small>
                     </div>
                   </div>
+                  <div class="cu-head-actions">
+                  <button type="button" id="cu-expand" title="Lihat kurs Rupiah ke semua mata uang + grafik" aria-label="Perluas tampilan kurs" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Perluas</span></button>
                   <button type="button" id="cu-refresh" title="Perbarui kurs dan data saham" aria-label="Perbarui data">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 17.5 6L20 12M4 12l2.5 6A7 7 0 0 0 18.4 15"/></svg><span>Perbarui</span>
                   </button>
+                  </div>
                 </div>
 
                 <div class="cu-body-grid">
@@ -577,6 +580,26 @@
                     <div id="cu-stock-status" class="cu-footnote cu-stock-status">Pantauan saham pilihan IDX, bukan seluruh bursa.</div>
                   </section>
                 </div>
+                <section class="cu-fx" aria-label="Kurs Rupiah ke berbagai mata uang">
+                  <div class="cu-fx-side">
+                    <div class="cu-fx-side-head"><strong>Nilai tukar ke Rupiah</strong><small>Pilih mata uang untuk melihat grafik</small></div>
+                    <div id="cu-fx-list" class="cu-fx-list" role="listbox" aria-label="Daftar mata uang"></div>
+                  </div>
+                  <div class="cu-fx-main">
+                    <div class="cu-fx-top">
+                      <div class="cu-fx-heading">
+                        <small id="cu-fx-title">USD · Dolar AS → IDR</small>
+                        <strong id="cu-fx-rate">Memuat kurs…</strong>
+                        <span id="cu-fx-delta" class="cu-fx-delta"></span>
+                      </div>
+                      <div id="cu-fx-ranges" class="cu-fx-ranges" role="group" aria-label="Rentang grafik">
+                        <button type="button" data-range="1B" class="on" title="30 hari">1B</button><button type="button" data-range="3B" title="3 bulan">3B</button><button type="button" data-range="6B" title="6 bulan">6B</button><button type="button" data-range="1T" title="1 tahun">1T</button>
+                      </div>
+                    </div>
+                    <div id="cu-fx-chart" class="cu-fx-chart"></div>
+                    <div id="cu-fx-status" class="cu-footnote cu-fx-status">Memuat grafik…</div>
+                  </div>
+                </section>
               </div>
             </div>
             <!-- /#track -->

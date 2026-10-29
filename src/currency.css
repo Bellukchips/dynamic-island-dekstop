@@ -40,7 +40,8 @@
 .cu-head-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cu-head strong { font-size: 17px; line-height: 1.15; font-weight: 780; letter-spacing: -.35px; }
 .cu-head small { max-width: 300px; color: rgba(var(--fg-rgb), .58); font-size: 10px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#cu-refresh {
+#cu-refresh,
+#cu-expand {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -58,9 +59,12 @@
   cursor: pointer;
   transition: background .16s ease, border-color .16s ease, transform .16s ease;
 }
-#cu-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-#cu-refresh:hover { background: rgba(var(--fg-rgb), .12); border-color: rgba(var(--fg-rgb), .24); }
-#cu-refresh:active { transform: scale(.96); }
+#cu-refresh svg,
+#cu-expand svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+#cu-refresh:hover,
+#cu-expand:hover { background: rgba(var(--fg-rgb), .12); border-color: rgba(var(--fg-rgb), .24); }
+#cu-refresh:active,
+#cu-expand:active { transform: scale(.96); }
 
 .cu-body-grid {
   display: grid;
@@ -260,5 +264,129 @@
   .cu-quick button:nth-child(n+5) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #cu-refresh, .cu-input-group, #cu-target, .cu-quick button { transition: none; }
+  #cu-refresh, #cu-expand, .cu-input-group, #cu-target, .cu-quick button, .cu-fx-row { transition: none; }
+}
+
+
+/* ---------- Tampilan diperluas: kurs Rupiah ke semua mata uang + grafik ---------- */
+.cu-head-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+#cu-expand[aria-expanded="true"] { border-color: rgba(var(--accent), .55); background: rgba(var(--accent), .18); }
+
+.cu-fx { display: none; }
+.p-currency.cu-expanded .cu-body-grid { display: none; }
+.p-currency.cu-expanded .cu-fx {
+  display: grid;
+  grid-template-columns: minmax(210px, .8fr) minmax(0, 1.5fr);
+  gap: 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.cu-fx-side,
+.cu-fx-main {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(var(--fg-rgb), .095);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(var(--fg-rgb), .055), rgba(var(--fg-rgb), .022));
+}
+.cu-fx-side { padding: 14px 8px 8px 12px; gap: 9px; }
+.cu-fx-side-head { display: flex; flex-direction: column; gap: 3px; padding-right: 6px; }
+.cu-fx-side-head strong { font-size: 13px; font-weight: 750; letter-spacing: -.1px; }
+.cu-fx-side-head small { color: rgba(var(--fg-rgb), .55); font-size: 10px; line-height: 1.35; }
+.cu-fx-list {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--fg-rgb), .22) transparent;
+}
+.cu-fx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(var(--fg-rgb), .04);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.cu-fx-row:hover { background: rgba(var(--fg-rgb), .1); }
+.cu-fx-row:active { transform: scale(.985); }
+.cu-fx-row.on { border-color: rgba(var(--accent), .6); background: rgba(var(--accent), .2); }
+.cu-fx-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cu-fx-who b { font-size: 12px; font-weight: 760; line-height: 1.15; white-space: nowrap; }
+.cu-fx-who em { overflow: hidden; color: rgba(var(--fg-rgb), .52); font-size: 9.5px; font-style: normal; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.cu-fx-price { flex: 0 0 auto; font-size: 12px; font-weight: 720; white-space: nowrap; }
+
+.cu-fx-main { padding: 14px 14px 12px; gap: 10px; }
+.cu-fx-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
+.cu-fx-heading { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cu-fx-heading small { overflow: hidden; color: rgba(var(--fg-rgb), .58); font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.cu-fx-heading strong { overflow: hidden; font-size: clamp(18px, 2.6vw, 24px); line-height: 1.15; font-weight: 800; letter-spacing: -.5px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cu-fx-delta { min-height: 14px; font-size: 10.5px; font-weight: 720; }
+.cu-fx-ranges { display: flex; gap: 4px; flex: 0 0 auto; padding: 3px; border: 1px solid rgba(var(--fg-rgb), .1); border-radius: 99px; background: rgba(0, 0, 0, .16); }
+.cu-fx-ranges button {
+  min-width: 30px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: rgba(var(--fg-rgb), .65);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.cu-fx-ranges button:hover { color: var(--fg); }
+.cu-fx-ranges button.on { background: rgba(var(--accent), .32); color: var(--fg); }
+
+.cu-fx-chart { position: relative; flex: 1 1 auto; min-width: 0; min-height: 120px; }
+.cu-fx-svg { display: block; overflow: visible; }
+.cu-fx-grid { stroke: rgba(var(--fg-rgb), .09); stroke-width: 1; stroke-dasharray: 3 4; }
+.cu-fx-axis { fill: rgba(var(--fg-rgb), .5); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.cu-fx-line { fill: none; stroke: rgb(var(--accent)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.cu-fx-guide { stroke: rgba(var(--fg-rgb), .35); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.cu-fx-dot { fill: rgb(var(--accent)); stroke: var(--bg, #111); stroke-width: 2; pointer-events: none; }
+.cu-fx-tip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid rgba(var(--fg-rgb), .18);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, .78);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.cu-fx-tip[hidden] { display: none; }
+.cu-fx-tip small { color: rgba(var(--fg-rgb), .6); font-size: 9.5px; }
+.cu-fx-tip b { font-size: 11.5px; font-weight: 760; }
+.cu-fx-status { margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(var(--fg-rgb), .075); }
+
+@media (max-width: 680px) {
+  .p-currency.cu-expanded .cu-fx { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .cu-fx-list { max-height: 180px; }
 }
