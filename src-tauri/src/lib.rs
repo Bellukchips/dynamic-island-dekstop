@@ -53,6 +53,39 @@ fn set_drag_out(window: tauri::WebviewWindow, active: bool) {
 // Nomor generasi membatalkan animasi resize sebelumnya saat target mode berubah lagi.
 // static SIZE_ANIMATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+// Area kerja monitor (di luar taskbar) dalam piksel fisik: (x, y, lebar, tinggi).
+// Di Windows memakai rcWork dari GetMonitorInfoW; platform lain memakai seluruh monitor.
+fn monitor_work_area(m: &tauri::Monitor) -> (i32, i32, i32, i32) {
+    let pos = m.position();
+    let size = m.size();
+    let full = (pos.x, pos.y, size.width as i32, size.height as i32);
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        };
+        unsafe {
+            let hmon = MonitorFromPoint(
+                POINT { x: pos.x + 1, y: pos.y + 1 },
+                MONITOR_DEFAULTTONEAREST,
+            );
+            let mut mi = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+                let r = mi.rcWork;
+                let (w, h) = (r.right - r.left, r.bottom - r.top);
+                if w > 0 && h > 0 {
+                    return (r.left, r.top, w, h);
+                }
+            }
+        }
+    }
+    full
+}
+
 // Terapkan posisi notch (di tengah atas atau di posisi kustom) berdasarkan ukuran jendela saat ini
 fn apply_notch_position_for(window: &tauri::WebviewWindow, width: i32, height: i32) {
     let monitor = window
@@ -62,19 +95,19 @@ fn apply_notch_position_for(window: &tauri::WebviewWindow, width: i32, height: i
         .or_else(|| window.primary_monitor().ok().flatten());
     if let Some(m) = monitor {
         let cur = *NOTCH_POS.lock().unwrap();
-        let mon_pos = m.position();
-        let mon_size = m.size();
+        // Pakai area kerja (tanpa taskbar) agar notch tidak tertutup taskbar.
+        let (wa_x, wa_y, wa_w, wa_h) = monitor_work_area(&m);
         let (x, y) = match cur {
             Some((cx, ty)) => {
                 let half_w = width / 2;
-                let min_x = mon_pos.x + half_w;
-                let max_x = (mon_pos.x + mon_size.width as i32 - half_w).max(min_x);
-                let min_y = mon_pos.y;
-                // ty sangat besar (BOTTOM_TY) => otomatis menempel di dasar layar
-                let max_y = (mon_pos.y + mon_size.height as i32 - height).max(min_y);
+                let min_x = wa_x + half_w;
+                let max_x = (wa_x + wa_w - half_w).max(min_x);
+                let min_y = wa_y;
+                // ty sangat besar (BOTTOM_TY) => otomatis menempel di dasar area kerja (di atas taskbar)
+                let max_y = (wa_y + wa_h - height).max(min_y);
                 (cx.clamp(min_x, max_x) - half_w, ty.clamp(min_y, max_y))
             }
-            None => (mon_pos.x + (mon_size.width as i32 - width) / 2, mon_pos.y),
+            None => (wa_x + (wa_w - width) / 2, wa_y),
         };
         let _ = window.set_position(PhysicalPosition::new(x, y));
     }
@@ -236,11 +269,13 @@ fn notch_monitor(window: tauri::WebviewWindow) -> Result<serde_json::Value, Stri
         .or_else(|| window.primary_monitor().ok().flatten())
         .ok_or("monitor tidak ditemukan")?;
     let s = window.scale_factor().unwrap_or(1.0);
+    // Kirim area kerja (tanpa taskbar), bukan seluruh monitor.
+    let (x, y, w, h) = monitor_work_area(&m);
     Ok(serde_json::json!({
-        "x": m.position().x as f64 / s,
-        "y": m.position().y as f64 / s,
-        "w": m.size().width as f64 / s,
-        "h": m.size().height as f64 / s,
+        "x": x as f64 / s,
+        "y": y as f64 / s,
+        "w": w as f64 / s,
+        "h": h as f64 / s,
     }))
 }
 #[tauri::command]
@@ -403,6 +438,43 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init()) // drag keluar: notch -> File Explorer
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
+            // Pantau area kerja monitor: berubah saat taskbar di-hide/ditampilkan, dipindah, atau resolusi berubah.
+            // Frontend lalu memperbarui batas bawahnya sehingga notch bisa turun mentok / naik di atas taskbar.
+            {
+                let w = win.clone();
+                std::thread::spawn(move || {
+                    let mut last = (i32::MIN, i32::MIN, i32::MIN, i32::MIN);
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(700));
+                        let m = w
+                            .current_monitor()
+                            .ok()
+                            .flatten()
+                            .or_else(|| w.primary_monitor().ok().flatten());
+                        let Some(m) = m else { continue };
+                        let cur = monitor_work_area(&m);
+                        if cur == last {
+                            continue;
+                        }
+                        let first = last.0 == i32::MIN;
+                        last = cur;
+                        if first {
+                            continue; // nilai awal sudah diambil frontend lewat notch_monitor
+                        }
+                        let s = w.scale_factor().unwrap_or(1.0).max(0.1);
+                        let _ = w.emit(
+                            "work-area-changed",
+                            serde_json::json!({
+                                "x": cur.0 as f64 / s,
+                                "y": cur.1 as f64 / s,
+                                "w": cur.2 as f64 / s,
+                                "h": cur.3 as f64 / s,
+                            }),
+                        );
+                        apply_notch_position(&w);
+                    }
+                });
+            }
             // eprintln!("[dnd-rust] hook aktif");
             // if std::env::var_os("NOTCH_DND_TEST").is_some() {
             //     eprintln!("[dnd-rust] TES: click-through DIMATIKAN");

@@ -2713,6 +2713,18 @@ function refreshNotes() {
 // Dengarkan perubahan dari jendela detail
 listen("notes-changed", () => refreshNotes()).catch(() => { });
 
+// Area kerja monitor berubah (taskbar di-hide/ditampilkan/dipindah): perbarui batas lalu tempatkan ulang notch.
+listen<typeof MON>("work-area-changed", (ev) => {
+  const m = ev.payload;
+  if (!m || !(m.w > 0) || !(m.h > 0)) return;
+  MON = m;
+  const view = notch.dataset.view ?? "idle";
+  void syncNativeWindowSize(view).then(() => {
+    placeShell(view);
+    setHit(view);
+  }).catch((error) => console.error("Gagal menyesuaikan notch dengan area kerja:", error));
+}).catch(() => { });
+
 document.getElementById("nt-clear")?.addEventListener("click", (e) => {
   e.stopPropagation();
   invoke<Note[]>("notes_clear").then(paintNotes).catch(() => { });
