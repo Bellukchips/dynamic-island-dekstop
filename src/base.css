@@ -232,15 +232,17 @@ body {
   overflow-wrap: anywhere;
 }
 #greeting-sub {
-  display: block;
   max-width: 100%;
   margin-top: 2px;
   color: rgba(var(--fg-rgb), .56);
   font-size: 10.5px;
   line-height: 1.25;
-  white-space: nowrap;
+  /* 1 baris bila muat; kalau terlalu panjang baru jadi 2 baris */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 #notch[data-view="dev"].greeting-active .l-dev {
   opacity: 0;

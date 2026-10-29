@@ -22,8 +22,8 @@ type Pref = { enabled: boolean; mode: string; custom_text: string };
 
 // harus sama dengan settings.html
 const STARTUP_GREETING_KEY = "notch.startupGreeting";
-const MODES = ["auto", "halo", "morning", "noon", "afternoon", "evening", "custom"];
-const DEFAULT: Pref = { enabled: true, mode: "auto", custom_text: "Halo, semangat menjalani hari!" };
+const MODES = ["auto", "random", "halo", "morning", "noon", "afternoon", "evening", "custom"];
+const DEFAULT: Pref = { enabled: true, mode: "random", custom_text: "Halo, semangat menjalani hari!" };
 
 function readPref(): Pref {
   try {
@@ -47,6 +47,82 @@ function greetingText(pref: Pref, d = new Date()): string {
   const h = d.getHours();
   const part = h >= 4 && h < 11 ? "pagi" : h >= 11 && h < 15 ? "siang" : h >= 15 && h < 18 ? "sore" : "malam";
   return `Halo! Selamat ${part}!`;
+}
+// ---------- sapaan acak (lucu), menyesuaikan waktu ----------
+// [judul, punchline, jamMulai?, jamSelesai?]. Tanpa jam = bisa muncul kapan saja. Dengan jam = hanya
+// muncul pada rentang itu (jamMulai > jamSelesai berarti melewati tengah malam) dan lebih sering dipilih.
+// {waktu} -> Pagi/Siang/Sore/Malam, {bonjour} -> Bonjour/Bonsoir (otomatis sesuai jam sekarang).
+// Daftar ini harus sama dengan settings.html.
+type Phrase = [title: string, sub: string, from?: number, to?: number];
+const PHRASES: Phrase[] = [
+  ["{waktu}, NPC kesayangan!", "Dunia sudah loading, masa kamu belum?"],
+  ["Welcome back, legend.", "Akhirnya pemeran utamanya muncul."],
+  ["Wih, masih hidup!", "Server kehidupan masih online rupanya."],
+  ["{bonjour}, manusia sibuk.", "Sibuk beneran atau cuma buka tab baru?"],
+  ["Selamat datang kembali.", "Kami pura-pura nggak nungguin."],
+  ["Aura +1000.", "Tinggal produktifnya yang ditingkatkan."],
+  ["Look who's here.", "Notch kecil, ego besar."],
+  ["Hari baru, kamu lagi.", "Semoga hari ini bukan copy-paste kemarin.", 4, 11],
+  ["Hello, world!", "Error juga ikut menyambutmu."],
+  ["Compile dulu, panik kemudian.", "Kita profesional, katanya."],
+  ["Bug hunter detected.", "Semoga hari ini bukan bug yang berburu balik."],
+  ["Git push, then pray.", "Ritual leluhur software engineer."],
+  ["Code mode: ON.", "Produktivitas sedang dinegosiasikan."],
+  ["404: Motivasi not found.", "Coba restart manusia."],
+  ["Works on my machine.", "Kalimat terakhir sebelum meeting panjang."],
+  ["Commit your feelings.", "Jangan semuanya disimpan di local."],
+  ["Semangat, full-stack warrior.", "Frontend menangis, backend menyusul."],
+  ["Satu bug lagi.", "Kalimat yang mengakhiri tiga jam hidupmu."],
+  ["Psst... manusia.", "Iya, kamu. Jangan pura-pura nggak lihat."],
+  ["Aku melihatmu.", "Bukan CCTV, cuma penasaran."],
+  ["Produktif dikit, boleh?", "Biar hari ini punya plot."],
+  ["Bro is back.", "Timeline kembali masuk akal."],
+  ["Main character energy.", "Background music belum tersedia."],
+  ["Kamu terlihat sibuk.", "Alt-tab bukan olahraga kardio."],
+  ["Tenang, Bos.", "Masalahnya belum tentu tenang."],
+  ["Plot twist hari ini?", "Kamu menyelesaikan pekerjaan tepat waktu."],
+  ["Aura terdeteksi.", "Sumbernya belum diketahui."],
+  ["Jangan overthinking.", "CPU otakmu sudah 98%."],
+  ["Santai dulu, komandan.", "Tidak semua masalah perlu di-fix sekarang."],
+  ["Achievement unlocked.", "Kamu berhasil membuka aplikasi lagi."],
+  ["Masih melek, chief?", "Windows saja tahu kapan harus sleep.", 22, 4],
+  ["Night shift activated.", "Besok jangan salahkan alarm.", 19, 4],
+  ["Tidur adalah fitur premium.", "Dan kamu belum berlangganan.", 22, 4],
+  ["Last task, katanya.", "Kita tahu ending cerita ini.", 19, 4],
+  ["Sudah malam, bro.", "Bug boleh lembur, kamu jangan.", 19, 4],
+  ["Save your progress.", "Termasuk progres kesehatanmu.", 20, 4],
+  ["Closing time.", "Laptop boleh ditutup, pikiran juga.", 17, 4],
+  ["Good night, legend.", "Semoga mimpi tanpa stack trace.", 21, 4],
+];
+const LAST_PHRASE_KEY = "notch.greeting.lastPhrase";
+const inHours = (h: number, from: number, to: number) => (from <= to ? h >= from && h < to : h >= from || h < to);
+const partOfDay = (h: number) => (h >= 4 && h < 11 ? "pagi" : h >= 11 && h < 15 ? "siang" : h >= 15 && h < 18 ? "sore" : "malam");
+
+function pickPhrase(d = new Date()): { text: string; sub: string } {
+  const h = d.getHours();
+  const part = partOfDay(h);
+  let last = -1;
+  try { last = Number(localStorage.getItem(LAST_PHRASE_KEY) ?? -1); } catch { /* abaikan */ }
+
+  // kandidat yang cocok dengan jam sekarang, tidak sama dengan yang terakhir; yang khusus jam diberi bobot 3
+  const pool: { i: number; w: number }[] = [];
+  PHRASES.forEach((p, i) => {
+    if (i === last) return;
+    const [, , from, to] = p;
+    const timed = from !== undefined && to !== undefined;
+    if (timed && !inHours(h, from, to)) return;
+    pool.push({ i, w: timed ? 3 : 1 });
+  });
+  let r = Math.random() * pool.reduce((a, c) => a + c.w, 0);
+  let chosen = pool[pool.length - 1].i;
+  for (const c of pool) { r -= c.w; if (r < 0) { chosen = c.i; break; } }
+  try { localStorage.setItem(LAST_PHRASE_KEY, String(chosen)); } catch { /* abaikan */ }
+
+  const [title, sub] = PHRASES[chosen];
+  const text = title
+    .replace("{waktu}", part[0].toUpperCase() + part.slice(1))
+    .replace("{bonjour}", part === "malam" ? "Bonsoir" : "Bonjour");
+  return { text, sub };
 }
 const estimateMs = (text: string) => {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
@@ -154,10 +230,14 @@ export function initGreeting(h: GreetingHooks): GreetingApi | null {
       else console.warn("[Greeting] Dilewati: notch terus sibuk");
       return;
     }
-    const text = greetingText(pref);
-    const sub = new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short", year: "numeric" });
-    showCard("startup", text, sub, estimateMs(text) + 1800);
-    void speak(text).then((r) => {
+    // mode "random": judul di kartu + punchline sebagai subteks, dan keduanya diucapkan
+    const random = pref.mode === "random" ? pickPhrase() : null;
+    const text = random ? random.text : greetingText(pref);
+    const sub = random ? random.sub
+      : new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short", year: "numeric" });
+    const spoken = random ? `${random.text} ${random.sub}` : text;
+    showCard("startup", text, sub, estimateMs(spoken) + 1800);
+    void speak(spoken).then((r) => {
       if (!r.ok) console.warn("[Greeting] Suara gagal:", r.reason);
       endCard("startup");
     });

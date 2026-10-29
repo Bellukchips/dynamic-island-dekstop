@@ -72,6 +72,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* teks terlalu panjang untuk 1 baris pada lebar maksimum: judul dibungkus jadi maks. 2 baris */
+#notch.rem-wrap .rem-text strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
 .rem-text small {
   font-size: 11px;
   color: rgba(var(--fg-rgb), 0.55);

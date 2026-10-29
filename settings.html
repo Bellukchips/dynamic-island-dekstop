@@ -1847,7 +1847,7 @@
           </div>
           <div class="card full" id="greeting-card">
             <h2>Greeting suara saat Notch dimulai</h2>
-            <p class="hint">Notch mengucapkan sapaan saat aplikasi dijalankan dan menampilkan teksnya di notch. Menggunakan voice Bahasa Indonesia (id-ID); bila belum tersedia, pasang voice Bahasa Indonesia melalui pengaturan Speech Windows. Agar terdengar ketika PC menyala, aktifkan juga "Jalankan otomatis saat komputer menyala" di atas.</p>
+            <p class="hint">Notch mengucapkan sapaan saat aplikasi dijalankan dan menampilkan teksnya di notch. Pilih "Acak lucu" untuk sapaan random yang ucapan waktunya (pagi/siang/sore/malam) menyesuaikan jam sekarang. Menggunakan voice Bahasa Indonesia (id-ID); bila belum tersedia, pasang voice Bahasa Indonesia melalui pengaturan Speech Windows. Agar terdengar ketika PC menyala, aktifkan juga "Jalankan otomatis saat komputer menyala" di atas.</p>
             <div class="row">
               <label for="g-enabled">Aktifkan greeting suara</label>
               <input type="checkbox" id="g-enabled" />
@@ -1855,6 +1855,7 @@
             <div class="row">
               <label for="g-mode">Sapaan bawaan</label>
               <select id="g-mode">
+                <option value="random">Acak lucu (otomatis sesuai waktu)</option>
                 <option value="auto">Halo + sapaan sesuai waktu</option>
                 <option value="halo">Halo</option>
                 <option value="morning">Selamat pagi</option>
@@ -2000,7 +2001,7 @@
     const STARTUP_GREETING_KEY = "notch.startupGreeting";
     const DEFAULT_GREETING = {
       enabled: true,
-      mode: "auto",
+      mode: "random",
       custom_text: "Halo, semangat menjalani hari!"
     };
     const CONVERSATION_MOMENTS_KEY = "notch.conversationMoments";
@@ -2125,7 +2126,7 @@
         };
         return {
           enabled: saved.enabled !== false,
-          mode: ["auto", "halo", "morning", "noon", "afternoon", "evening", "custom"].includes(saved.mode) ? saved.mode : "auto",
+          mode: ["auto", "random", "halo", "morning", "noon", "afternoon", "evening", "custom"].includes(saved.mode) ? saved.mode : "auto",
           custom_text: typeof saved.custom_text === "string" ? saved.custom_text.slice(0, 120) : DEFAULT_GREETING.custom_text
         };
       } catch {
@@ -2283,6 +2284,90 @@
       "Simulasi Conversation Moment · momen cuaca"
     ));
 
+    // Sapaan acak (lucu). [judul, punchline, jamMulai?, jamSelesai?]; tanpa jam = kapan saja,
+    // jamMulai > jamSelesai = melewati tengah malam. Harus sama dengan src/greeting.ts.
+    const PHRASES = [
+      ["{waktu}, NPC kesayangan!", "Dunia sudah loading, masa kamu belum?"],
+      ["Welcome back, legend.", "Akhirnya pemeran utamanya muncul."],
+      ["Wih, masih hidup!", "Server kehidupan masih online rupanya."],
+      ["{bonjour}, manusia sibuk.", "Sibuk beneran atau cuma buka tab baru?"],
+      ["Selamat datang kembali.", "Kami pura-pura nggak nungguin."],
+      ["Aura +1000.", "Tinggal produktifnya yang ditingkatkan."],
+      ["Look who's here.", "Notch kecil, ego besar."],
+      ["Hari baru, kamu lagi.", "Semoga hari ini bukan copy-paste kemarin.", 4, 11],
+      ["Hello, world!", "Error juga ikut menyambutmu."],
+      ["Compile dulu, panik kemudian.", "Kita profesional, katanya."],
+      ["Bug hunter detected.", "Semoga hari ini bukan bug yang berburu balik."],
+      ["Git push, then pray.", "Ritual leluhur software engineer."],
+      ["Code mode: ON.", "Produktivitas sedang dinegosiasikan."],
+      ["404: Motivasi not found.", "Coba restart manusia."],
+      ["Works on my machine.", "Kalimat terakhir sebelum meeting panjang."],
+      ["Commit your feelings.", "Jangan semuanya disimpan di local."],
+      ["Semangat, full-stack warrior.", "Frontend menangis, backend menyusul."],
+      ["Satu bug lagi.", "Kalimat yang mengakhiri tiga jam hidupmu."],
+      ["Psst... manusia.", "Iya, kamu. Jangan pura-pura nggak lihat."],
+      ["Aku melihatmu.", "Bukan CCTV, cuma penasaran."],
+      ["Produktif dikit, boleh?", "Biar hari ini punya plot."],
+      ["Bro is back.", "Timeline kembali masuk akal."],
+      ["Main character energy.", "Background music belum tersedia."],
+      ["Kamu terlihat sibuk.", "Alt-tab bukan olahraga kardio."],
+      ["Tenang, Bos.", "Masalahnya belum tentu tenang."],
+      ["Plot twist hari ini?", "Kamu menyelesaikan pekerjaan tepat waktu."],
+      ["Aura terdeteksi.", "Sumbernya belum diketahui."],
+      ["Jangan overthinking.", "CPU otakmu sudah 98%."],
+      ["Santai dulu, komandan.", "Tidak semua masalah perlu di-fix sekarang."],
+      ["Achievement unlocked.", "Kamu berhasil membuka aplikasi lagi."],
+      ["Masih melek, chief?", "Windows saja tahu kapan harus sleep.", 22, 4],
+      ["Night shift activated.", "Besok jangan salahkan alarm.", 19, 4],
+      ["Tidur adalah fitur premium.", "Dan kamu belum berlangganan.", 22, 4],
+      ["Last task, katanya.", "Kita tahu ending cerita ini.", 19, 4],
+      ["Sudah malam, bro.", "Bug boleh lembur, kamu jangan.", 19, 4],
+      ["Save your progress.", "Termasuk progres kesehatanmu.", 20, 4],
+      ["Closing time.", "Laptop boleh ditutup, pikiran juga.", 17, 4],
+      ["Good night, legend.", "Semoga mimpi tanpa stack trace.", 21, 4],
+    ];
+    const LAST_PHRASE_KEY = "notch.greeting.lastPhrase";
+    const inHours = (h, from, to) => (from <= to ? h >= from && h < to : h >= from || h < to);
+    const partOfDay = (h) => (h >= 4 && h < 11 ? "pagi" : h >= 11 && h < 15 ? "siang" : h >= 15 && h < 18 ? "sore" : "malam");
+
+    function pickRandomGreeting() {
+      const h = new Date().getHours();
+      const part = partOfDay(h);
+      let last = -1;
+      try {
+        last = Number(localStorage.getItem(LAST_PHRASE_KEY) ?? -1);
+      } catch {}
+      const pool = [];
+      PHRASES.forEach((p, i) => {
+        if (i === last) return;
+        const timed = p[2] !== undefined && p[3] !== undefined;
+        if (timed && !inHours(h, p[2], p[3])) return;
+        pool.push({
+          i,
+          w: timed ? 3 : 1
+        });
+      });
+      let r = Math.random() * pool.reduce((a, c) => a + c.w, 0);
+      let chosen = pool[pool.length - 1].i;
+      for (const c of pool) {
+        r -= c.w;
+        if (r < 0) {
+          chosen = c.i;
+          break;
+        }
+      }
+      try {
+        localStorage.setItem(LAST_PHRASE_KEY, String(chosen));
+      } catch {}
+      const text = PHRASES[chosen][0]
+        .replace("{waktu}", part[0].toUpperCase() + part.slice(1))
+        .replace("{bonjour}", part === "malam" ? "Bonsoir" : "Bonjour");
+      return {
+        text,
+        sub: PHRASES[chosen][1]
+      };
+    }
+
     function greetingText(pref) {
       if (pref.mode === "custom") return pref.custom_text.trim() || DEFAULT_GREETING.custom_text;
       if (pref.mode === "halo") return "Halo!";
@@ -2313,14 +2398,16 @@
       }
     }
 
-    function speakGreeting(text) {
+    function speakGreeting(text, sub = "") {
       const synth = window.speechSynthesis;
       if (!synth || typeof window.SpeechSynthesisUtterance !== "function") {
         say("Fitur suara tidak tersedia di WebView ini.", "err");
         return false;
       }
-      const phrase = String(text || "").trim();
-      if (!phrase) {
+      const cardText = String(text || "").trim();
+      const cardSub = String(sub || "").trim();
+      const phrase = cardSub ? `${cardText} ${cardSub}` : cardText; // yang diucapkan: judul + punchline
+      if (!cardText) {
         say("Teks greeting masih kosong.", "err");
         return false;
       }
@@ -2328,8 +2415,8 @@
       const id = `settings-greeting-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       emitGreetingEvent("greeting-start", {
         id,
-        text: phrase,
-        subtitle: "Mencoba mengucapkan greeting…",
+        text: cardText,
+        subtitle: cardSub || "Mencoba mengucapkan greeting…",
         durationMs: estimateGreetingDuration(phrase) + 1800
       });
 
@@ -2682,9 +2769,13 @@
     ["g-enabled", "g-mode"].forEach((id) => inp(id).addEventListener("change", syncGreetingControls));
     inp("g-test").addEventListener("click", () => {
       const greeting = collectGreetingPref();
-      const text = greetingText(greeting);
       // Jangan menimpa status onstart/onerror; speakGreeting mengelola statusnya sendiri.
-      speakGreeting(text);
+      if (greeting.mode === "random") {
+        const pick = pickRandomGreeting();
+        speakGreeting(pick.text, pick.sub);
+      } else {
+        speakGreeting(greetingText(greeting));
+      }
     });
 
     inp("default-mood").addEventListener("change", () => {

@@ -250,7 +250,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 
 // Jendela tetap compact untuk menu biasa. Saat Currency aktif, ukurannya membesar agar
 // dashboard konversi + saham mendapat ruang nyata (bukan sekadar CSS overflow).
-const WIN_BASE: [number, number] = [600, 336];
+const WIN_BASE: [number, number] = [760, 336]; // lebar 760 agar kartu pengingat bisa selebar 720 + telinga
 const CURRENCY_WIN_BASE: [number, number] = [800, 620];
 const isCurrencyHub = (view = notch.dataset.view ?? "idle") => view === "hub" && names[page] === "currency";
 const winLogical = (view = notch.dataset.view ?? "idle"): [number, number] => {
@@ -2156,8 +2156,8 @@ function beep() {
 // ---------- lebar kartu pengingat mengikuti panjang teks ----------
 // Satuan di sini adalah px dasar (sebelum skala), sama seperti BASE_SIZES.
 const REM_MIN_W = 340;  // lebar minimum = ukuran lama
-const REM_MAX_W = 560;  // batas atas; teks yang lebih panjang dipotong dengan "…"
-const REM_CHROME_W = 32 + 42 + 3 * 12 + 4; // padding kiri-kanan + ikon + 3 gap + cadangan
+const REM_MAX_W = 720;  // batas atas; lewat dari ini teks dibungkus jadi 2 baris
+const REM_CHROME_W = 32 + 42 + 3 * 12 + 12; // padding kiri-kanan + ikon + 3 gap + cadangan agar pasti 1 baris
 const REM_BTN_PAD = 22; // padding horizontal .rem-btn (11px x 2)
 let remCardW = 0;       // lebar kartu aktif (px dasar); 0 = belum pernah ditampilkan
 let remMeasureCtx: CanvasRenderingContext2D | null = null;
@@ -2191,7 +2191,10 @@ function fitRemCard(title: string, sub: string) {
   const btnW =
     measureText($("rem-snooze"), $("rem-snooze").textContent ?? "") + REM_BTN_PAD +
     measureText($("rem-stop"), $("rem-stop").textContent ?? "") + REM_BTN_PAD;
-  remCardW = clamp(Math.ceil(REM_CHROME_W + textW + btnW), REM_MIN_W, REM_MAX_W);
+  const wanted = Math.ceil(REM_CHROME_W + textW + btnW);
+  // 1 baris selama muat; kalau melewati batas, lebar dikunci di maksimum dan judul jadi 2 baris
+  notch.classList.toggle("rem-wrap", wanted > REM_MAX_W);
+  remCardW = clamp(wanted, REM_MIN_W, REM_MAX_W);
   applyRemSize();
 }
 
