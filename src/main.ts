@@ -2,6 +2,8 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { initNudge } from "./nudge";
+import { initGreeting } from "./greeting";
+import { initMoments, noteMedia, noteWeather, noteBattery, noteActivity, focusStarted, focusTick, focusFinished } from "./moments";
 import { loadFace, saveFace, startClock, type Face } from "./clock";
 import { initCalendar, goToday, shiftMonth } from "./calendar";
 import { initHubNav } from "./hub-nav";
@@ -559,7 +561,7 @@ function updateBase() {
 }
 setInterval(updateBase, 3000);
 
-function markActive() { lastActivity = Date.now(); if (sleeping) updateBase(); }
+function markActive() { noteActivity(); lastActivity = Date.now(); if (sleeping) updateBase(); }
 document.addEventListener("mousemove", markActive);
 document.addEventListener("keydown", markActive);
 
@@ -1322,6 +1324,7 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 
 listen<Media>("media", (e) => {
   const m = e.payload;
+  noteMedia({ active: m.active, playing: m.playing, title: m.title, artist: m.artist }); // Conversation Moments
   const wasPlaying = playing;
   playing = m.active && m.playing;
 
@@ -1403,6 +1406,7 @@ listen<{ name: string; battery: number | null; connected?: boolean }>("bluetooth
 // ---------- baterai ----------
 let wasCharging: boolean | null = null;
 function handleBattery(percent: number, charging: boolean) {
+  noteBattery(percent, charging); // Conversation Moments
   if (wasCharging === false && charging) flash("love", 3000);
   wasCharging = charging;
 
@@ -1441,6 +1445,7 @@ const LABELS: Record<string, string> = {
 };
 
 function showDevice(kind: string, name: string, connected: boolean, sub?: string) {
+  notch.classList.remove("greeting-active"); // kartu perangkat tidak boleh memakai layer greeting
   const icon = $("dev-icon");
   icon.dataset.kind = ICONS[kind] ? kind : "usb";
   icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[kind] ?? ICONS.usb}</svg>`;
@@ -1499,6 +1504,7 @@ function showWeather(w: Weather, alert = false) {
 listen<[Weather, boolean]>("weather", (e) => {
   const [w, alert] = e.payload;
   showWeather(w, alert);
+  noteWeather(w, alert, describe(w.code, w.is_day)); // Conversation Moments
   if (alert) {
     openHub(pageOf("weather"), 5000);
     flash("surprised", 1500);
@@ -1589,6 +1595,7 @@ function nextPhase(auto: boolean) {
     hubByHover = false;
     openHub(pageOf("timer"), 6000);
     flash(finished === "focus" ? "love" : "surprised", 3000);
+    focusFinished(finished, phase, round, POM.rounds); // Focus Companion
   }
 }
 
@@ -1596,6 +1603,7 @@ setInterval(() => {
   if (!running) return;
   remaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
   renderPom();
+  focusTick(phase, round, phaseLen(phase), remaining, running); // Focus Companion: setengah sesi
   if (remaining <= 0) nextPhase(true);
 }, 250);
 
@@ -1604,7 +1612,11 @@ const pomBtn = (id: string, fn: () => void) =>
 
 pomBtn("pom-toggle", () => {
   running = !running;
-  if (running) endAt = Date.now() + remaining * 1000;
+  if (running) {
+    endAt = Date.now() + remaining * 1000;
+    // Focus Companion: hanya saat sesi fokus dimulai dari awal, bukan saat dilanjutkan setelah jeda
+    if (phase === "focus" && remaining >= phaseLen("focus") - 2) focusStarted(round, POM.rounds);
+  }
 });
 pomBtn("pom-reset", () => { running = false; remaining = phaseLen(phase); });
 pomBtn("pom-skip", () => nextPhase(false));
@@ -2668,6 +2680,7 @@ initNudge({
   playing: () => playing,
   canShow: () => override === null, // jangan menimpa kartu/hub yang sedang tampil
   card: (title, sub, ms) => {
+    notch.classList.remove("greeting-active");
     $("dev-icon").classList.remove("off", "play");
     $("dev-chip").classList.remove("off");
     $("dev-name").textContent = title;
@@ -2679,6 +2692,7 @@ initNudge({
     // Sapaan saat pointer kembali tidak boleh menimpa kartu lain yang sedang dipakai.
     const isIdleNudge = override === "dev" && $("dev-sub").textContent.startsWith("Pointer diam");
     if (override !== null && !isIdleNudge) return;
+    notch.classList.remove("greeting-active");
 
     $("dev-icon").classList.remove("off", "play");
     $("dev-chip").classList.add("off");
@@ -2688,6 +2702,19 @@ initNudge({
     expand("dev", ms);
   },
   mood: (m, ms) => flash(m as Mood, ms),
+});
+// Sapaan saat aplikasi dijalankan (juga setelah komputer restart) + penerima event tombol "Coba ucapkan" di Pengaturan.
+const greetingApi = initGreeting({
+  canShow: () => override === null && !isDraggingWindow && !holdHover,
+  isCard: () => override === "dev",
+  show: (ms) => { hubByHover = false; expand("dev", ms); },
+  mood: (m, ms) => flash(m as Mood, ms),
+});
+// Conversation Moments + Focus Companion: komentar teks memakai kartu yang sama, tidak pernah menimpa
+// adzan, pengingat, greeting, hub, atau kartu perangkat (menunggu antrean sampai notch bebas).
+initMoments({
+  canShow: () => override === null && !prayerAdhanActive && !isDraggingWindow && !holdHover && !inside,
+  say: (text, sub, ms) => { greetingApi?.say(text, sub, ms); },
 });
 
 // Pengingat jadwal shalat memakai kartu khusus. Saat adzan diputar, kartu ditahan

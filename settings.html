@@ -2345,11 +2345,14 @@
         let speechStarted = false;
         let finished = false;
         let voiceWaitTimer = 0;
+        let voicePoll = 0;
         let speechWatchdog = 0;
         const cleanupVoiceWait = () => {
           synth.removeEventListener?.("voiceschanged", tryStart);
           window.clearTimeout(voiceWaitTimer);
+          window.clearInterval(voicePoll);
           voiceWaitTimer = 0;
+          voicePoll = 0;
         };
         const finish = () => {
           if (finished) return;
@@ -2409,6 +2412,8 @@
         };
 
         synth.addEventListener?.("voiceschanged", tryStart);
+        // "voiceschanged" tidak selalu terpicu di WebView2; cek berkala juga.
+        voicePoll = window.setInterval(tryStart, 300);
         voiceWaitTimer = window.setTimeout(() => {
           if (voiceSelected || finished) return;
           cleanupVoiceWait();
@@ -2417,7 +2422,10 @@
           say("Voice Bahasa Indonesia (id-ID) tidak ditemukan. Tambahkan voice Bahasa Indonesia di Settings Windows > Time & language > Speech.", "err");
           console.warn("[Settings] Voice TTS yang tersedia:", available || "belum ada voice yang dimuat");
           // Teks pada notch tetap tampil sampai timer fallback selesai.
-        }, 2600);
+          emitGreetingEvent("greeting-end", {
+            id
+          });
+        }, 7000);
         tryStart();
         if (!synth.getVoices().length) say("Memuat voice Bahasa Indonesia dari Windows…", "ok");
         return true;
