@@ -183,10 +183,14 @@ let started = false;
 export function initGreeting(h: GreetingHooks): GreetingApi | null {
   if (started) return null; // idempoten
   started = true;
-  const notch = document.getElementById("notch");
-  const textEl = document.getElementById("greeting-text");
-  const subEl = document.getElementById("greeting-sub");
-  if (!notch || !textEl || !subEl) { console.warn("[Greeting] Layer greeting tidak ada di index.html"); return null; }
+  const notchEl = document.getElementById("notch");
+  const textElRaw = document.getElementById("greeting-text");
+  const subElRaw = document.getElementById("greeting-sub");
+  if (!notchEl || !textElRaw || !subElRaw) { console.warn("[Greeting] Layer greeting tidak ada di index.html"); return null; }
+  // Konstanta bertipe non-null: aman dipakai di dalam semua closure / callback.
+  const notch: HTMLElement = notchEl;
+  const textEl: HTMLElement = textElRaw;
+  const subEl: HTMLElement = subElRaw;
   let activeId = "";
   let activeBubble = false;
   let clearTimer: number | undefined;
@@ -209,9 +213,9 @@ export function initGreeting(h: GreetingHooks): GreetingApi | null {
     if (activeBubble) {
       notch.classList.remove("greeting-active");
     } else {
-      textEl!.textContent = text;
-      subEl!.textContent = sub;
-      notch!.classList.add("greeting-active");
+      textEl.textContent = text;
+      subEl.textContent = sub;
+      notch.classList.add("greeting-active");
       h.show(ms);
     }
 
@@ -227,7 +231,7 @@ export function initGreeting(h: GreetingHooks): GreetingApi | null {
       clearTimeout(clearTimer);
       return;
     }
-    if (!notch!.classList.contains("greeting-active")) return;
+    if (!notch.classList.contains("greeting-active")) return;
     activeId = "";
     if (h.isCard()) h.show(900);                              // beri jeda singkat lalu tutup
     scheduleClear(1500);
