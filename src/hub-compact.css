@@ -161,8 +161,12 @@
 .nt-list {
   max-height: 62px;
 }
-.clip-list {
-  max-height: 78px;
+/* clipboard: grid kotak, 2 baris terlihat (2x52 + 6 = 110px), selebihnya scroll ke bawah */
+.p-clip {
+  padding-bottom: 12px;
+}
+.p-clip .clip-list {
+  max-height: 110px;
 }
 
 /* ===== Mata idle: tepat di tengah vertikal (sebelumnya terlalu ke atas) ===== */

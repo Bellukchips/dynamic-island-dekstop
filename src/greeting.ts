@@ -11,6 +11,9 @@ export type GreetingHooks = {
   isCard: () => boolean;                  // kartu "dev" sedang aktif (bukan hub/kartu lain)
   show: (ms: number) => void;             // tampilkan kartu "dev" selama ms
   mood: (m: string, ms: number) => void;  // ekspresi mata sementara
+  showBubble?: (text: string, sub: string, ms: number) => boolean;
+  hideBubble?: () => void;
+  isMeeting?: () => boolean;
 };
 export type GreetingApi = {
   // kartu teks yang sama dipakai Conversation Moments / Focus Companion (menimpa kartu "dev" yang sedang tampil)
@@ -185,23 +188,45 @@ export function initGreeting(h: GreetingHooks): GreetingApi | null {
   const subEl = document.getElementById("greeting-sub");
   if (!notch || !textEl || !subEl) { console.warn("[Greeting] Layer greeting tidak ada di index.html"); return null; }
   let activeId = "";
+  let activeBubble = false;
   let clearTimer: number | undefined;
 
   const scheduleClear = (ms: number) => {
     clearTimeout(clearTimer);
-    clearTimer = window.setTimeout(() => notch.classList.remove("greeting-active"), ms);
+    clearTimer = window.setTimeout(() => {
+      notch.classList.remove("greeting-active");
+      if (activeBubble) h.hideBubble?.();
+      activeBubble = false;
+    }, ms);
   };
   function showCard(id: string, text: string, sub: string, ms: number) {
+    if (h.isMeeting?.()) return;
     activeId = id;
-    textEl!.textContent = text;
-    subEl!.textContent = sub;
-    notch!.classList.add("greeting-active");
-    h.show(ms);
+
+    // Jika notch sedang dock di sisi/bawah layar, greeting ikut memakai awan
+    // percakapan. Bila tidak didukung/ruang tidak tersedia, pertahankan kartu lama.
+    activeBubble = h.showBubble?.(text, sub, ms) === true;
+    if (activeBubble) {
+      notch.classList.remove("greeting-active");
+    } else {
+      textEl!.textContent = text;
+      subEl!.textContent = sub;
+      notch!.classList.add("greeting-active");
+      h.show(ms);
+    }
+
     h.mood("happy", ms);
     scheduleClear(ms + 600);
   }
   function endCard(id?: string) {
     if (id && activeId && id !== activeId) return;           // sapaan lain sudah menggantikan
+    if (activeBubble) {
+      activeId = "";
+      h.hideBubble?.();
+      activeBubble = false;
+      clearTimeout(clearTimer);
+      return;
+    }
     if (!notch!.classList.contains("greeting-active")) return;
     activeId = "";
     if (h.isCard()) h.show(900);                              // beri jeda singkat lalu tutup

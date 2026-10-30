@@ -20,6 +20,9 @@ mod notes;
 mod reminder;
 mod prayer;
 mod currency;
+mod open_url;
+#[cfg(target_os = "linux")]
+mod osd_control;
 #[cfg(target_os = "windows")]
 mod winps;
 // area klik pil (x, lebar, tinggi) dalam piksel logis. Dipakai di Windows.
@@ -425,6 +428,10 @@ pub fn run() {
 
     config::init();
 
+    // KDE Plasma: hide status-change OSD while Notch is running.
+    #[cfg(target_os = "linux")]
+    osd_control::activate();
+
     // konfigurasi dikirim ke frontend sebelum main.ts jalan (window.__CFG__)
     let script = format!(
         "window.__CFG__ = {};",
@@ -711,8 +718,15 @@ pub fn run() {
             notch_get_position,
             notch_monitor,
             open_note_detail,
-            currency::fetch_yahoo_chart
+            currency::fetch_yahoo_chart,
+            open_url::open_url
         ])
-        .run(tauri::generate_context!())
-        .expect("gagal menjalankan aplikasi");
+        .build(tauri::generate_context!())
+        .expect("gagal membangun aplikasi")
+        .run(|_app_handle, event| {
+            #[cfg(target_os = "linux")]
+            if let tauri::RunEvent::Exit = event {
+                osd_control::restore();
+            }
+        });
 }

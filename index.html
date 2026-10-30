@@ -52,6 +52,7 @@
   <link rel="stylesheet" href="/src/currency.css" />
   <link rel="stylesheet" href="/src/update-banner.css" />
   <link rel="stylesheet" href="/src/orb-drag.css" />
+  <link rel="stylesheet" href="/src/ramadan.css" />
 
   <script>
     // Migrasi ringan: tampilkan halaman Currency untuk konfigurasi lama sampai pengguna
@@ -528,8 +529,37 @@
                       <span id="pr-remind-txt">10 menit sebelum</span>
                       <i aria-hidden="true"></i>
                     </button>
+                    <button type="button" id="pr-ramadan-toggle" class="pr-ramadan-toggle" aria-pressed="false"
+                      aria-label="Mode Ramadan" title="Aktifkan atau nonaktifkan Mode Ramadan"><span class="pr-rm-ico" aria-hidden="true">☾</span><span class="pr-rm-lbl">Ramadan</span></button>
                   </div>
                 </div>
+
+                <!-- Mode Ramadan: hitung mundur sahur dan buka puasa, imsakiyah, dzikir setelah adzan (muncul saat tombol Ramadan aktif) -->
+                <section class="pr-ramadan-panel" id="pr-ramadan-panel" hidden>
+                  <div class="pr-ramadan-head">
+                    <div class="pr-ramadan-headl">
+                      <span class="pr-ramadan-moon">☾</span>
+                      <div><div class="pr-ramadan-title">Mode Ramadan</div><div class="pr-ramadan-state">Hitung mundur sahur dan buka puasa, imsakiyah, serta dzikir setelah adzan.</div></div>
+                    </div>
+                    <div class="pr-ramadan-headr"><button type="button" class="pr-rm-sw" id="pr-ramadan-sw" aria-label="Mode Ramadan aktif"></button><span>Aktif</span><button type="button" class="pr-rm-gear" aria-label="Pengaturan Ramadan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+                  </div>
+                  <div class="pr-ramadan-counts">
+                    <div class="pr-ramadan-count"><span class="pr-ramadan-ico">🍲</span><div class="pr-ramadan-ctext"><small>Menuju Imsak <i>(Sahur)</i></small><strong id="pr-ramadan-sahur">--:--:--</strong><em id="pr-ramadan-sahur-at">Imsak --:--</em></div></div>
+                    <div class="pr-ramadan-count buka"><span class="pr-ramadan-ico">🌅</span><div class="pr-ramadan-ctext"><small>Menuju Maghrib <i>(Buka Puasa)</i></small><strong id="pr-ramadan-buka">--:--:--</strong><em id="pr-ramadan-buka-at">Maghrib --:--</em></div></div>
+                  </div>
+                  <div class="pr-ramadan-bottom">
+                    <div class="pr-ramadan-card">
+                      <div class="pr-ramadan-ch"><h4>Imsakiyah Hari Ini</h4><span id="pr-ramadan-date"></span></div>
+                      <div class="pr-ramadan-times" id="pr-ramadan-times"></div>
+                      <div class="pr-ramadan-note">Jadwal mengikuti lokasi dan data salat yang sudah tersimpan di Notch. Countdown sahur berakhir pada waktu imsak.</div>
+                    </div>
+                    <div class="pr-ramadan-card">
+                      <div class="pr-ramadan-ch"><h4>Dzikir Setelah Adzan</h4><div class="pr-dhikr-nav"><button type="button" id="pr-dh-prev">‹</button><span id="pr-dh-n">1/3</span><button type="button" id="pr-dh-next">›</button></div></div>
+                      <div class="pr-dhikr-box"><div class="pr-dhikr-ar" id="pr-dh-ar"></div><div class="pr-dhikr-latin" id="pr-dh-latin"></div><div class="pr-dhikr-arti" id="pr-dh-arti"></div><div class="pr-dhikr-note" id="pr-dh-note"></div></div>
+                      <div class="pr-dhikr-dots" id="pr-dh-dots"></div>
+                    </div>
+                  </div>
+                </section>
               </div>
 
               <!-- Halaman: Currency (kurs rupiah dan ringkasan saham IDX) -->

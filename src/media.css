@@ -160,6 +160,10 @@
 .m-time .bar.seeking #m-progress::after {
   transform: translateY(-50%) scale(1);
 }
+/* saat digeser: ikuti kursor langsung, tanpa animasi 1 detik */
+.m-time .bar.seeking #m-progress {
+  transition: none;
+}
 
 .btns {
   display: flex;

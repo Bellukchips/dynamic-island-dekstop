@@ -148,3 +148,45 @@
 #shell:has(> #notch[data-view="update"]) {
   --e: 24px;
 }
+
+
+/* ---------- variasi posisi: samping, dasar, saat di-drag ----------
+   Aturan dasar di atas hanya untuk dock atas (sudut atas rata) dan melayang. Tanpa aturan di bawah,
+   banner di samping/bawah ikut sudut dock atas dan tidak berbentuk "awan percakapan" seperti pengingat.
+   Sisi yang menempel ke tepi layar dibuat rata, sisi yang menghadap ke dalam dibulatkan; lengkung
+   "telinga" penyambung dibuat #shell (edge.css) memakai --e: 24px di atas.
+   Harus ditaruh SETELAH .is-floating karena di sisi layar kelas .is-floating ikut aktif. */
+#notch.is-edge-left[data-view="update"] {
+  border-radius: 0 24px 24px 0 !important;
+}
+#notch.is-edge-right[data-view="update"] {
+  border-radius: 24px 0 0 24px !important;
+}
+#notch.is-bottom[data-view="update"] {
+  border-radius: 24px 24px 0 0 !important;
+}
+#notch.is-dragging[data-view="update"] {
+  border-radius: 24px !important;
+  transform: scale(0.97);
+  animation: none;
+}
+#notch.is-dragging.is-bottom[data-view="update"] {
+  border-radius: 24px 24px 0 0 !important;
+  transform: none !important;
+}
+#notch.is-dragging.is-edge-left[data-view="update"] {
+  border-radius: 0 24px 24px 0 !important;
+  transform: none !important;
+}
+#notch.is-dragging.is-edge-right[data-view="update"] {
+  border-radius: 24px 0 0 24px !important;
+  transform: none !important;
+}
+
+
+/* ---------- update wajib: ikon bernuansa peringatan, tanpa tombol "Nanti" ---------- */
+.l-update.is-required .update-icon {
+  background: rgba(255, 99, 99, 0.18);
+  color: #ff6b6b;
+  box-shadow: 0 4px 18px rgba(255, 99, 99, 0.16);
+}

@@ -21,8 +21,8 @@ export type MomentBubble = {
   active: () => boolean;
 };
 
-// Sisi kanan memakai kartu biasa seperti sebelumnya; ubah ke true bila ingin awan juga di kanan.
-const BUBBLE_ON_RIGHT = false;
+// Awan percakapan aktif untuk dock kiri, kanan, dan bawah.
+const BUBBLE_ON_RIGHT = true;
 
 type Side = "bottom" | "left" | "right";
 
@@ -47,10 +47,20 @@ export function initMomentBubble({ shell, notch }: MomentBubbleHooks): MomentBub
   // ditolak hanya view kartu/hub karena awan akan menimpanya.
   const BUBBLE_VIEWS = new Set(["bottomIdle", "bottomMedia", "edgeIdle", "edgeMedia", "idle", "clock", "compact", "compactLyrics"]);
   const dockSide = (withRight = false): Side | null => {
-    if (!BUBBLE_VIEWS.has(notch.dataset.view ?? "idle")) return null;
-    if (notch.classList.contains("is-bottom")) return "bottom";
-    if (notch.classList.contains("is-edge-left")) return "left";
-    if ((BUBBLE_ON_RIGHT || withRight) && notch.classList.contains("is-edge-right")) return "right"; // withRight: awan adzan
+    // Kelas dock adalah sumber posisi yang otoritatif. Baca dari notch DAN shell
+    // karena keduanya disinkronkan saat drag/snap, tetapi dapat berbeda sesaat
+    // ketika posisi dipulihkan dari konfigurasi.
+    const isBottom = notch.classList.contains("is-bottom") || shell.classList.contains("is-bottom");
+    const isLeft = notch.classList.contains("is-edge-left") || shell.classList.contains("is-edge-left");
+    const isRight = notch.classList.contains("is-edge-right") || shell.classList.contains("is-edge-right");
+
+    // Jangan tampilkan awan di atas hub/kartu interaktif. Namun kelas dock tetap
+    // diperiksa lebih dahulu agar perubahan data-view yang terlambat tidak
+    // membuat pesan jatuh ke kartu dev lama.
+    const view = notch.dataset.view ?? "idle";
+    if (isBottom && BUBBLE_VIEWS.has(view)) return "bottom";
+    if (isLeft && BUBBLE_VIEWS.has(view)) return "left";
+    if ((BUBBLE_ON_RIGHT || withRight) && isRight && BUBBLE_VIEWS.has(view)) return "right";
     return null;
   };
 
@@ -114,18 +124,51 @@ export function initMomentBubble({ shell, notch }: MomentBubbleHooks): MomentBub
   // Posisikan awan terhadap notch. Dipanggil saat muncul dan saat bentuk notch berubah.
   function place(side: Side) {
     el.dataset.side = side;
-    el.style.removeProperty("left");
+
+    // Selalu ukur terhadap posisi notch yang sebenarnya, bukan tepi #shell.
+    // #shell adalah jendela native yang jauh lebih besar daripada notch; memakai
+    // left:100% / bottom:100% dari shell membuat awan melompat jauh atau terpotong
+    // ketika notch ditempelkan di sisi/bawah layar.
+    const sr = shell.getBoundingClientRect();
+    const nr = notch.getBoundingClientRect();
+    const bw = el.offsetWidth;
+    const bh = el.offsetHeight;
+    const gap = 10;
+    const pad = 8;
+
+    let left = nr.left - sr.left + (nr.width - bw) / 2;
+    let top = nr.top - sr.top - bh - gap;
+
+    if (side === "left") {
+      // Awan berada di sebelah kanan notch yang menempel di sisi kiri.
+      left = nr.right - sr.left + gap;
+      top = nr.top - sr.top + (nr.height - bh) / 2;
+    } else if (side === "right") {
+      // Awan berada di sebelah kiri notch yang menempel di sisi kanan.
+      left = nr.left - sr.left - bw - gap;
+      top = nr.top - sr.top + (nr.height - bh) / 2;
+    }
+
+    // Jaga seluruh awan di dalam viewport. Koordinat kemudian dikonversi
+    // kembali ke sistem koordinat #shell untuk positioning absolute.
+    const minLeft = pad - sr.left;
+    const maxLeft = window.innerWidth - bw - pad - sr.left;
+    const minTop = pad - sr.top;
+    const maxTop = window.innerHeight - bh - pad - sr.top;
+    left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft));
+    top = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop));
+
+    // Override aturan posisi CSS lama yang berbasis tepi shell.
+    el.style.left = `${Math.round(left)}px`;
+    el.style.top = `${Math.round(top)}px`;
+    el.style.right = "auto";
+    el.style.bottom = "auto";
+    el.style.translate = "none";
     el.style.removeProperty("--tail-x");
 
     if (side === "bottom") {
-      // Jaga awan tetap di dalam jendela (notch bisa berada dekat tepi kiri/kanan layar).
-      const sr = shell.getBoundingClientRect();
-      const bw = el.offsetWidth;
-      const cx = sr.left + sr.width / 2;
-      const pad = 8;
-      const left = Math.min(Math.max(cx - bw / 2, pad), Math.max(pad, window.innerWidth - bw - pad));
-      const tail = Math.min(Math.max(cx - left, 22), Math.max(22, bw - 22));
-      el.style.left = `${Math.round(left - sr.left)}px`;
+      const notchCenter = nr.left - sr.left + nr.width / 2;
+      const tail = Math.min(Math.max(notchCenter - left, 22), Math.max(22, bw - 22));
       el.style.setProperty("--tail-x", `${Math.round(tail)}px`);
     }
   }

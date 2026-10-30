@@ -55,11 +55,18 @@ type Msg = { kind: Kind; key: string; text: string; sub: string; expires: number
 let hooks: MomentsHooks | null = null;
 const queue: Msg[] = [];
 let lastConvAt = 0;
+let meetingMode = false;
+
+/** Dipanggil oleh indikator privasi; komentar yang tertahan selama rapat dibuang, bukan diputar belakangan. */
+export function setMeetingMode(active: boolean) {
+  meetingMode = active;
+  if (active) queue.length = 0;
+}
 
 const showMs = (text: string) => Math.min(8000, Math.max(4500, 2500 + text.split(/\s+/).length * 330));
 
 function enqueue(kind: Kind, key: string, text: string, sub: string, ttlMs: number) {
-  if (!hooks) return;
+  if (!hooks || meetingMode) return;
   if (kind === "conv" && Date.now() - lastConvAt < readCm().cooldown_min * 60_000) return; // jeda antar komentar
   const i = queue.findIndex((m) => m.key === key);
   if (i >= 0) queue.splice(i, 1);
@@ -69,7 +76,7 @@ function enqueue(kind: Kind, key: string, text: string, sub: string, ttlMs: numb
   pump();
 }
 function pump() {
-  if (!hooks) return;
+  if (!hooks || meetingMode) return;
   const now = Date.now();
   for (let i = queue.length - 1; i >= 0; i--) if (queue[i].expires <= now) queue.splice(i, 1);
   if (!queue.length || !hooks.canShow()) return;

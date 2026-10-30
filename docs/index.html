@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Notch — Pendamping desktop</title>
-  <meta name="description" content="Notch adalah pendamping desktop ringkas untuk media, lirik, cuaca, timer fokus, pengingat, catatan, riwayat clipboard, file, dan status sistem.">
+  <meta name="description" content="Notch adalah pendamping desktop ringkas untuk media, lirik, cuaca, timer fokus, pengingat, catatan, riwayat clipboard, file, status sistem, Mode Ramadan, dan Mode rapat.">
   <meta name="theme-color" content="#f3f2ed">
   <style>
     :root {
@@ -192,6 +192,8 @@
     <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M8 10h8M8 14h8M8 18h5"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14A8.5 8.5 0 0 1 10 3.5 8.5 8.5 0 1 0 20.5 14z"/></symbol>
+    <symbol id="i-ramadan" viewBox="0 0 24 24"><path d="M17 14.5A7 7 0 0 1 8.5 6 7 7 0 1 0 17 14.5z"/><path d="m18 3 .8 1.9L20.7 6l-1.9.8L18 8.7l-.8-1.9L15.3 6l1.9-1.1z"/></symbol>
+    <symbol id="i-meeting" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10.5 6-3.5v10l-6-3.5"/><path d="M7 10h4"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3M12 14v3"/></symbol>
     <symbol id="i-usb" viewBox="0 0 24 24"><path d="M12 20V4M12 8l-4 4M12 13l4 3M12 5l-3 3M12 4l-2 2M12 4l2 2"/><circle cx="8" cy="13" r="1.5"/><path d="M16 16v3"/><rect x="14.5" y="19" width="3" height="3" rx=".5"/></symbol>
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM17 9a5 5 0 0 1 0 6M19 5a10 10 0 0 1 0 14"/></symbol>
@@ -205,6 +207,10 @@
     <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 16h5"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="6" rx="6" ry="3"/><path d="M3 6v5c0 1.7 2.7 3 6 3s6-1.3 6-3V6M3 11v5c0 1.7 2.7 3 6 3 1.2 0 2.3-.2 3.3-.5"/><ellipse cx="17" cy="16" rx="4" ry="2.5"/><path d="M13 16v4c0 1.4 1.8 2.5 4 2.5s4-1.1 4-2.5v-4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14.5h4"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-cursor" viewBox="0 0 24 24"><path d="m5 3 14 7-6 2-2 6z"/></symbol>
+    <symbol id="i-price-alert" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 0 0-12 0c0 5.5-2.5 6-2.5 7.5h17c0-1.5-2.5-2-2.5-7.5M10 20h4"/><path d="m8.5 12 2.5-2.5 1.8 1.5 2.7-3"/></symbol>
   </svg>
 
   <div class="shell">
@@ -226,7 +232,7 @@
         <div>
           <div class="eyebrow"><span class="status-dot"></span> Windows · Linux · Tauri 2</div>
           <h1>Panel kecil di tepi layar.<br>Dirancang untuk dipakai.</h1>
-          <p class="lead">Notch mengumpulkan hal-hal yang sering kamu cek sepanjang hari ke dalam satu pendamping desktop: media, lirik, cuaca, sesi fokus, pengingat, catatan, file, dan status sistem.</p>
+          <p class="lead">Notch mengumpulkan hal-hal yang sering kamu cek sepanjang hari ke dalam satu pendamping desktop: media, lirik, cuaca, sesi fokus, pengingat, catatan, file, status sistem, jadwal Ramadan, dan mode rapat otomatis.</p>
           <div class="actions">
             <a class="button primary" href="https://github.com/bellukchips/dynamic-island-dekstop/releases"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Unduh rilis</a>
             <a class="button" href="https://github.com/bellukchips/dynamic-island-dekstop"><svg class="icon" aria-hidden="true"><use href="#i-github"/></svg> Lihat kode sumber</a>
@@ -269,16 +275,24 @@
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-battery"/></svg></span><h3>Baterai &amp; perangkat</h3></div><p>Persentase dan status pengisian baterai, serta kartu saat USB, Bluetooth, charger, keyboard, atau mouse tersambung maupun dilepas.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-timer"/></svg></span><h3>Timer fokus</h3></div><p>Pomodoro untuk fokus, istirahat singkat, dan istirahat panjang. Atur durasi sesi dan jumlah ronde.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-sliders"/></svg></span><h3>Kontrol cepat</h3></div><p>Akses cepat ke mikrofon, Wi-Fi, Bluetooth, keep-awake, serta tampilan terang/gelap jika didukung.</p></article>
-          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-chart"/></svg></span><h3>Status sistem</h3></div><p>Penggunaan CPU dan memori secara langsung, serta kecepatan unduh dan unggah jaringan.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-chart"/></svg></span><h3>Status sistem</h3></div><p>Penggunaan CPU, RAM, swap, dan penyimpanan secara langsung, kecepatan unduh dan unggah jaringan, jumlah proses, uptime, serta info sistem operasi.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-bell"/></svg></span><h3>Pengingat</h3></div><p>Tentukan tanggal dan jam, ulangi harian atau bulanan, aktifkan bunyi, tunda, atau tandai pengingat selesai.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-note"/></svg></span><h3>Catatan permanen</h3></div><p>Simpan catatan cepat dan buka detailnya di jendela terpisah. Catatan tetap tersimpan.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-clipboard"/></svg></span><h3>Riwayat clipboard</h3></div><p>Lihat isi clipboard terbaru, salin ulang item, atau bersihkan riwayat.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-folder"/></svg></span><h3>Shelf file</h3></div><p>Seret file ke notch agar mudah diakses sementara, lalu seret kembali ke File Explorer atau aplikasi lain.</p></article>
-          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-moon"/></svg></span><h3>Jadwal shalat</h3></div><p>Jadwal shalat harian, preferensi, kartu pengingat, dan audio adzan saat pengingat diaktifkan.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-moon"/></svg></span><h3>Jadwal shalat</h3></div><p>Jadwal shalat harian, mode pengingat (adzan, nada, atau senyap), pengingat sebelum waktu masuk, dan audio adzan. Selama adzan berbunyi, notch menampilkan kartu atau awan percakapan yang tidak tertutup oleh klik, dan media yang sedang berjalan dijeda lalu dilanjutkan setelah adzan selesai.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-ramadan"/></svg></span><h3>Mode Ramadan</h3></div><p>Aktifkan dari tombol Ramadan di halaman shalat. Notch melebar dan menampilkan hitung mundur menuju imsak (sahur) dan Maghrib (buka puasa), imsakiyah hari ini lengkap dengan imsak, subuh, terbit, dzuhur, ashar, maghrib, dan isya, serta kartu dzikir setelah adzan yang bisa digeser. Setelah adzan selesai, notch menampilkan pengingat dzikir. Memakai jadwal shalat yang sudah tersimpan, dan pilihan aktif atau tidaknya diingat.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-lock"/></svg></span><h3>Indikator privasi</h3></div><p>Menampilkan indikator dan kartu pemberitahuan saat mikrofon atau kamera sedang digunakan.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-meeting"/></svg></span><h3>Mode rapat</h3></div><p>Aktif otomatis saat kamera atau mikrofon dipakai (butuh indikator privasi menyala). Notch menampilkan timer durasi rapat beserta status kamera dan mikrofon, dalam bentuk awan percakapan atau kartu. Selama rapat, sapaan dan komentar Conversation Moments ditahan dan dibuang, bukan diputar belakangan, sehingga tidak ada notifikasi yang mengganggu. Begitu rapat selesai, notch menampilkan ringkasan lama rapat.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-coins"/></svg></span><h3>Mata uang &amp; ringkasan pasar</h3></div><p>Konversi Rupiah ke mata uang pilihan dan lihat performa bulanan saham pilihan di Bursa Efek Indonesia. Membutuhkan akses jaringan dan sumber data pasar yang dapat diakses.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-price-alert"/></svg></span><h3>Alert kurs &amp; harga</h3></div><p>Dapatkan pemberitahuan di notch saat kurs mata uang atau harga saham yang kamu pantau mencapai angka yang kamu tentukan, tanpa perlu membuka halaman Currency.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-volume"/></svg></span><h3>HUD volume &amp; kecerahan</h3></div><p>Indikator volume dan kecerahan tampil di dalam notch, termasuk status mute jika tersedia.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-eye"/></svg></span><h3>Mata ekspresif</h3></div><p>Mata mengikuti kursor, berkedip, dan berganti di antara delapan ekspresi serta sepuluh tema.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-eye"/></svg></span><h3>Istirahat mata 20-20-20</h3></div><p>Setiap 20 menit, mata notch mengajakmu menatap objek yang jauh selama 20 detik. Cocok untuk notch yang punya mata dan skin mata sendiri, jadi pengingatnya terasa seperti ajakan dari teman, bukan alarm.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-volume"/></svg></span><h3>Greeting suara</h3></div><p>Notch menyapamu dengan suara setiap kali dijalankan, termasuk setelah komputer menyala. Pilih sapaan otomatis sesuai jam, acak, atau tulis kalimatmu sendiri. Bisa dicoba dulu dari Pengaturan.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-chat"/></svg></span><h3>Conversation Moments</h3></div><p>Komentar singkat berupa teks, tanpa suara, di momen yang pas: musik mulai atau berganti lagu, cuaca berubah atau hujan segera turun, baterai menipis, atau saat kamu kembali setelah lama pergi. Atur momen yang aktif dan jedanya, dan pesan tidak pernah menimpa kartu penting seperti adzan atau pengingat, serta dibungkam otomatis selama Mode rapat.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-target"/></svg></span><h3>Focus Companion</h3></div><p>Teman untuk sesi Pomodoro. Notch memberi semangat saat sesi fokus dimulai, saat setengah jalan, ketika sesi selesai, dan saat waktu istirahat berakhir.</p></article>
+          <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-cursor"/></svg></span><h3>Pesan saat pointer diam</h3></div><p>Kalau pointer tidak bergerak cukup lama, notch menyapa dengan pesan imut seperti “Kamu kemana, kok diam saja?”. Atur lama diam, teks, emoji, dan ekspresi mata. Bisa disembunyikan saat musik atau video sedang diputar.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-move"/></svg></span><h3>Seret, tempel, dan pindahkan</h3></div><p>Seret notch ke mana pun. Notch dapat berubah menjadi bola mengambang dan menempel di tepi atas, bawah, kiri, atau kanan.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-palette"/></svg></span><h3>Tampilan</h3></div><p>Warna otomatis, terang, gelap, atau kustom, dengan skala tampilan dari 0,5× sampai 1,5×.</p></article>
           <article class="feature"><div class="feature-head"><span class="feature-icon"><svg class="icon"><use href="#i-refresh"/></svg></span><h3>Pembaruan &amp; gerakan</h3></div><p>Pemberitahuan rilis baru dan gerakan acak yang halus sebagai opsi.</p></article>
@@ -323,6 +337,9 @@ npm run tauri build</code></pre></div></div>
             <div class="key-row"><strong>Arahkan kursor atau klik notch</strong><span>Buka hub</span></div>
             <div class="key-row"><strong>Scroll mouse / touchpad</strong><span>Pindah halaman</span></div>
             <div class="key-row"><strong>Klik ikon hub</strong><span>Buka halaman yang dipilih</span></div>
+            <div class="key-row"><strong>Tombol Ramadan (halaman shalat)</strong><span>Aktifkan atau matikan Mode Ramadan</span></div>
+            <div class="key-row"><strong>Klik notch saat adzan</strong><span>Tidak menutup alert; alert hilang sendiri saat adzan selesai</span></div>
+            <div class="key-row"><strong>Kamera atau mikrofon aktif</strong><span>Mode rapat menyala otomatis dan berhenti saat perangkat dilepas</span></div>
             <div class="key-row"><strong>Tahan dan seret</strong><span>Pindahkan notch ke tepi layar</span></div>
             <div class="key-row"><strong>Jatuhkan file</strong><span>Tambahkan ke shelf file</span></div>
             <div class="key-row"><strong>Klik kanan item shelf</strong><span>Tampilkan file di foldernya</span></div>
@@ -353,6 +370,7 @@ npm run tauri build</code></pre></div></div>
             <p>Rust membaca <code>config.toml</code> dan menyediakan pengaturannya ke frontend sebagai <code>window.__CFG__</code>. Nilai kosong menggunakan default di <code>main.ts</code>.</p>
             <p>Hapus ID halaman untuk menyembunyikannya atau tambahkan agar tampil di hub. Perubahan Pengaturan diteruskan melalui event <code>config-changed</code>.</p>
             <p>Posisi notch yang diseret disimpan di bagian <code>[position]</code> melalui <code>custom</code>, <code>x</code>, dan <code>y</code>.</p>
+            <p>Mode Ramadan memakai halaman <code>prayer</code>, jadi pastikan ID itu ada di daftar <code>pages</code>. Mode rapat bergantung pada indikator privasi (<code>privacy</code>) agar kamera dan mikrofon terdeteksi.</p>
           </div>
           <pre><code>scale = 1.0
 pages = [

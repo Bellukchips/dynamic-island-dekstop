@@ -16,6 +16,7 @@ type Hooks = {
     adhanStart: (prayerName: string, sub: string) => void | Promise<void>;
     adhanEnd: () => void;
     adhanError?: (message: string) => void;
+    ramadanExpanded?: (expanded: boolean) => void;
 };
 
 const PRAYERS: [keyof Day, string][] = [
@@ -142,6 +143,7 @@ function render() {
         el("pr-remind")?.classList.toggle("on", prefs.remind_before);
         set("pr-remind-txt", `${prefs.remind_min} mnt sebelum`);
     }
+    renderRamadan();
 }
 
 // ---------- suara ----------
@@ -204,7 +206,10 @@ async function adzan(prayerName = "Adzan", showNotch = true) {
         if (finished) return;
         finished = true;
         clearActive();
-        if (showNotch) hooks.adhanEnd();
+        if (showNotch) {
+            hooks.adhanEnd();
+            showRamadanDhikr(prayerName);
+        }
     };
     activeAdhanFinish = finish;
 
@@ -342,6 +347,123 @@ function checkReminders() {
     }
 }
 
+// ---------- Mode Ramadan ----------
+// Markup ada di index.html dan gaya di ramadan.css. File ini hanya menyambungkan perilaku
+// ke elemen yang sudah ada (tidak lagi membuat tombol, panel, atau <style> sendiri).
+const RAMADAN_KEY = "notch.ramadan.enabled";
+let ramadanEnabled = false;
+try { ramadanEnabled = localStorage.getItem(RAMADAN_KEY) === "1"; } catch { /* storage opsional */ }
+
+const DHIKR: { ar: string; latin: string; arti: string; note: string }[] = [
+    { ar: "أَسْتَغْفِرُ اللّٰهَ", latin: "Astaghfirullah", arti: "“Aku memohon ampun kepada Allah.”", note: "Dibaca 3x setelah adzan" },
+    { ar: "اللّٰهُمَّ رَبَّ هٰذِهِ الدَّعْوَةِ التَّامَّةِ", latin: "Allahumma rabba hadzihid-da'watit-tammah", arti: "“Ya Allah, Tuhan pemilik seruan yang sempurna ini.”", note: "Doa setelah adzan" },
+    { ar: "سُبْحَانَ اللّٰهِ وَبِحَمْدِهِ", latin: "Subhanallahi wa bihamdihi", arti: "“Maha Suci Allah dan segala puji bagi-Nya.”", note: "Dibaca 33x" },
+];
+let dhikrIdx = 0;
+
+function installRamadanUi() {
+    const page = document.querySelector<HTMLElement>(".p-prayer");
+    if (!page || page.dataset.ramadanReady) return;
+    const toggle = el("pr-ramadan-toggle");
+    const panel = el("pr-ramadan-panel");
+    if (!toggle || !panel) return;
+    page.dataset.ramadanReady = "1";
+    panel.hidden = !ramadanEnabled;
+
+    const setEnabled = (v: boolean) => {
+        ramadanEnabled = v;
+        try { localStorage.setItem(RAMADAN_KEY, v ? "1" : "0"); } catch { /* storage opsional */ }
+        hooks.ramadanExpanded?.(v);
+        renderRamadan();
+    };
+    toggle.addEventListener("click", (e) => { e.stopPropagation(); setEnabled(!ramadanEnabled); });
+    el("pr-ramadan-sw")?.addEventListener("click", (e) => { e.stopPropagation(); setEnabled(false); });
+    const step = (d: number) => { dhikrIdx = (dhikrIdx + d + DHIKR.length) % DHIKR.length; renderDhikr(); };
+    el("pr-dh-prev")?.addEventListener("click", (e) => { e.stopPropagation(); step(-1); });
+    el("pr-dh-next")?.addEventListener("click", (e) => { e.stopPropagation(); step(1); });
+    hooks.ramadanExpanded?.(ramadanEnabled);
+    renderRamadan();
+}
+
+function renderDhikr() {
+    const d = DHIKR[dhikrIdx];
+    const set = (id: string, v: string) => { const n = el(id); if (n) n.textContent = v; };
+    set("pr-dh-ar", d.ar); set("pr-dh-latin", d.latin); set("pr-dh-arti", d.arti); set("pr-dh-note", d.note);
+    set("pr-dh-n", `${dhikrIdx + 1}/${DHIKR.length}`);
+    const dots = el("pr-dh-dots");
+    if (dots) dots.innerHTML = DHIKR.map((_, i) => `<i class="${i === dhikrIdx ? "on" : ""}"></i>`).join("");
+}
+
+function countdownText(target: Date | null): string {
+    if (!target) return "--:--:--";
+    const seconds = Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000));
+    return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor((seconds % 3600) / 60))}:${pad(seconds % 60)}`;
+}
+
+function ramadanTarget(dayKey: "imsak" | "maghrib"): { at: Date; day: Day } | null {
+    const now = new Date();
+    for (let offset = 0; offset <= 1; offset++) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+        const info = dayEntries(date);
+        if (!info) continue;
+        const at = parseAt(date, info.day[dayKey]);
+        if (at && at.getTime() > now.getTime()) return { at, day: info.day };
+    }
+    return null;
+}
+
+function renderRamadan() {
+    const toggle = el("pr-ramadan-toggle") as HTMLButtonElement | null;
+    const panel = el("pr-ramadan-panel") as HTMLElement | null;
+    if (!toggle || !panel) return;
+    toggle.classList.toggle("on", ramadanEnabled);
+    toggle.setAttribute("aria-pressed", String(ramadanEnabled));
+    panel.hidden = !ramadanEnabled;
+    document.querySelector(".p-prayer")?.classList.toggle("ramadan-on", ramadanEnabled);
+    if (!ramadanEnabled) return;
+    if (!panel.dataset.dh) { panel.dataset.dh = "1"; renderDhikr(); }
+
+    const now = new Date();
+    const todayInfo = dayEntries(now);
+    const sahur = ramadanTarget("imsak");
+    const buka = ramadanTarget("maghrib");
+    const set = (id: string, value: string) => { const node = el(id); if (node) node.textContent = value; };
+    set("pr-ramadan-date", now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).replace(/^(\S+) /, "$1, "));
+    set("pr-ramadan-sahur", countdownText(sahur?.at ?? null));
+    set("pr-ramadan-buka", countdownText(buka?.at ?? null));
+    set("pr-ramadan-sahur-at", `Imsak ${sahur ? hhmm(sahur.at) : "--:--"}`);
+    set("pr-ramadan-buka-at", `Maghrib ${buka ? hhmm(buka.at) : "--:--"}`);
+
+    const times = el("pr-ramadan-times");
+    if (times) {
+        if (!todayInfo) {
+            times.textContent = err ? "Jadwal belum tersedia" : "Memuat jadwal…";
+        } else {
+            const d = todayInfo.day;
+            const rows: [string, string][] = [
+                ["Imsak", d.imsak], ["Subuh", d.subuh], ["Terbit", d.terbit],
+                ["Dzuhur", d.dzuhur], ["Ashar", d.ashar], ["Maghrib", d.maghrib], ["Isya", d.isya],
+            ];
+            times.replaceChildren();
+            rows.forEach(([name, time], i) => {
+                const item = document.createElement("div");
+                item.className = "pr-ramadan-time" + (i === 0 ? " first" : "");
+                const label = document.createElement("small");
+                label.textContent = name;
+                const value = document.createElement("b");
+                value.textContent = time || "--:--";
+                item.append(label, value);
+                times.appendChild(item);
+            });
+        }
+    }
+}
+
+function showRamadanDhikr(prayerName: string) {
+    if (!ramadanEnabled || prayerName === "Tes adzan") return;
+    hooks.card("Dzikir setelah adzan", "Allahumma rabba hadzihid-da'watit-tammah.", 12000);
+}
+
 // ---------- kontrol ----------
 function savePrefs() {
     if (!prefs) return;
@@ -376,6 +498,7 @@ export function initPrayer(h: Hooks) {
     hooks = h;
     wire();
     build();
+    installRamadanUi();
 
     invoke<Prefs>("prayer_info").then((p) => { prefs = p; render(); }).catch((e) => { err = String(e); render(); });
 

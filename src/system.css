@@ -185,37 +185,44 @@
   height: 13px;
 }
 .p-clip .clip-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  /* kolom otomatis: makin lebar panel, makin banyak kolom ke samping; sisanya turun ke bawah */
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-auto-rows: 52px;
+  gap: 6px;
   min-width: 0;
-  max-height: 74px;
+  max-height: 110px; /* 2 baris terlihat, baris berikutnya lewat scroll */
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--fg-rgb), 0.25) transparent;
 }
 .p-clip .clip-list::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+}
+.p-clip .clip-list::-webkit-scrollbar-thumb {
+  background: rgba(var(--fg-rgb), 0.25);
+  border-radius: 4px;
 }
 .p-clip .clip-item {
   all: unset;
   box-sizing: border-box;
-  display: block;
-  flex: none;
-  width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   min-width: 0;
-  height: 22px;
-  padding: 0 10px;
-  line-height: 22px;
-  border-radius: 7px;
+  height: 52px;
+  padding: 6px 8px;
+  border-radius: 9px;
   background: rgba(var(--fg-rgb), 0.08);
-  font-size: 12px;
-  text-align: left; /* tombol bawaan memusatkan teks */
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 13px;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, transform 0.1s;
 }
 .p-clip .clip-item:hover {
   background: rgba(var(--fg-rgb), 0.18);
@@ -224,6 +231,7 @@
   background: rgba(var(--accent, 120, 200, 255), 0.35);
 }
 .p-clip .clip-empty {
+  grid-column: 1 / -1;
   padding: 10px 0;
   font-size: 12px;
   text-align: center;
