@@ -107,7 +107,7 @@ export function init(ctx: Record<string, any>): void {
   ctx.WIN_BASE = [600, 336];
   ctx.CURRENCY_WIN_BASE = [800, 620];
   ctx.isCurrencyHub = (view = ctx.notch.dataset.view ?? "idle") => view === "hub" && ctx.names[ctx.page] === "currency";
-  ctx.isRamadanHub = (view = ctx.notch.dataset.view ?? "idle") => view === "hub" && ctx.names[ctx.page] === "prayer" && ctx.notch.classList.contains("ramadan-expanded");
+  ctx.isRamadanHub = (view = ctx.notch.dataset.view ?? "idle") => view === "hub" && ctx.names[ctx.page] === "prayer" && ctx.notch.classList.contains("ramadan-enabled");
   ctx.winLogical = (view = ctx.notch.dataset.view ?? "idle"): [
       number,
       number

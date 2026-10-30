@@ -201,7 +201,7 @@ export function register(ctx: Record<string, any>): void {
       const reminderExpanded = ctx.notch.classList.contains("reminder-picking");
       const notesExpanded = ctx.notch.classList.contains("notes-expanded");
       const currencyExpanded = ctx.names[ctx.page] === "currency";
-      const ramadanExpanded = ctx.names[ctx.page] === "prayer" && ctx.notch.classList.contains("ramadan-expanded");
+      const ramadanExpanded = ctx.names[ctx.page] === "prayer" && ctx.notch.classList.contains("ramadan-enabled");
       const width = (currencyExpanded || ramadanExpanded) ? 780 : ctx.BASE_SIZES.hub[0];
       const height = ramadanExpanded ? 540 : reminderExpanded ? 230 : notesExpanded ? 300 : currencyExpanded ? 520 : ctx.BASE_SIZES.hub[1];
       const hitWidth = (currencyExpanded || ramadanExpanded) ? 770 : ctx.BASE_HIT.hub[0];
@@ -211,6 +211,9 @@ export function register(ctx: Record<string, any>): void {
       ctx.HIT.hub[0] = Math.round(hitWidth * ctx.CFG.scale);
       ctx.HIT.hub[1] = Math.round(hitHeight * ctx.CFG.scale);
       // Variabel CSS ditempatkan langsung pada notch supaya track, page, dan nav ikut melebar.
+      // "ramadan-expanded" harus ikut berpindah halaman; kalau tertinggal, CSS (width: 780px !important)
+      // tetap melebarkan hub padahal jendela native sudah kembali ke ukuran normal.
+      ctx.notch.classList.toggle("ramadan-expanded", ramadanExpanded);
       ctx.notch.classList.toggle("currency-expanded", currencyExpanded || ramadanExpanded);
       ctx.notch.style.setProperty("--hub-w", `${width}px`);
       ctx.notch.style.setProperty("--hub-h", `${height}px`);

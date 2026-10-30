@@ -107,7 +107,9 @@ export function init(ctx: Record<string, any>): void {
           }
       },
       ramadanExpanded: (expanded) => {
-          ctx.notch.classList.toggle("ramadan-expanded", expanded);
+          // Hanya mencatat pengaturan (aktif/tidak). Class "ramadan-expanded" yang melebarkan notch
+          // dihitung di syncHubDynamicHeight() dan hanya ada selama halaman shalat yang terbuka.
+          ctx.notch.classList.toggle("ramadan-enabled", expanded);
           // Ukuran panel berubah tepat di bawah kursor: tahan hover sebentar supaya hub tidak
           // tertutup sendiri saat tepinya bergeser (terasa seperti tombol tidak merespons).
           ctx.settleUntil = Date.now() + 500;
